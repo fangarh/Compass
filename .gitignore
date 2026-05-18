@@ -10,6 +10,7 @@ captures/
 .idea/
 *.iml
 .vscode/
+stalker/.obsidian/
 
 # Local Android SDK / emulator / device state
 local.properties
