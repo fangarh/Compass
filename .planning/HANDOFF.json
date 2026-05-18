@@ -73,6 +73,11 @@
       "action": "Clarify intended meaning of friend-or-foe for the next discussion.",
       "context": "Need to know whether it classifies beacons/anomalies, players/devices, QR/actions, or a combination.",
       "blocking": true
+    },
+    {
+      "action": "Install or verify GSD for the project when the user is in the office.",
+      "context": "The user explicitly requested GSD as a mandatory first step once back in the office.",
+      "blocking": true
     }
   ],
   "decisions": [
@@ -89,6 +94,11 @@
     {
       "decision": "Wi-Fi remains the current radio layer and is considered a necessary evil.",
       "rationale": "Customer cannot move to BLE now and uses Wi-Fi hardware that will be analyzed later.",
+      "phase": null
+    },
+    {
+      "decision": "When the user is in the office, install or verify GSD first.",
+      "rationale": "The user made this an explicit requirement for office sessions before continuing project work.",
       "phase": null
     }
   ],
