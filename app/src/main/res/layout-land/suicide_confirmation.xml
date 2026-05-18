@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<android.support.percent.PercentRelativeLayout android:layout_width="match_parent" android:layout_height="match_parent" android:keepScreenOn="true"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <android.support.percent.PercentRelativeLayout android:background="@drawable/popup_background" android:layout_width="wrap_content" android:layout_centerInParent="true" app:layout_heightPercent="90.0%" app:layout_marginBottomPercent="4.999995%" app:layout_marginLeftPercent="0.99999905%" app:layout_marginRightPercent="10.000002%" app:layout_marginTopPercent="10.000002%" app:layout_widthPercent="90.0%" />
+    <ImageButton android:id="@id/close" android:background="@drawable/popup_close" android:layout_width="wrap_content" android:layout_height="wrap_content" app:layout_marginLeftPercent="87.0%" app:layout_marginTopPercent="7.0000052%" />
+    <TextView android:textColor="@android:color/white" android:id="@id/name" android:text="@string/popup_suicide" android:textAlignment="center" app:layout_heightPercent="14.999998%" app:layout_marginLeftPercent="23.000002%" app:layout_marginTopPercent="15.999996%" app:layout_widthPercent="55.000008%" />
+    <ImageView android:id="@id/suicide_image" android:background="@drawable/tube_dead_misc" app:layout_heightPercent="39.999996%" app:layout_marginLeftPercent="23.000002%" app:layout_marginTopPercent="32.000004%" app:layout_widthPercent="55.000008%" />
+    <Button android:textColor="#ffffff" android:id="@id/confirm_suicide" android:background="@drawable/popup_button" android:text="@string/popup_yes" app:layout_heightPercent="10.000002%" app:layout_marginLeftPercent="10.000002%" app:layout_marginTopPercent="72.0%" app:layout_widthPercent="35.000004%" />
+    <Button android:textColor="#ffffff" android:id="@id/cancel_suicide" android:background="@drawable/popup_button" android:text="@string/popup_no" app:layout_heightPercent="10.000002%" app:layout_marginLeftPercent="55.000008%" app:layout_marginTopPercent="72.0%" app:layout_widthPercent="35.000004%" />
+</android.support.percent.PercentRelativeLayout>

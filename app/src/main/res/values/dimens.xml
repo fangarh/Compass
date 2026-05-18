@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="height">90.0dp</dimen>
+    <dimen name="settings_row_gap">40.0dp</dimen>
+    <dimen name="settings_row_h">30.0dp</dimen>
+    <dimen name="settings_title_w">120.0dp</dimen>
+    <dimen name="width">90.0dp</dimen>
+</resources>

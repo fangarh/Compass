@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<android.support.percent.PercentRelativeLayout android:layout_width="match_parent" android:layout_height="match_parent" android:keepScreenOn="true"
+  xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
+    <android.support.constraint.ConstraintLayout android:background="@drawable/popup_background" android:padding="20.0dp" android:layout_width="wrap_content" android:layout_height="247.0dp" android:layout_centerInParent="false" app:layout_heightPercent="90.0%" app:layout_marginBottomPercent="0.99999905%" app:layout_marginLeftPercent="10.000002%" app:layout_marginRightPercent="4.999995%" app:layout_marginTopPercent="10.000002%" app:layout_widthPercent="99.0%">
+        <TextView android:id="@id/s_vibro" android:layout_width="140.0dp" android:layout_height="50.0dp" android:text="@string/tray_vibro" app:layout_constraintTop_toTopOf="parent" />
+        <Switch android:id="@id/vibroSwitch" android:layout_width="wrap_content" android:layout_height="@dimen/settings_row_h" app:layout_constraintLeft_toRightOf="@id/s_vibro" />
+        <TextView android:id="@id/s_compass" android:layout_width="140.0dp" android:layout_height="53.0dp" android:layout_marginTop="20.0dp" android:text="@string/tray_compass" app:layout_constraintTop_toBottomOf="@id/s_vibro" />
+        <Switch android:id="@id/compassSwitch" android:layout_width="wrap_content" android:layout_height="@dimen/settings_row_h" android:layout_marginTop="@dimen/settings_row_gap" app:layout_constraintLeft_toRightOf="@id/s_compass" app:layout_constraintTop_toBottomOf="@id/vibroSwitch" />
+        <TextView android:id="@id/s_orientation" android:layout_width="@dimen/settings_title_w" android:layout_height="50.0dp" android:layout_marginTop="28.0dp" android:text="@string/tray_orientation" app:layout_constraintTop_toBottomOf="@id/s_compass" />
+        <RadioGroup android:orientation="vertical" android:id="@id/orientation" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="@dimen/settings_row_gap" app:layout_constraintLeft_toRightOf="@id/s_orientation" app:layout_constraintTop_toBottomOf="@id/compassSwitch">
+            <RadioButton android:id="@id/orientationPort" android:layout_width="wrap_content" android:layout_height="@dimen/settings_row_h" android:text="@string/tray_portrait" />
+            <RadioButton android:id="@id/orientationLand" android:layout_width="wrap_content" android:layout_height="@dimen/settings_row_h" android:text="@string/tray_landscape" />
+        </RadioGroup>
+    </android.support.constraint.ConstraintLayout>
+    <ImageButton android:id="@id/close" android:background="@drawable/popup_close" android:layout_width="wrap_content" android:layout_height="wrap_content" android:contentDescription="TODO" app:layout_marginLeftPercent="87.0%" app:layout_marginTopPercent="7.0000052%" />
+</android.support.percent.PercentRelativeLayout>

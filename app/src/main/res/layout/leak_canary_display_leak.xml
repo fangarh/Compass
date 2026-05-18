@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="vertical" android:background="#3c3c3c" android:layout_width="match_parent" android:layout_height="match_parent"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <ListView android:id="@id/leak_canary_display_leak_list" android:layout_width="match_parent" android:layout_height="0.0dp" android:divider="@null" android:dividerHeight="0.0dp" android:layout_weight="1.0" />
+    <TextView android:textSize="12.0sp" android:id="@id/leak_canary_display_leak_failure" android:visibility="gone" android:layout_width="match_parent" android:layout_height="0.0dp" android:layout_weight="1.0" />
+    <Button android:id="@id/leak_canary_action" android:visibility="gone" android:layout_width="match_parent" android:layout_height="wrap_content" />
+</LinearLayout>

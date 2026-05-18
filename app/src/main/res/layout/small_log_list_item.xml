@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout android:orientation="horizontal" android:layout_width="match_parent" android:layout_height="wrap_content" android:weightSum="100.0"
+  xmlns:android="http://schemas.android.com/apk/res/android">
+    <TextView android:textSize="16.0sp" android:textColor="@color/orange" android:id="@id/time" android:layout_width="0.0dp" android:layout_height="wrap_content" android:layout_marginRight="2.0sp" android:text="00:00" android:layout_weight="15.0" />
+    <TextView android:textSize="16.0sp" android:textColor="@color/orange" android:id="@id/text" android:layout_width="0.0dp" android:layout_height="wrap_content" android:text="blablablab\nasdasd asd asd asd \nasdasdasd\nasdasd" android:layout_weight="85.0" />
+</LinearLayout>

@@ -1,0 +1,52 @@
+# Gradle / Android build output
+.gradle/
+build/
+*/build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# IDE / local editor state
+.idea/
+*.iml
+.vscode/
+
+# Local Android SDK / emulator / device state
+local.properties
+*.hprof
+*.keystore
+*.jks
+
+# Recovered/decompiler working output.
+# These folders are reproducible and very large; keep curated notes under docs/ instead.
+recovered/
+.apk-analysis/
+.jadx-appdata/
+.jadx-home/
+
+# Downloaded reverse-engineering tools and framework caches.
+# Keep tools/README.md tracked.
+tools/*.jar
+tools/*.zip
+tools/jadx-*/
+tools/apktool-framework/
+
+# Generated APKs and signing side files.
+# Keep the original APK as the recovery input.
+*.apk
+*.ap_
+*.idsig
+!compassv33.apk
+
+# Handoff artifacts are built outputs, not source.
+artifacts/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+Thumbs.db
+desktop.ini
+
+# Accidental UI dump files from emulator QA
+docs/user-guide/images/*.xml

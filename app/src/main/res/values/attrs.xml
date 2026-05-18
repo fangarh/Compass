@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <attr name="image" format="reference" />
+    <attr name="measurement">
+        <enum name="horizontal" value="1" />
+        <enum name="vertical" value="0" />
+    </attr>
+    <attr name="offset_bottom" format="integer" />
+    <attr name="offset_left" format="integer" />
+    <attr name="scale_color" format="color" />
+    <attr name="scale_height" format="integer" />
+    <attr name="scale_width" format="integer" />
+    <declare-styleable name="Bar">
+        <attr name="image" />
+        <attr name="measurement" />
+        <attr name="offset_bottom" />
+        <attr name="offset_left" />
+        <attr name="scale_color" />
+        <attr name="scale_height" />
+        <attr name="scale_width" />
+    </declare-styleable>
+</resources>

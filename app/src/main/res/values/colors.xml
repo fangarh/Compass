@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="armorBar">#643200ff</color>
+    <color name="bad">@color/red</color>
+    <color name="blood">@color/red</color>
+    <color name="colorAccent">#ff4081</color>
+    <color name="colorPrimary">#3f51b5</color>
+    <color name="colorPrimaryDark">#303f9f</color>
+    <color name="deviceBar">#6400c864</color>
+    <color name="green">#22ff00</color>
+    <color name="negative">#ff0000</color>
+    <color name="neutral">#ffd500</color>
+    <color name="norm">@color/orange</color>
+    <color name="ok">@color/orange</color>
+    <color name="orange">#ff8000</color>
+    <color name="positive">#1aff00</color>
+    <color name="red">#ff0000</color>
+    <color name="staminaBar">#64ffc864</color>
+    <color name="whiteTransparent">#33ffffff</color>
+    <color name="zxing_custom_possible_result_points">#903a89cf</color>
+    <color name="zxing_custom_result_view">#b0000000</color>
+    <color name="zxing_custom_viewfinder_laser">#1976d2</color>
+    <color name="zxing_custom_viewfinder_mask">#60000000</color>
+</resources>
