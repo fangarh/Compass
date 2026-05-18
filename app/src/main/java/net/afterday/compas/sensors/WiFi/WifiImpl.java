@@ -8,7 +8,6 @@ import android.net.wifi.ScanResult;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.SystemClock;
-import android.provider.Settings;
 import android.util.Log;
 import io.reactivex.Observable;
 import io.reactivex.ObservableSource;
@@ -24,8 +23,7 @@ import net.afterday.compas.logging.Logger;
 
 /* JADX INFO: loaded from: classes.dex */
 public class WifiImpl implements WiFi {
-    private static final long DEBUG_BYPASS_SCAN_INTERVAL_MS = 1000;
-    private static final long THROTTLED_SCAN_INTERVAL_MS = 35000;
+    private static final long DEFAULT_SCAN_INTERVAL_MS = 5000;
     private static final long TICK_INTERVAL_SECONDS = 1;
     private static final long THROTTLE_LOG_INTERVAL_MS = 30000;
     private static final long DIAGNOSTIC_LOG_INTERVAL_MS = 30000;
@@ -41,7 +39,7 @@ public class WifiImpl implements WiFi {
     private long lastThrottleLogMs = 0;
     private long lastFreshResultsMs = 0;
     private long lastDiagnosticLogMs = 0;
-    private boolean lastDebugBypass = false;
+    private boolean lastOneHzMode = true;
 
     public WifiImpl(Context context) {
         this.appContext = context.getApplicationContext();
@@ -70,7 +68,7 @@ public class WifiImpl implements WiFi {
         Log.d(this.TAG, "WIFI Sensor started " + Thread.currentThread().getName());
         registerScanReceiver();
         this.isRunning.set(true);
-        this.lastDebugBypass = isDebugBypassEnabled();
+        this.lastOneHzMode = isOneHzModeEnabled();
         logDiagnostic("WiFi scan mode=" + getModeName() + "; intervalMs=" + getScanIntervalMs() + "; debugBuild=" + BuildConfig.DEBUG, true);
         this.isRunningSubj.onNext(true);
         requestScanIfDue(true);
@@ -153,24 +151,15 @@ public class WifiImpl implements WiFi {
     }
 
     private long getScanIntervalMs() {
-        return isDebugBypassEnabled() ? DEBUG_BYPASS_SCAN_INTERVAL_MS : THROTTLED_SCAN_INTERVAL_MS;
+        return DEFAULT_SCAN_INTERVAL_MS;
     }
 
-    private boolean isDebugBypassEnabled() {
-        if (!BuildConfig.DEBUG) {
-            return false;
-        }
-        try {
-            int developerOptions = Settings.Global.getInt(this.appContext.getContentResolver(), Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0);
-            int wifiScanThrottleEnabled = Settings.Global.getInt(this.appContext.getContentResolver(), "wifi_scan_throttle_enabled", 1);
-            return developerOptions == 1 && wifiScanThrottleEnabled == 0;
-        } catch (Exception e) {
-            return false;
-        }
+    private boolean isOneHzModeEnabled() {
+        return true;
     }
 
     private String getModeName() {
-        return isDebugBypassEnabled() ? "debug-1hz" : "normal-throttled";
+        return "default-5s";
     }
 
     private void publishCachedResults() {
@@ -209,9 +198,9 @@ public class WifiImpl implements WiFi {
             return;
         }
         long now = SystemClock.elapsedRealtime();
-        boolean debugBypass = isDebugBypassEnabled();
-        if (debugBypass != this.lastDebugBypass) {
-            this.lastDebugBypass = debugBypass;
+        boolean oneHzMode = isOneHzModeEnabled();
+        if (oneHzMode != this.lastOneHzMode) {
+            this.lastOneHzMode = oneHzMode;
             logDiagnostic("WiFi scan mode changed to " + getModeName() + "; intervalMs=" + getScanIntervalMs(), true);
             return;
         }

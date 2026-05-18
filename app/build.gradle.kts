@@ -14,8 +14,8 @@ android {
         applicationId = "net.afterday.compas"
         minSdk = 23
         targetSdk = 35
-        versionCode = 1814
-        versionName = "1814-recovered"
+        versionCode = 1816
+        versionName = "1816-default-5s"
     }
 
     compileOptions {
