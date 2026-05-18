@@ -1,0 +1,650 @@
+﻿<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Compass IFF UX sketch</title>
+  <style>
+    :root {
+      --amber: #ff8a00;
+      --amber-soft: #ffb347;
+      --green: #6cff9a;
+      --cyan: #8fffee;
+      --red: #ff4338;
+      --panel: rgba(5, 8, 7, .88);
+      --panel-2: rgba(12, 15, 13, .96);
+      --line: rgba(219, 159, 91, .42);
+      --text: #f1eadb;
+      --muted: #9d9a8d;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #050605;
+      color: var(--text);
+      font-family: "Segoe UI", Arial, sans-serif;
+      letter-spacing: 0;
+      overflow: hidden;
+    }
+
+    .pda {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      min-width: 1100px;
+      min-height: 620px;
+      background:
+        linear-gradient(90deg, rgba(0,0,0,.92), rgba(0,0,0,.35) 45%, rgba(0,0,0,.88)),
+        url("../../../docs/user-guide/images/01-main-screen.png") center / cover no-repeat;
+    }
+
+    .pda::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0, rgba(255,255,255,.025) 1px, transparent 1px, transparent 4px),
+        radial-gradient(circle at 70% 45%, transparent 0 28%, rgba(0,0,0,.18) 41%, rgba(0,0,0,.44) 100%);
+      mix-blend-mode: screen;
+    }
+
+    .top-tabs {
+      position: absolute;
+      z-index: 4;
+      top: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      padding: 8px;
+      border: 1px solid rgba(255,138,0,.35);
+      background: rgba(0,0,0,.68);
+    }
+
+    .tab {
+      border: 1px solid rgba(255,138,0,.4);
+      background: rgba(15,12,7,.9);
+      color: var(--amber-soft);
+      padding: 8px 14px;
+      font-weight: 700;
+      font-size: 14px;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .tab.active {
+      color: #111;
+      background: var(--amber);
+      box-shadow: 0 0 18px rgba(255,138,0,.45);
+    }
+
+    .status-tube {
+      position: absolute;
+      z-index: 2;
+      right: 22.5vw;
+      bottom: 19.5vh;
+      width: 310px;
+      height: 78px;
+      display: grid;
+      place-items: center;
+      border-radius: 34px;
+      border: 2px solid rgba(129, 255, 205, .35);
+      background: radial-gradient(circle at 50% 50%, rgba(84,255,183,.26), rgba(0,0,0,.88) 66%);
+      color: var(--green);
+      font-size: 40px;
+      font-weight: 300;
+      text-shadow: 0 0 12px rgba(108,255,154,.9);
+    }
+
+    .log {
+      position: absolute;
+      z-index: 2;
+      left: 3.6vw;
+      bottom: 5.4vh;
+      width: 38vw;
+      height: 23vh;
+      overflow: hidden;
+      padding: 16px 20px;
+      color: var(--amber);
+      background: rgba(0,0,0,.9);
+      border: 1px solid rgba(255,138,0,.18);
+      font-family: "Consolas", monospace;
+      font-size: 18px;
+      line-height: 1.25;
+    }
+
+    .iff-entry,
+    .quick-action,
+    .map-action {
+      position: absolute;
+      z-index: 3;
+      bottom: 5.2vh;
+      width: 220px;
+      height: 70px;
+      border: 2px solid rgba(255,138,0,.58);
+      background: linear-gradient(#2b1200, #050100);
+      color: var(--amber);
+      font-size: 22px;
+      font-weight: 800;
+      text-transform: uppercase;
+      box-shadow: 0 0 18px rgba(255,138,0,.24);
+    }
+
+    .quick-action {
+      right: 4.8vw;
+    }
+
+    .map-action {
+      right: calc(4.8vw + 240px);
+    }
+
+    .iff-entry {
+      left: 42.5vw;
+      bottom: 5.2vh;
+    }
+
+    .compass {
+      position: absolute;
+      z-index: 2;
+      right: 8.2vw;
+      top: 16vh;
+      width: min(40vw, 760px);
+      aspect-ratio: 1.35 / 1;
+      border-radius: 50%;
+      border: 24px solid rgba(0,0,0,.82);
+      background:
+        radial-gradient(circle at 50% 52%, rgba(250,247,217,.96) 0 43%, rgba(60,54,40,.9) 44%, rgba(2,2,2,.95) 64%, rgba(0,0,0,1) 100%);
+      box-shadow: inset 0 0 42px rgba(0,0,0,.9), 0 0 30px rgba(0,0,0,.8);
+    }
+
+    .dial-label {
+      position: absolute;
+      top: 48%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 74%;
+      text-align: center;
+      color: #131313;
+      font-size: 30px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .dial-sub {
+      display: block;
+      margin-top: 12px;
+      color: #34312a;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .sector {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 46%;
+      height: 46%;
+      transform-origin: 0 0;
+      transform: rotate(var(--angle, -38deg));
+      clip-path: polygon(0 0, 100% 17%, 100% 83%);
+      background: radial-gradient(circle at 0 0, rgba(108,255,154,.92), rgba(108,255,154,.3) 44%, transparent 72%);
+      filter: drop-shadow(0 0 12px rgba(108,255,154,.85));
+    }
+
+    .needle {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 4px;
+      height: 43%;
+      transform-origin: 50% 0;
+      transform: rotate(var(--angle, -38deg));
+      background: var(--green);
+      box-shadow: 0 0 12px var(--green);
+    }
+
+    .approach-panel,
+    .team-panel,
+    .map-panel {
+      position: absolute;
+      z-index: 3;
+      left: 49%;
+      top: 52%;
+      transform: translate(-50%, -50%);
+      width: min(76vw, 1380px);
+      min-height: 66vh;
+      display: none;
+      border: 2px solid var(--line);
+      background: linear-gradient(180deg, rgba(18,21,18,.96), rgba(2,3,2,.96));
+      box-shadow: 0 0 0 4px rgba(0,0,0,.56), 0 0 40px rgba(0,0,0,.8);
+    }
+
+    .approach-panel {
+      left: 33%;
+      top: 45%;
+      width: 40vw;
+      min-width: 560px;
+      min-height: 400px;
+      padding: 28px;
+    }
+
+    .mode-approach .approach-panel,
+    .mode-team .team-panel,
+    .mode-map .map-panel {
+      display: block;
+    }
+
+    .mode-team .compass,
+    .mode-map .compass {
+      opacity: .32;
+    }
+
+    .mode-idle .sector,
+    .mode-idle .needle,
+    .mode-team .sector,
+    .mode-team .needle,
+    .mode-map .sector,
+    .mode-map .needle {
+      display: none;
+    }
+
+    .mode-idle .dial-label::before {
+      content: "ВЛИЯНИЯ";
+    }
+
+    .mode-idle .dial-sub::before {
+      content: "штатный детектор";
+    }
+
+    .mode-approach .dial-label::before {
+      content: "ALLY";
+      color: var(--green);
+    }
+
+    .mode-approach .dial-sub::before {
+      content: "11 часов / расчет 16 м";
+    }
+
+    .mode-team .dial-label::before,
+    .mode-map .dial-label::before {
+      content: "IFF";
+    }
+
+    .mode-team .dial-sub::before,
+    .mode-map .dial-sub::before {
+      content: "командный слой";
+    }
+
+    .panel-title {
+      color: var(--amber);
+      font-family: "Consolas", monospace;
+      font-size: 22px;
+      text-transform: uppercase;
+    }
+
+    .big-name {
+      margin-top: 18px;
+      color: var(--green);
+      font-size: 64px;
+      font-weight: 800;
+      text-shadow: 0 0 20px rgba(108,255,154,.6);
+    }
+
+    .confirmation {
+      margin-top: 6px;
+      color: #101610;
+      background: var(--green);
+      display: inline-block;
+      padding: 8px 14px;
+      font-weight: 900;
+      font-size: 24px;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 28px;
+    }
+
+    .metric {
+      border: 1px solid rgba(255,138,0,.32);
+      padding: 14px;
+      background: rgba(0,0,0,.45);
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      text-transform: uppercase;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 6px;
+      color: var(--amber-soft);
+      font-size: 22px;
+    }
+
+    .warning {
+      margin-top: 20px;
+      padding: 12px 14px;
+      border-left: 5px solid var(--amber);
+      color: var(--amber-soft);
+      background: rgba(255,138,0,.1);
+      font-size: 16px;
+    }
+
+    .team-panel {
+      padding: 72px 68px 52px;
+    }
+
+    .team-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: center;
+      margin-bottom: 28px;
+    }
+
+    .team-header h1 {
+      margin: 0;
+      color: var(--amber);
+      font-size: 34px;
+      text-transform: uppercase;
+    }
+
+    .team-actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    .action {
+      border: 1px solid rgba(255,138,0,.44);
+      background: #100905;
+      color: var(--amber-soft);
+      padding: 12px 18px;
+      font-size: 16px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .action.primary {
+      background: var(--amber);
+      color: #111;
+    }
+
+    .roster {
+      display: grid;
+      gap: 10px;
+      font-family: "Consolas", monospace;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 170px 190px 150px 1fr;
+      gap: 18px;
+      align-items: center;
+      min-height: 58px;
+      padding: 10px 16px;
+      border: 1px solid rgba(255,255,255,.08);
+      background: rgba(0,0,0,.38);
+      color: var(--text);
+      font-size: 18px;
+    }
+
+    .row.hot {
+      border-color: rgba(108,255,154,.72);
+      box-shadow: inset 0 0 22px rgba(108,255,154,.12);
+    }
+
+    .tag {
+      display: inline-block;
+      width: max-content;
+      padding: 4px 8px;
+      background: rgba(255,138,0,.14);
+      color: var(--amber-soft);
+      border: 1px solid rgba(255,138,0,.26);
+      font-size: 14px;
+      text-transform: uppercase;
+    }
+
+    .tag.green {
+      color: var(--green);
+      border-color: rgba(108,255,154,.45);
+      background: rgba(108,255,154,.1);
+    }
+
+    .tag.red {
+      color: var(--red);
+      border-color: rgba(255,67,56,.45);
+      background: rgba(255,67,56,.1);
+    }
+
+    .map-panel {
+      padding: 54px;
+    }
+
+    .map-grid {
+      position: relative;
+      height: 56vh;
+      border: 1px solid rgba(255,138,0,.35);
+      background:
+        linear-gradient(rgba(255,138,0,.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,138,0,.08) 1px, transparent 1px),
+        radial-gradient(circle at 55% 45%, rgba(108,255,154,.14), transparent 18%),
+        #060807;
+      background-size: 42px 42px, 42px 42px, auto, auto;
+      overflow: hidden;
+    }
+
+    .map-grid::before {
+      content: "OFFLINE MAP / ERROR AREAS";
+      position: absolute;
+      left: 18px;
+      top: 14px;
+      color: var(--amber);
+      font-family: "Consolas", monospace;
+      font-size: 18px;
+    }
+
+    .marker {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      display: grid;
+      place-items: center;
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      border: 2px solid currentColor;
+      color: var(--green);
+      background: rgba(0,0,0,.7);
+      font-weight: 900;
+      box-shadow: 0 0 18px rgba(108,255,154,.32);
+    }
+
+    .marker.self {
+      color: var(--cyan);
+    }
+
+    .marker.petya {
+      left: 58%;
+      top: 44%;
+    }
+
+    .marker.vasya {
+      left: 49%;
+      top: 54%;
+    }
+
+    .marker.zhenya {
+      left: 68%;
+      top: 35%;
+    }
+
+    .marker.me {
+      left: 37%;
+      top: 62%;
+    }
+
+    .error-ring {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      border: 2px dashed rgba(108,255,154,.38);
+      background: rgba(108,255,154,.08);
+      width: 230px;
+      height: 170px;
+      left: 58%;
+      top: 44%;
+    }
+
+    .witness-line {
+      position: absolute;
+      height: 2px;
+      transform-origin: 0 0;
+      background: rgba(255,138,0,.72);
+      box-shadow: 0 0 10px rgba(255,138,0,.5);
+    }
+
+    .line-one {
+      left: 49%;
+      top: 54%;
+      width: 180px;
+      transform: rotate(-31deg);
+    }
+
+    .line-two {
+      left: 68%;
+      top: 35%;
+      width: 140px;
+      transform: rotate(153deg);
+    }
+  </style>
+</head>
+<body>
+  <main id="app" class="pda mode-approach">
+    <nav class="top-tabs" aria-label="Состояния макета">
+      <button class="tab" data-mode="idle">Фон</button>
+      <button class="tab active" data-mode="approach">Контакт</button>
+      <button class="tab" data-mode="team">Команда</button>
+      <button class="tab" data-mode="map">Карта</button>
+    </nav>
+
+    <section class="compass" aria-label="Правый прибор">
+      <div class="sector"></div>
+      <div class="needle"></div>
+      <div class="dial-label"><span class="dial-sub"></span></div>
+    </section>
+
+    <div class="status-tube" id="tube">ALLY</div>
+
+    <section class="log" aria-label="Журнал событий">
+      <div>21:16 PETYA approach beacon active</div>
+      <div>21:16 IFF confirmed by YOU, VASYA, ZHENYA</div>
+      <div>21:16 direction sector LEFT-FRONT, confidence MED</div>
+      <div>21:15 VASYA visible, signal fresh</div>
+    </section>
+
+    <button class="iff-entry">IFF</button>
+    <button class="map-action">Карта</button>
+    <button class="quick-action">Я подхожу</button>
+
+    <section class="approach-panel" aria-label="Боевой IFF">
+      <div class="panel-title">IFF / Контакт</div>
+      <div class="big-name">ПЕТЯ</div>
+      <div class="confirmation">ПОДТВЕРЖДЕН СВОЙ</div>
+
+      <div class="metrics">
+        <div class="metric"><span>Дистанция</span><strong>16 м / зона 10-20</strong></div>
+        <div class="metric"><span>Направление</span><strong>11 часов</strong></div>
+        <div class="metric"><span>Слышат</span><strong>вы, Вася, Женя</strong></div>
+        <div class="metric"><span>Свежесть</span><strong>2 сек назад</strong></div>
+      </div>
+
+      <div class="warning">Карта открывается только кнопкой. Автоматически уводить с Контакта нельзя.</div>
+    </section>
+
+    <section class="team-panel" aria-label="Команда">
+      <div class="team-header">
+        <h1>Команда / единый список без дублей</h1>
+        <div class="team-actions">
+          <button class="action primary">Я подхожу</button>
+          <button class="action">Тихий</button>
+          <button class="action">Экономный</button>
+          <button class="action">Карта</button>
+        </div>
+      </div>
+
+      <div class="roster">
+        <div class="row hot">
+          <strong>Петя</strong>
+          <span class="tag green">подходит</span>
+          <span>16 м / 10-20</span>
+          <span>подтвержден: вы, Вася, Женя</span>
+        </div>
+        <div class="row">
+          <strong>Вася</strong>
+          <span class="tag green">рядом</span>
+          <span>5-10 м</span>
+          <span>сигнал свежий, GPS средний</span>
+        </div>
+        <div class="row">
+          <strong>Женя</strong>
+          <span class="tag">виден</span>
+          <span>35 м</span>
+          <span>слышит Петю, компас стабилен</span>
+        </div>
+        <div class="row">
+          <strong>Игорь</strong>
+          <span class="tag red">радиотишина</span>
+          <span>-</span>
+          <span>последний контакт 12 мин назад</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="map-panel" aria-label="Карта">
+      <div class="map-grid">
+        <div class="error-ring" title="Оценочная область Пети"></div>
+        <div class="witness-line line-one"></div>
+        <div class="witness-line line-two"></div>
+        <div class="marker self me">Я</div>
+        <div class="marker vasya">В</div>
+        <div class="marker zhenya">Ж</div>
+        <div class="marker petya">П</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const app = document.getElementById("app");
+    const tube = document.getElementById("tube");
+    const labels = {
+      idle: "CLEAR",
+      approach: "ALLY",
+      team: "TEAM",
+      map: "MAP"
+    };
+
+    for (const button of document.querySelectorAll(".tab")) {
+      button.addEventListener("click", () => {
+        const mode = button.dataset.mode;
+        app.className = `pda mode-${mode}`;
+        tube.textContent = labels[mode];
+        for (const tab of document.querySelectorAll(".tab")) {
+          tab.classList.toggle("active", tab === button);
+        }
+      });
+    }
+  </script>
+</body>
+</html>
+
