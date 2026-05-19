@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 17: IFF Local Witness Quorum completed.
+Phase 18: IFF Remote Witness Contract completed.
 
 ## Last Verified Baseline
 
@@ -23,9 +23,8 @@ Phase 17: IFF Local Witness Quorum completed.
 
 ## Next Action
 
-Next useful slice: design the local transport contract for remote witness
-reports: source player id, target player id, freshness, RSSI, and signature
-placeholder.
+Next useful slice: add a local-only remote witness simulation toggle or fixture
+so quorum behavior can be validated before real transport.
 
 ## Verification
 
@@ -323,3 +322,39 @@ placeholder.
   `artifacts/iff-field-session-20260519-1659` ->
   `artifacts/iff-field-analysis-20260519-1659`, 2398 scan entries, CSV row
   `NO_CURRENT_WITNESS 0/3`.
+
+2026-05-19 Phase 18:
+
+- Added `IffRemoteWitnessReport` with contract version
+  `iff-remote-witness-v1`.
+- Added `IffRemoteWitnessStore` for future in-memory remote report ingestion.
+- Contract fields:
+  - source player id;
+  - target player id;
+  - target beacon SSID;
+  - BSSID;
+  - RSSI;
+  - frequency;
+  - observed monotonic time;
+  - received monotonic time;
+  - signature status.
+- Signature is currently `SIGNATURE_PENDING`.
+- `IffWitnessQuorum` now accepts remote report lists, though no transport feeds
+  them yet.
+- Team UI shows `REMOTE REPORTS: 0`, contract version, and signature
+  placeholder.
+- `IFF_DIAG event=field_check` now records:
+  - `remoteWitnessContract`;
+  - `remoteReportCount`;
+  - `remoteFreshSources`.
+- Analyzer exports remote contract fields in IFF field-check CSV/Markdown.
+- `:app:assembleDebug` completed successfully.
+- APK installed on OnePlus `e089985a`.
+- UIAutomator verified main PDA -> `IFF`.
+- `ЗАПИСАТЬ` for `Петя` produced
+  `remoteWitnessContract=iff-remote-witness-v1 remoteReportCount=0 remoteFreshSources=0`.
+- `scripts/test-analyze-field-logs.ps1` passed.
+- Fresh contract log analyzer check completed:
+  `artifacts/iff-field-session-20260519-1707` ->
+  `artifacts/iff-field-analysis-20260519-1707`, 635 scan entries, CSV rows
+  with `iff-remote-witness-v1` and `0 reports / 0 fresh`.

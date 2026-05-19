@@ -353,6 +353,34 @@ teammate reports explicitly `PENDING`. `ЗАПИСАТЬ` logged
 `witnessQuorum=NO_CURRENT_WITNESS witnessFreshSources=0 witnessPossibleSources=3`.
 Analyzer smoke test passed.
 
+## Phase 18: IFF Remote Witness Contract
+
+**Status:** completed
+
+**Goal:** Define the report contract needed for future remote teammate witness
+exchange without adding transport or crypto yet.
+
+**Scope:**
+
+- Add `IffRemoteWitnessReport`.
+- Add `IffRemoteWitnessStore`.
+- Define contract version `iff-remote-witness-v1`.
+- Include source player, target player, target beacon SSID, BSSID, RSSI,
+  frequency, observed/received monotonic times, and signature status.
+- Keep signatures as `SIGNATURE_PENDING`.
+- Feed remote report lists into quorum calculation.
+- Show remote report count and contract/signature placeholder in the IFF UI.
+- Add remote contract fields to `IFF_DIAG event=field_check`.
+- Extend analyzer CSV/Markdown output with remote fields.
+
+**Verification:** debug APK builds. APK installed on OnePlus `e089985a`.
+UIAutomator verified main PDA -> `IFF`; team screen showed
+`REMOTE REPORTS: 0`, contract `iff-remote-witness-v1`, and
+`SIGNATURE_PENDING`. `ЗАПИСАТЬ` for `Петя` logged
+`remoteWitnessContract=iff-remote-witness-v1 remoteReportCount=0 remoteFreshSources=0`.
+Analyzer smoke test passed, and the fresh contract log analysis produced CSV
+rows with `0 reports / 0 fresh`.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

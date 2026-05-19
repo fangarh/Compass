@@ -11,8 +11,11 @@ import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import java.util.List;
 import net.afterday.compas.iff.IffConfidence;
 import net.afterday.compas.iff.IffConfidence.Snapshot;
+import net.afterday.compas.iff.IffRemoteWitnessReport;
+import net.afterday.compas.iff.IffRemoteWitnessStore;
 import net.afterday.compas.iff.IffRadioWitnessStore;
 import net.afterday.compas.iff.IffRadioWitnessStore.WitnessSnapshot;
 import net.afterday.compas.iff.IffWitnessQuorum;
@@ -234,10 +237,12 @@ public class IffActivity extends Activity {
                 + "RADIO FRESH: " + freshWitnessCount() + "\n"
                 + "PROXIMITY STRONG: " + strongProximityCount() + "\n"
                 + "MULTI-WITNESS: " + multiWitnessCount() + "\n"
+                + "REMOTE REPORTS: " + remoteReportCount() + "\n"
                 + "DIRECTION: UNKNOWN");
         body.setText("Выберите участника, чтобы открыть карточку контакта.\n"
                 + "Проценты - текущая уверенность слоя, а не финальное доказательство.\n"
-                + "Multi-witness пока локальный: remote reports еще не подключены.\n"
+                + "Remote witness contract: " + IffRemoteWitnessReport.CONTRACT_VERSION + "\n"
+                + "Signature status пока placeholder: " + IffRemoteWitnessReport.SIGNATURE_PENDING + "\n"
                 + "Последняя проверка: " + lastFieldCheckSummary);
         for (int i = 0; i < roster.length; i++) {
             bodyContainer.addView(createRosterButton(i));
@@ -275,6 +280,9 @@ public class IffActivity extends Activity {
                 + " witnessQuorum=" + quorum.label
                 + " witnessFreshSources=" + quorum.freshSources
                 + " witnessPossibleSources=" + quorum.possibleSources
+                + " remoteWitnessContract=" + IffRemoteWitnessReport.CONTRACT_VERSION
+                + " remoteReportCount=" + quorum.remoteReportCount
+                + " remoteFreshSources=" + quorum.remoteFreshSources
                 + " witness=" + witnessState
                 + " localApproach=" + approachActive);
         lastFieldCheckSummary = selected.displayName + ": identity " + confidence.identity.score
@@ -334,7 +342,7 @@ public class IffActivity extends Activity {
 
     private IffWitnessQuorum.Snapshot witnessQuorumFor(IffPlayer player, WitnessSnapshot witness) {
         int possibleSources = roster.length - 1;
-        return IffWitnessQuorum.evaluate(player.playerId, witness, possibleSources);
+        return IffWitnessQuorum.evaluate(player.playerId, witness, IffRemoteWitnessStore.getReportsFor(player.playerId), possibleSources);
     }
 
     private String confidenceDetails(Snapshot confidence) {
@@ -401,7 +409,29 @@ public class IffActivity extends Activity {
                     .append(formatAge(quorum.localWitness.ageMs()))
                     .append("\n");
         }
-        builder.append("- remote teammate reports: PENDING (network not implemented)\n")
+        builder.append("- remote contract: ").append(IffRemoteWitnessReport.CONTRACT_VERSION).append("\n")
+                .append("- remote reports: ");
+        if (quorum.remoteReports.size() == 0) {
+            builder.append("none received\n");
+        } else {
+            builder.append(quorum.remoteReportCount).append(" received\n");
+            for (int i = 0; i < quorum.remoteReports.size(); i++) {
+                IffRemoteWitnessReport report = quorum.remoteReports.get(i);
+                builder.append("  ")
+                        .append(report.sourcePlayerId)
+                        .append(" -> ")
+                        .append(report.freshnessLabel())
+                        .append(" ")
+                        .append(report.rssi)
+                        .append("dBm age=")
+                        .append(formatAge(report.ageMs()))
+                        .append(" signature=")
+                        .append(report.signatureStatus)
+                        .append("\n");
+            }
+        }
+        builder.append("- transport: PENDING (network not implemented)\n")
+                .append("- signature: ").append(IffRemoteWitnessReport.SIGNATURE_PENDING).append("\n")
                 .append("- identity is not upgraded by quorum without crypto");
         return builder.toString();
     }
@@ -438,6 +468,14 @@ public class IffActivity extends Activity {
             if (witnessQuorumFor(player, witness).hasMultiWitness()) {
                 count++;
             }
+        }
+        return count;
+    }
+
+    private int remoteReportCount() {
+        int count = 0;
+        for (int i = 0; i < roster.length; i++) {
+            count += IffRemoteWitnessStore.reportCountFor(roster[i].playerId);
         }
         return count;
     }

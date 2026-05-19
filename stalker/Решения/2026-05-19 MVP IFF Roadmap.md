@@ -263,10 +263,37 @@ confidence без криптографии. Direction также не появл
 
 ## Следующий срез
 
-Спроектировать локальный contract для remote witness reports:
+## Реализованный срез Phase 18
+
+Спроектирован локальный contract для remote witness reports:
 
 ```text
 source player -> target player -> freshness/RSSI -> signature placeholder
 ```
 
-Это подготовит сетевой обмен, но еще не потребует реального транспорта.
+Добавлены:
+
+- `IffRemoteWitnessReport`;
+- `IffRemoteWitnessStore`;
+- contract version `iff-remote-witness-v1`;
+- signature placeholder `SIGNATURE_PENDING`;
+- UI `REMOTE REPORTS: 0`;
+- поля в diagnostic log:
+  - `remoteWitnessContract`;
+  - `remoteReportCount`;
+  - `remoteFreshSources`.
+
+Analyzer теперь выводит remote contract поля в CSV/Markdown.
+
+Важно: remote reports смогут повышать proximity quorum позже, но не identity
+confidence без проверки подписи.
+
+## Следующий срез
+
+Добавить local-only simulation/fixture для remote witness reports:
+
+```text
+без сети -> вручную добавить synthetic remote report -> проверить MULTI_WITNESS
+```
+
+Это позволит отладить quorum UI до реального транспорта.
