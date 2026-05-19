@@ -381,6 +381,38 @@ UIAutomator verified main PDA -> `IFF`; team screen showed
 Analyzer smoke test passed, and the fresh contract log analysis produced CSV
 rows with `0 reports / 0 fresh`.
 
+## Phase 19: IFF Remote Witness Simulation
+
+**Status:** completed
+
+**Goal:** Validate multi-witness quorum behavior before real network transport
+by adding a local-only fixture that injects synthetic remote witness reports for
+the selected IFF contact.
+
+**Scope:**
+
+- Add a `SIM WITNESS` action on the IFF screen.
+- Generate two synthetic `iff-remote-witness-v1` reports for the selected roster
+  participant from other roster sources.
+- Keep signatures as `SIGNATURE_PENDING`.
+- Feed simulated reports through `IffRemoteWitnessStore` and
+  `IffWitnessQuorum`.
+- Show `MULTI_WITNESS` only while enough reports are fresh.
+- Keep identity, proximity, position, and direction confidence separate and
+  unchanged by simulation alone.
+- Keep real transport, cryptography, GPS calibration, phone-specific Wi-Fi
+  calibration, and Samsung-specific logic out of this slice.
+
+**Verification:** debug APK builds. APK installed on OnePlus `e089985a`.
+UIAutomator verified main PDA -> `IFF` -> `КОМАНДА` -> select `Петя` ->
+`SIM WITNESS` -> `КОНТАКТ`. The contact screen showed
+`WITNESSES: MULTI_WITNESS 2/3`, two fresh remote reports, and
+`SIGNATURE_PENDING`; identity remained roster-only without crypto upgrade.
+`ЗАПИСАТЬ` logged
+`witnessQuorum=MULTI_WITNESS witnessFreshSources=2 witnessPossibleSources=3 remoteReportCount=2 remoteFreshSources=2`.
+Analyzer verification on `artifacts/iff-field-session-20260519-1716` produced
+an IFF row for `Петя` with `MULTI_WITNESS 2/3` and `2 reports / 2 fresh`.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

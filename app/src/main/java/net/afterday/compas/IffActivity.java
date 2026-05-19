@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.support.annotation.Nullable;
 import android.view.View;
 import android.view.Window;
@@ -47,6 +48,7 @@ public class IffActivity extends Activity {
     private Button mapTab;
     private Button approachButton;
     private Button recordCheckButton;
+    private Button simWitnessButton;
     private TextView title;
     private TextView subtitle;
     private TextView status;
@@ -105,6 +107,7 @@ public class IffActivity extends Activity {
         mapTab = (Button) findViewById(R.id.iff_map_tab);
         approachButton = (Button) findViewById(R.id.iff_approach);
         recordCheckButton = (Button) findViewById(R.id.iff_record_check);
+        simWitnessButton = (Button) findViewById(R.id.iff_sim_witness);
         title = (TextView) findViewById(R.id.iff_title);
         subtitle = (TextView) findViewById(R.id.iff_subtitle);
         status = (TextView) findViewById(R.id.iff_status);
@@ -123,6 +126,7 @@ public class IffActivity extends Activity {
         mapTab.setTypeface(mono, Typeface.BOLD);
         approachButton.setTypeface(mono, Typeface.BOLD);
         recordCheckButton.setTypeface(mono, Typeface.BOLD);
+        simWitnessButton.setTypeface(mono, Typeface.BOLD);
     }
 
     private void setListeners() {
@@ -159,6 +163,12 @@ public class IffActivity extends Activity {
                 recordFieldCheck();
             }
         });
+        simWitnessButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                simulateRemoteWitnesses();
+            }
+        });
     }
 
     private void toggleApproach() {
@@ -181,6 +191,7 @@ public class IffActivity extends Activity {
 
     private void render() {
         approachButton.setText(approachActive ? "ОТМЕНИТЬ ПОДХОД" : "Я ПОДХОЖУ");
+        simWitnessButton.setText("SIM WITNESS");
         renderTabs();
         if (activeTab == TAB_CONTACT) {
             renderContact();
@@ -253,7 +264,8 @@ public class IffActivity extends Activity {
         resetBody();
         title.setText("КАРТА");
         subtitle.setText("позиции и свидетели");
-        status.setText("POSITION: UNKNOWN 0%\nСВИДЕТЕЛИ: " + freshWitnessCount() + " fresh\nDIRECTION: UNKNOWN 0%");
+        status.setText("POSITION: UNKNOWN 0%\nLOCAL RADIO: " + freshWitnessCount() + " fresh\n"
+                + "REMOTE REPORTS: " + remoteReportCount() + "\nDIRECTION: UNKNOWN 0%");
         body.setText(mapWitnessList());
     }
 
@@ -287,6 +299,41 @@ public class IffActivity extends Activity {
                 + " localApproach=" + approachActive);
         lastFieldCheckSummary = selected.displayName + ": identity " + confidence.identity.score
                 + "% / proximity " + confidence.proximity.score + "% / witness " + (witness == null ? "none" : witness.freshnessLabel());
+        activeTab = TAB_CONTACT;
+        render();
+    }
+
+    private void simulateRemoteWitnesses() {
+        IffPlayer target = roster[selectedPlayerIndex];
+        long now = SystemClock.elapsedRealtime();
+        int added = 0;
+        for (int i = 0; i < roster.length && added < 2; i++) {
+            IffPlayer source = roster[i];
+            if (source.playerId.equals(target.playerId)) {
+                continue;
+            }
+            int rssi = added == 0 ? -48 : -61;
+            IffRemoteWitnessReport report = new IffRemoteWitnessReport(
+                    source.playerId,
+                    target.playerId,
+                    IffRadioWitnessStore.expectedBeaconSsid(target.playerId),
+                    "sim:" + source.playerId + ":" + target.playerId,
+                    rssi,
+                    2412,
+                    now - (2500L + (added * 900L)),
+                    now,
+                    IffRemoteWitnessReport.SIGNATURE_PENDING);
+            if (IffRemoteWitnessStore.receiveReport(report)) {
+                added++;
+            }
+        }
+        FieldDiagnosticLog.event("IFF_DIAG", "event=remote_witness_simulated"
+                + " targetPlayerId=" + target.playerId
+                + " added=" + added
+                + " contract=" + IffRemoteWitnessReport.CONTRACT_VERSION
+                + " signatureStatus=" + IffRemoteWitnessReport.SIGNATURE_PENDING);
+        lastFieldCheckSummary = target.displayName + ": simulated remote witnesses " + added + " / "
+                + IffRemoteWitnessReport.SIGNATURE_PENDING;
         activeTab = TAB_CONTACT;
         render();
     }
@@ -494,7 +541,7 @@ public class IffActivity extends Activity {
                     .append("\n");
         }
         builder.append("\nGPS и направление будут отдельными слоями уверенности.\n")
-                .append("Remote witness reports пока не подключены.");
+                .append("Remote transport пока не подключен; SIM WITNESS добавляет local-only fixture.");
         return builder.toString();
     }
 

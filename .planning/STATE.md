@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 18: IFF Remote Witness Contract completed.
+Phase 19: IFF Remote Witness Simulation completed.
 
 ## Last Verified Baseline
 
@@ -23,8 +23,9 @@ Phase 18: IFF Remote Witness Contract completed.
 
 ## Next Action
 
-Next useful slice: add a local-only remote witness simulation toggle or fixture
-so quorum behavior can be validated before real transport.
+Next useful slice: make remote witness freshness/expiry visible and controllable
+in the local fixture, so the UI can verify transitions from `MULTI_WITNESS` to
+stale/unknown without waiting on real transport.
 
 ## Verification
 
@@ -358,3 +359,31 @@ so quorum behavior can be validated before real transport.
   `artifacts/iff-field-session-20260519-1707` ->
   `artifacts/iff-field-analysis-20260519-1707`, 635 scan entries, CSV rows
   with `iff-remote-witness-v1` and `0 reports / 0 fresh`.
+
+2026-05-19 Phase 19:
+
+- Added a local-only `SIM WITNESS` action to the IFF screen.
+- The action injects two synthetic remote witness reports for the selected
+  roster participant through `IffRemoteWitnessStore`.
+- Synthetic reports use contract `iff-remote-witness-v1` and
+  `SIGNATURE_PENDING`.
+- `IffWitnessQuorum` now distinguishes local-only, remote-only, and
+  multi-witness states.
+- Contact UI shows fresh simulated reports and `MULTI_WITNESS 2/3` while the
+  reports are inside the freshness window.
+- Map UI separates:
+  - `POSITION: UNKNOWN 0%`;
+  - local radio freshness;
+  - remote report count;
+  - `DIRECTION: UNKNOWN`.
+- `:app:assembleDebug` completed successfully.
+- APK installed on OnePlus `e089985a`.
+- UIAutomator verified:
+  `Main -> IFF -> КОМАНДА -> Петя -> SIM WITNESS -> КОНТАКТ`.
+- `ЗАПИСАТЬ` produced:
+  `witnessQuorum=MULTI_WITNESS witnessFreshSources=2 witnessPossibleSources=3 remoteWitnessContract=iff-remote-witness-v1 remoteReportCount=2 remoteFreshSources=2`.
+- `scripts/test-analyze-field-logs.ps1` passed.
+- Fresh simulation analyzer check completed:
+  `artifacts/iff-field-session-20260519-1716` ->
+  `artifacts/iff-field-analysis-20260519-1716`, 1400 scan entries, CSV row
+  `MULTI_WITNESS 2/3` with `2 reports / 2 fresh`.

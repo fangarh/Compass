@@ -297,3 +297,45 @@ confidence без проверки подписи.
 ```
 
 Это позволит отладить quorum UI до реального транспорта.
+
+## Реализованный срез Phase 19
+
+Добавлен local-only simulation/fixture для remote witness reports:
+
+```text
+выбранный участник -> SIM WITNESS -> два synthetic remote reports -> MULTI_WITNESS
+```
+
+Что появилось:
+
+- кнопка `SIM WITNESS` на IFF-экране;
+- два synthetic remote reports для выбранного контакта;
+- contract `iff-remote-witness-v1`;
+- signature status `SIGNATURE_PENDING`;
+- `WITNESSES: MULTI_WITNESS 2/3` при свежих reports;
+- `remote_witness_simulated` и remote witness counts в diagnostic log;
+- analyzer видит `MULTI_WITNESS`, `remoteReportCount=2` и
+  `remoteFreshSources=2`.
+
+Проверка на OnePlus:
+
+- `Main -> IFF -> Команда -> Петя -> SIM WITNESS -> Контакт`;
+- контакт показал два свежих remote reports;
+- identity осталась `ROSTER_ONLY`, без crypto upgrade;
+- `ЗАПИСАТЬ` записал `MULTI_WITNESS 2/3`;
+- analyzer по сессии `20260519-1716` подтвердил `2 reports / 2 fresh`.
+
+Важно: это только fixture для UI/quorum/logging. Он не означает реальный
+транспорт, криптографическую идентичность, направление или точную позицию.
+
+## Следующий срез
+
+Сделать freshness/expiry remote reports видимыми и управляемыми в local
+fixture:
+
+```text
+fresh reports -> истечение freshness window -> stale/unknown transition
+```
+
+Это нужно, чтобы явно проверять переход `MULTI_WITNESS` обратно в
+неподтвержденное состояние до подключения реального транспорта.

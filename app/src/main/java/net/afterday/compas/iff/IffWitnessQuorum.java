@@ -32,8 +32,10 @@ public final class IffWitnessQuorum {
         String label;
         if (freshSources >= 2) {
             label = "MULTI_WITNESS";
-        } else if (freshSources == 1) {
+        } else if (localWitness != null && localWitness.isFresh()) {
             label = "LOCAL_WITNESS_ONLY";
+        } else if (remoteFreshSources == 1) {
+            label = "REMOTE_WITNESS_ONLY";
         } else if (staleSources == 1) {
             label = "STALE_LOCAL_WITNESS";
         } else {
