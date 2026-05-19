@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 16: IFF Cautious Proximity UI completed.
+Phase 17: IFF Local Witness Quorum completed.
 
 ## Last Verified Baseline
 
@@ -23,8 +23,9 @@ Phase 16: IFF Cautious Proximity UI completed.
 
 ## Next Action
 
-Next useful slice: start multi-witness design, where another teammate can
-report hearing the same claimed player without turning RSSI into direction.
+Next useful slice: design the local transport contract for remote witness
+reports: source player id, target player id, freshness, RSSI, and signature
+placeholder.
 
 ## Verification
 
@@ -294,3 +295,31 @@ report hearing the same claimed player without turning RSSI into direction.
 - APK installed on OnePlus `e089985a`.
 - UIAutomator verified main PDA -> `IFF`; team screen showed
   `RADIO FRESH: 0`, `PROXIMITY STRONG: 0`, and `DIRECTION: UNKNOWN`.
+
+2026-05-19 Phase 17:
+
+- Added `IffWitnessQuorum` as the first multi-witness foundation.
+- Current phone is modeled as `local-device`.
+- Remote teammate reports are explicitly `PENDING`; no network exchange exists
+  yet.
+- Contact screen now shows:
+  - `WITNESSES: NO_CURRENT_WITNESS 0/3` when no beacon is heard;
+  - `WITNESS QUORUM` details;
+  - a note that identity is not upgraded by quorum without crypto.
+- Team screen now shows `MULTI-WITNESS: 0`.
+- Map list includes quorum state per roster participant.
+- `IFF_DIAG event=field_check` now records:
+  - `witnessQuorum`;
+  - `witnessFreshSources`;
+  - `witnessPossibleSources`.
+- Analyzer now exports quorum fields into IFF field-check CSV/Markdown output.
+- `:app:assembleDebug` completed successfully.
+- APK installed on OnePlus `e089985a`.
+- UIAutomator verified main PDA -> `IFF` -> `КОМАНДА` -> select `Петя`.
+- `ЗАПИСАТЬ` produced
+  `witnessQuorum=NO_CURRENT_WITNESS witnessFreshSources=0 witnessPossibleSources=3`.
+- `scripts/test-analyze-field-logs.ps1` passed.
+- Fresh quorum log analyzer check completed:
+  `artifacts/iff-field-session-20260519-1659` ->
+  `artifacts/iff-field-analysis-20260519-1659`, 2398 scan entries, CSV row
+  `NO_CURRENT_WITNESS 0/3`.

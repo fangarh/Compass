@@ -236,10 +236,37 @@ RADIO_NEAR / RADIO_MID -> RADIO_NEAR / RADIO_WEAK_HINT
 
 ## Следующий срез
 
-Начать multi-witness design:
+## Реализованный срез Phase 17
+
+Добавлен первый multi-witness foundation:
 
 ```text
 один заявленный игрок -> несколько телефонов слышат beacon -> confidence выше
 ```
 
-При этом не добавлять direction и не усиливать identity без криптографии.
+Пока без сети. Текущий телефон считается `local-device`, а remote teammate
+reports явно показываются как `PENDING`.
+
+Что появилось:
+
+- `WITNESSES: ...` на карточке контакта;
+- блок `WITNESS QUORUM`;
+- `MULTI-WITNESS: 0` на экране команды;
+- quorum state на карте;
+- поля в diagnostic log:
+  - `witnessQuorum`;
+  - `witnessFreshSources`;
+  - `witnessPossibleSources`.
+
+Важно: quorum в будущем может повышать proximity confidence, но не identity
+confidence без криптографии. Direction также не появляется из RSSI/quorum.
+
+## Следующий срез
+
+Спроектировать локальный contract для remote witness reports:
+
+```text
+source player -> target player -> freshness/RSSI -> signature placeholder
+```
+
+Это подготовит сетевой обмен, но еще не потребует реального транспорта.

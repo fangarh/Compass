@@ -330,6 +330,29 @@ not a strong or exact distance confirmation.
 UIAutomator verified main PDA -> `IFF`; team screen showed
 `RADIO FRESH: 0`, `PROXIMITY STRONG: 0`, and `DIRECTION: UNKNOWN`.
 
+## Phase 17: IFF Local Witness Quorum
+
+**Status:** completed
+
+**Goal:** Add a multi-witness foundation while keeping the current MVP honest:
+only the local phone reports today, remote teammate reports are pending.
+
+**Scope:**
+
+- Add `IffWitnessQuorum`.
+- Show `WITNESSES` / `WITNESS QUORUM` in contact details.
+- Show `MULTI-WITNESS` count on the team screen.
+- Show quorum state on the map list.
+- Add quorum fields to `IFF_DIAG event=field_check`.
+- Extend the field-log analyzer to export quorum fields.
+
+**Verification:** debug APK builds. APK installed on OnePlus `e089985a`.
+UIAutomator verified main PDA -> `IFF`; team screen showed `MULTI-WITNESS: 0`.
+Selecting `Петя` showed `WITNESSES: NO_CURRENT_WITNESS 0/3`, with remote
+teammate reports explicitly `PENDING`. `ЗАПИСАТЬ` logged
+`witnessQuorum=NO_CURRENT_WITNESS witnessFreshSources=0 witnessPossibleSources=3`.
+Analyzer smoke test passed.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

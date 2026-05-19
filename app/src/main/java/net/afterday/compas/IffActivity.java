@@ -15,6 +15,7 @@ import net.afterday.compas.iff.IffConfidence;
 import net.afterday.compas.iff.IffConfidence.Snapshot;
 import net.afterday.compas.iff.IffRadioWitnessStore;
 import net.afterday.compas.iff.IffRadioWitnessStore.WitnessSnapshot;
+import net.afterday.compas.iff.IffWitnessQuorum;
 import net.afterday.compas.logging.FieldDiagnosticLog;
 
 public class IffActivity extends Activity {
@@ -202,10 +203,11 @@ public class IffActivity extends Activity {
         IffPlayer selected = roster[selectedPlayerIndex];
         WitnessSnapshot witness = IffRadioWitnessStore.getWitness(selected.playerId);
         Snapshot confidence = confidenceFor(selected, witness);
+        IffWitnessQuorum.Snapshot quorum = witnessQuorumFor(selected, witness);
         boolean localApproachSelected = approachActive && selected.local;
         title.setText(localApproachSelected ? "ВЫ ПОДХОДИТЕ" : selected.displayName);
         subtitle.setText(selected.local ? "локальный игрок" : "локальный roster + radio witness");
-        status.setText("CONFIDENCE\n" + confidence.compactStatus());
+        status.setText("CONFIDENCE\n" + confidence.compactStatus() + "\nWITNESSES: " + quorum.compact());
         body.setText("ИГРОК\n"
                 + "- имя: " + selected.displayName + "\n"
                 + "- id: " + selected.playerId + "\n"
@@ -215,8 +217,10 @@ public class IffActivity extends Activity {
                 + confidenceDetails(confidence) + "\n\n"
                 + "СВИДЕТЕЛИ\n"
                 + witnessDetails(witness) + "\n\n"
+                + "WITNESS QUORUM\n"
+                + witnessQuorumDetails(selected, quorum) + "\n\n"
                 + "РЕШЕНИЕ\n"
-                + decisionText(confidence) + "\n\n"
+                + decisionText(confidence, quorum) + "\n\n"
                 + "FIELD CHECK\n"
                 + "- последняя запись: " + lastFieldCheckSummary);
     }
@@ -229,9 +233,11 @@ public class IffActivity extends Activity {
                 + "УЧАСТНИКОВ: " + roster.length + "\n"
                 + "RADIO FRESH: " + freshWitnessCount() + "\n"
                 + "PROXIMITY STRONG: " + strongProximityCount() + "\n"
+                + "MULTI-WITNESS: " + multiWitnessCount() + "\n"
                 + "DIRECTION: UNKNOWN");
         body.setText("Выберите участника, чтобы открыть карточку контакта.\n"
                 + "Проценты - текущая уверенность слоя, а не финальное доказательство.\n"
+                + "Multi-witness пока локальный: remote reports еще не подключены.\n"
                 + "Последняя проверка: " + lastFieldCheckSummary);
         for (int i = 0; i < roster.length; i++) {
             bodyContainer.addView(createRosterButton(i));
@@ -250,6 +256,7 @@ public class IffActivity extends Activity {
         IffPlayer selected = roster[selectedPlayerIndex];
         WitnessSnapshot witness = IffRadioWitnessStore.getWitness(selected.playerId);
         Snapshot confidence = confidenceFor(selected, witness);
+        IffWitnessQuorum.Snapshot quorum = witnessQuorumFor(selected, witness);
         String witnessState = witness == null
                 ? "none"
                 : witness.freshnessLabel() + " rssi=" + witness.rssi + " ageMs=" + witness.ageMs()
@@ -265,6 +272,9 @@ public class IffActivity extends Activity {
                 + " positionScore=" + confidence.position.score
                 + " directionLabel=" + confidence.direction.label
                 + " directionScore=" + confidence.direction.score
+                + " witnessQuorum=" + quorum.label
+                + " witnessFreshSources=" + quorum.freshSources
+                + " witnessPossibleSources=" + quorum.possibleSources
                 + " witness=" + witnessState
                 + " localApproach=" + approachActive);
         lastFieldCheckSummary = selected.displayName + ": identity " + confidence.identity.score
@@ -322,6 +332,11 @@ public class IffActivity extends Activity {
         return IffConfidence.evaluate(player.playerId, player.local, approachActive, witness);
     }
 
+    private IffWitnessQuorum.Snapshot witnessQuorumFor(IffPlayer player, WitnessSnapshot witness) {
+        int possibleSources = roster.length - 1;
+        return IffWitnessQuorum.evaluate(player.playerId, witness, possibleSources);
+    }
+
     private String confidenceDetails(Snapshot confidence) {
         return confidence.identity.detailLine("identity") + "\n"
                 + confidence.proximity.detailLine("proximity") + "\n"
@@ -329,16 +344,18 @@ public class IffActivity extends Activity {
                 + confidence.direction.detailLine("direction");
     }
 
-    private String decisionText(Snapshot confidence) {
+    private String decisionText(Snapshot confidence, IffWitnessQuorum.Snapshot quorum) {
         if ("RADIO_NEAR".equals(confidence.proximity.label)) {
             return "- рядом слышен свежий beacon заявленного участника\n"
                     + "- это сильный proximity hint, но не crypto identity\n"
+                    + "- quorum: " + quorum.compact() + ", multi-witness еще нет\n"
                     + "- direction и точная position пока неизвестны";
         }
         if ("RADIO_WEAK_HINT".equals(confidence.proximity.label)
                 || "RADIO_EDGE_HINT".equals(confidence.proximity.label)) {
             return "- beacon слышен свежо, но RSSI не дает точную дистанцию\n"
                     + "- это слабая proximity-подсказка, не подтверждение близкого контакта\n"
+                    + "- quorum: " + quorum.compact() + ", multi-witness еще нет\n"
                     + "- direction и точная position пока неизвестны";
         }
         if ("LOCAL_DECLARED_UNKNOWN".equals(confidence.proximity.label)) {
@@ -369,6 +386,26 @@ public class IffActivity extends Activity {
                 + "- frequency: " + witness.frequency + " MHz";
     }
 
+    private String witnessQuorumDetails(IffPlayer selected, IffWitnessQuorum.Snapshot quorum) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("- target: ").append(selected.displayName).append("\n")
+                .append("- state: ").append(quorum.compact()).append("\n")
+                .append("- local-device: ");
+        if (quorum.localWitness == null) {
+            builder.append("NO_REPORT\n");
+        } else {
+            builder.append(quorum.localWitness.freshnessLabel())
+                    .append(" ")
+                    .append(quorum.localWitness.rssi)
+                    .append("dBm age=")
+                    .append(formatAge(quorum.localWitness.ageMs()))
+                    .append("\n");
+        }
+        builder.append("- remote teammate reports: PENDING (network not implemented)\n")
+                .append("- identity is not upgraded by quorum without crypto");
+        return builder.toString();
+    }
+
     private int freshWitnessCount() {
         int count = 0;
         for (int i = 0; i < roster.length; i++) {
@@ -393,6 +430,18 @@ public class IffActivity extends Activity {
         return count;
     }
 
+    private int multiWitnessCount() {
+        int count = 0;
+        for (int i = 0; i < roster.length; i++) {
+            IffPlayer player = roster[i];
+            WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
+            if (witnessQuorumFor(player, witness).hasMultiWitness()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     private String mapWitnessList() {
         StringBuilder builder = new StringBuilder();
         builder.append("КАРТА ПОКА НЕ РИСУЕТ АЗИМУТ\n\n");
@@ -401,10 +450,13 @@ public class IffActivity extends Activity {
             WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
             builder.append(player.displayName)
                     .append(": ")
+                    .append(witnessQuorumFor(player, witness).compact())
+                    .append(" / ")
                     .append(witness == null ? "radio UNKNOWN" : witness.freshnessLabel() + " " + witness.rssi + "dBm age=" + formatAge(witness.ageMs()))
                     .append("\n");
         }
-        builder.append("\nGPS и направление будут отдельными слоями уверенности.");
+        builder.append("\nGPS и направление будут отдельными слоями уверенности.\n")
+                .append("Remote witness reports пока не подключены.");
         return builder.toString();
     }
 

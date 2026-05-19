@@ -307,6 +307,9 @@ foreach ($log in $logs) {
                     PositionScore = Get-NumberOrNull (Get-FieldValue $message "positionScore")
                     DirectionLabel = Get-FieldValue $message "directionLabel"
                     DirectionScore = Get-NumberOrNull (Get-FieldValue $message "directionScore")
+                    WitnessQuorum = Get-FieldValue $message "witnessQuorum"
+                    WitnessFreshSources = Get-NumberOrNull (Get-FieldValue $message "witnessFreshSources")
+                    WitnessPossibleSources = Get-NumberOrNull (Get-FieldValue $message "witnessPossibleSources")
                     WitnessFreshness = Get-FieldValue $message "witness"
                     WitnessRssi = Get-NumberOrNull (Get-FieldValue $message "rssi")
                     WitnessAgeMs = Get-NumberOrNull (Get-FieldValue $message "ageMs")
@@ -688,6 +691,9 @@ $iffFieldCheckTimeline = $iffFieldChecks |
             PositionScore = $_.PositionScore
             DirectionLabel = $_.DirectionLabel
             DirectionScore = $_.DirectionScore
+            WitnessQuorum = $_.WitnessQuorum
+            WitnessFreshSources = $_.WitnessFreshSources
+            WitnessPossibleSources = $_.WitnessPossibleSources
             WitnessFreshness = $_.WitnessFreshness
             WitnessRssi = $_.WitnessRssi
             WitnessAgeMs = $_.WitnessAgeMs
@@ -725,6 +731,7 @@ $iffFieldCheckSummary = $iffFieldChecks |
             Count = $items.Count
             IdentityLabels = Get-LabelCountsText $items "IdentityLabel"
             ProximityLabels = Get-LabelCountsText $items "ProximityLabel"
+            WitnessQuorumLabels = Get-LabelCountsText $items "WitnessQuorum"
             WitnessFreshness = Get-LabelCountsText $items "WitnessFreshness"
             AvgIdentityScore = [math]::Round(($items | Measure-Object IdentityScore -Average).Average, 1)
             AvgProximityScore = [math]::Round(($items | Measure-Object ProximityScore -Average).Average, 1)
@@ -1090,22 +1097,23 @@ $report.Add("")
 if ($iffFieldCheckTimeline.Count -eq 0) {
     $report.Add("No `IFF_DIAG event=field_check` lines found. Tap the IFF record button during field checks to capture identity/proximity snapshots.")
 } else {
-    $report.Add("| Time | Window | Device | Player | Identity | Proximity | Witness | RSSI | Age ms | Position | Direction |")
-    $report.Add("| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |")
+    $report.Add("| Time | Window | Device | Player | Identity | Proximity | Quorum | Witness | RSSI | Age ms | Position | Direction |")
+    $report.Add("| --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |")
     foreach ($row in $iffFieldCheckTimeline) {
         $player = if ([string]::IsNullOrWhiteSpace($row.DisplayName)) { $row.PlayerId } else { "$($row.DisplayName) ($($row.PlayerId))" }
         $rssi = if ($null -eq $row.WitnessRssi) { "" } else { $row.WitnessRssi }
         $age = if ($null -eq $row.WitnessAgeMs) { "" } else { $row.WitnessAgeMs }
-        $report.Add("| $($row.Time) | $($row.Window) | $($row.Device) | $player | $($row.IdentityLabel) $($row.IdentityScore) | $($row.ProximityLabel) $($row.ProximityScore) | $($row.WitnessFreshness) | $rssi | $age | $($row.PositionLabel) $($row.PositionScore) | $($row.DirectionLabel) $($row.DirectionScore) |")
+        $quorum = if ([string]::IsNullOrWhiteSpace($row.WitnessQuorum)) { "" } else { "$($row.WitnessQuorum) $($row.WitnessFreshSources)/$($row.WitnessPossibleSources)" }
+        $report.Add("| $($row.Time) | $($row.Window) | $($row.Device) | $player | $($row.IdentityLabel) $($row.IdentityScore) | $($row.ProximityLabel) $($row.ProximityScore) | $quorum | $($row.WitnessFreshness) | $rssi | $age | $($row.PositionLabel) $($row.PositionScore) | $($row.DirectionLabel) $($row.DirectionScore) |")
     }
 
     $report.Add("")
-    $report.Add("| Window | Device | Player | Checks | Identity labels | Proximity labels | Witness | Avg RSSI | Avg age ms |")
-    $report.Add("| --- | --- | --- | ---: | --- | --- | --- | ---: | ---: |")
+    $report.Add("| Window | Device | Player | Checks | Identity labels | Proximity labels | Quorum labels | Witness | Avg RSSI | Avg age ms |")
+    $report.Add("| --- | --- | --- | ---: | --- | --- | --- | --- | ---: | ---: |")
     foreach ($row in $iffFieldCheckSummary) {
         $avgRssi = if ($null -eq $row.AvgRssi) { "" } else { $row.AvgRssi }
         $avgAge = if ($null -eq $row.AvgAgeMs) { "" } else { $row.AvgAgeMs }
-        $report.Add("| $($row.Window) | $($row.Device) | $($row.DisplayName) ($($row.PlayerId)) | $($row.Count) | $($row.IdentityLabels) | $($row.ProximityLabels) | $($row.WitnessFreshness) | $avgRssi | $avgAge |")
+        $report.Add("| $($row.Window) | $($row.Device) | $($row.DisplayName) ($($row.PlayerId)) | $($row.Count) | $($row.IdentityLabels) | $($row.ProximityLabels) | $($row.WitnessQuorumLabels) | $($row.WitnessFreshness) | $avgRssi | $avgAge |")
     }
 
     $report.Add("")
