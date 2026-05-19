@@ -372,3 +372,48 @@ R3CT20C8A8N: avg fresh age 1068 ms, max fresh age 2140 ms, avg receiver gap 2.17
 В коротком прогоне не было tick-ов со свежестью старше 3 секунд. Для цели
 реакции 3-5 секунд это обнадеживающий результат, но нужен более длинный тест
 с перемещением.
+
+## Phase 8: hotspot как Wi-Fi маяк
+
+После офисных маршрутных тестов возвращаемся к исходной задаче: направление и
+приближение к объекту в лесу. Офисная топология полезна для проверки частоты
+логирования, но она слишком зависит от стен, точек доступа и переотражений.
+
+Минимальный следующий тест: один телефон включает точку доступа с SSID
+`COMPASS_BEACON_A`, второй телефон запускает Compass и пишет diagnostic log.
+ПК участвует только через USB ADB; Wi-Fi на ПК не нужен.
+
+APK менять не потребовалось: в логах уже есть все `WIFI_DIAG event=scan_entry`
+со строками SSID/BSSID/RSSI/frequency. Расширен только анализатор:
+
+```text
+beacon-timeline.csv
+beacon-bucket-summary.csv
+beacon-summary.csv
+```
+
+Команда анализа:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\analyze-field-logs.ps1 `
+  -InputRoot artifacts\field-logs\<run> `
+  -OutputDir artifacts\field-analysis-<run> `
+  -Windows "route=HH:MM:SS..HH:MM:SS" `
+  -BucketSeconds 5 `
+  -BeaconSsids "COMPASS_BEACON*"
+```
+
+Главный файл для разбора следующего теста:
+`beacon-bucket-summary.csv`.
+
+Смысл колонок:
+
+```text
+AvgRssi     средний уровень маяка в bucket-е
+RangeClass  грубая зона very_close/close/medium/far/edge
+Trend       stronger/weaker/stable относительно предыдущего bucket-а
+TrendDb     изменение RSSI в dB
+```
+
+Это пока не расстояние в метрах. Для игры сейчас важнее короткая динамика:
+игрок приближается к маяку, удаляется, стоит на месте или маяк пропал.

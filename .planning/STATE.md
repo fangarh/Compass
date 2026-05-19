@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 6: 1 Hz Wi-Fi Freshness Test in progress.
+Phase 8: Hotspot Beacon Ranging Analysis completed.
 
 ## Last Verified Baseline
 
@@ -23,9 +23,9 @@ Phase 6: 1 Hz Wi-Fi Freshness Test in progress.
 
 ## Next Action
 
-Phase 7 added multisensor diagnostics. Before the next blind route test, make
-sure both phones are unlocked after install and all startup permissions are
-granted, especially physical activity on OnePlus for step counter data.
+Run a two-phone beacon test. Configure one phone hotspot SSID as
+`COMPASS_BEACON_A`, run Compass diagnostics on the other phone, then swap roles
+if needed. Analyze with `-BeaconSsids "COMPASS_BEACON*"`.
 
 ## Verification
 
@@ -105,3 +105,18 @@ granted, especially physical activity on OnePlus for step counter data.
   9 location events, and intact Wi-Fi freshness output.
 - OnePlus installed the APK but still needs manual unlock/permission handling
   for the new physical-activity permission before the next test.
+
+2026-05-19 Phase 8:
+
+- Office topology testing was stopped as the primary direction because it does
+  not represent the forest distance/direction problem well enough.
+- The current app logs already contain raw Wi-Fi scan entries, so no APK change
+  was needed for the next step.
+- Analyzer now supports controlled hotspot SSID filtering through
+  `-BeaconSsids`.
+- New outputs:
+  - `beacon-timeline.csv`
+  - `beacon-bucket-summary.csv`
+  - `beacon-summary.csv`
+- Verification script:
+  `powershell -ExecutionPolicy Bypass -File scripts\test-analyze-field-logs.ps1`.

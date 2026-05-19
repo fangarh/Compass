@@ -123,6 +123,26 @@ SM-S908B produced `SENSOR_DIAG` and `LOCATION_DIAG` lines with app version
 `1816-diagnostic-sensors-1s`; analyzer emitted sensor/location CSV files and
 existing Wi-Fi freshness output remained valid.
 
+## Phase 8: Hotspot Beacon Ranging Analysis
+
+**Status:** completed
+
+**Goal:** Return the field work to the original forest problem by analyzing one
+phone as a Wi-Fi object beacon and the other phone as the receiver.
+
+**Scope:**
+
+- Keep the current diagnostic APK unchanged; raw `scan_entry` lines already
+  contain SSID/BSSID/RSSI/frequency.
+- Extend `scripts/analyze-field-logs.ps1` with `-BeaconSsids`.
+- Export `beacon-timeline.csv`, `beacon-bucket-summary.csv`, and
+  `beacon-summary.csv`.
+- Classify rough RSSI range bands and short-term stronger/weaker/stable trends.
+
+**Verification:** `scripts/test-analyze-field-logs.ps1` completed on
+2026-05-19 with a synthetic `COMPASS_BEACON_A` log and detected both stronger
+and weaker beacon trends.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

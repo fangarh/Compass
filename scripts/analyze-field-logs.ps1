@@ -7,6 +7,7 @@ param(
     [string]$CorridorStart = "2026-05-19 10:02:05",
     [string]$Windows = "",
     [int]$BucketSeconds = 30,
+    [string]$BeaconSsids = "COMPASS_BEACON*",
     [switch]$IncludeLegacyRootLogs
 )
 
@@ -121,6 +122,7 @@ if (-not $IncludeLegacyRootLogs) {
 }
 
 $scanEntries = New-Object System.Collections.Generic.List[object]
+$beaconEntries = New-Object System.Collections.Generic.List[object]
 $events = New-Object System.Collections.Generic.List[object]
 $contexts = New-Object System.Collections.Generic.List[object]
 $freshnessTicks = New-Object System.Collections.Generic.List[object]
@@ -142,6 +144,53 @@ function Get-NumberOrNull([string]$value) {
         return $null
     }
     return [double]::Parse($value, $culture)
+}
+
+$beaconSsidPatterns = @(
+    $BeaconSsids -split ',' |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+)
+
+function Test-BeaconSsid([string]$ssid) {
+    if ([string]::IsNullOrWhiteSpace($ssid) -or $beaconSsidPatterns.Count -eq 0) {
+        return $false
+    }
+    foreach ($pattern in $beaconSsidPatterns) {
+        if ($ssid -like $pattern) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Get-BeaconRangeClass([int]$rssi) {
+    if ($rssi -ge -45) {
+        return "very_close"
+    }
+    if ($rssi -ge -55) {
+        return "close"
+    }
+    if ($rssi -ge -67) {
+        return "medium"
+    }
+    if ($rssi -ge -80) {
+        return "far"
+    }
+    return "edge"
+}
+
+function Get-BeaconTrend([Nullable[double]]$deltaDb) {
+    if ($null -eq $deltaDb) {
+        return "first"
+    }
+    if ($deltaDb -ge 3.0) {
+        return "stronger"
+    }
+    if ($deltaDb -le -3.0) {
+        return "weaker"
+    }
+    return "stable"
 }
 
 foreach ($log in $logs) {
@@ -256,7 +305,7 @@ foreach ($log in $logs) {
         }
 
         if ($message -match 'event=scan_entry .*?ssid="(?<ssid>.*?)" bssid=(?<bssid>\S+) level=(?<level>-?\d+) frequency=(?<frequency>\d+) timestamp=(?<scanTimestamp>\d+)') {
-            $scanEntries.Add([pscustomobject]@{
+            $entry = [pscustomobject]@{
                 Device = $device
                 LogFile = $log.Name
                 Time = $time
@@ -267,7 +316,23 @@ foreach ($log in $logs) {
                 Rssi = [int]$Matches.level
                 Frequency = [int]$Matches.frequency
                 ScanTimestamp = [int64]$Matches.scanTimestamp
-            })
+            }
+            $scanEntries.Add($entry)
+            if (Test-BeaconSsid $entry.Ssid) {
+                $beaconEntries.Add([pscustomobject]@{
+                    Device = $entry.Device
+                    LogFile = $entry.LogFile
+                    Time = $entry.Time
+                    Window = $entry.Window
+                    Bucket = $entry.Bucket
+                    Ssid = $entry.Ssid
+                    Bssid = $entry.Bssid
+                    Rssi = $entry.Rssi
+                    Frequency = $entry.Frequency
+                    ScanTimestamp = $entry.ScanTimestamp
+                    RangeClass = Get-BeaconRangeClass $entry.Rssi
+                })
+            }
             continue
         }
 
@@ -346,6 +411,118 @@ $bucketSummary = $scanEntries |
         }
     } |
     Sort-Object Bucket, Device, AvgRssi -Descending
+
+$beaconTimeline = $beaconEntries |
+    Sort-Object Time, Device, Ssid, Bssid |
+    ForEach-Object {
+        [pscustomobject]@{
+            Device = $_.Device
+            LogFile = $_.LogFile
+            Time = $_.Time.ToString("yyyy-MM-dd HH:mm:ss.fff")
+            Window = $_.Window
+            Bucket = $_.Bucket
+            Ssid = $_.Ssid
+            Bssid = $_.Bssid
+            Rssi = $_.Rssi
+            Frequency = $_.Frequency
+            RangeClass = $_.RangeClass
+            ScanTimestamp = $_.ScanTimestamp
+        }
+    }
+
+$beaconBucketRaw = @(
+    $beaconEntries |
+        Group-Object Window, Device, Bucket, Ssid, Bssid |
+        ForEach-Object {
+            $items = $_.Group
+            $rssis = $items | ForEach-Object { $_.Rssi }
+            $first = ($items | Sort-Object Time | Select-Object -First 1).Time
+            $last = ($items | Sort-Object Time | Select-Object -Last 1).Time
+            $freq = (($items | Group-Object Frequency | Sort-Object Count -Descending | Select-Object -First 1).Name)
+            $avg = [math]::Round(($rssis | Measure-Object -Average).Average, 1)
+            [pscustomobject]@{
+                Window = $items[0].Window
+                Device = $items[0].Device
+                Bucket = $items[0].Bucket
+                Ssid = $items[0].Ssid
+                Bssid = $items[0].Bssid
+                Frequency = [int]$freq
+                Count = $items.Count
+                AvgRssi = $avg
+                MinRssi = ($rssis | Measure-Object -Minimum).Minimum
+                MaxRssi = ($rssis | Measure-Object -Maximum).Maximum
+                RangeClass = Get-BeaconRangeClass ([int][math]::Round($avg, 0))
+                FirstSeenTime = $first
+                LastSeenTime = $last
+            }
+        }
+)
+
+$beaconBucketSummary = New-Object System.Collections.Generic.List[object]
+$lastBeaconBucketByKey = @{}
+$secondLastBeaconBucketByKey = @{}
+foreach ($row in ($beaconBucketRaw | Sort-Object Device, Ssid, Bssid, FirstSeenTime)) {
+    $key = "$($row.Device)|$($row.Ssid)|$($row.Bssid)"
+    $previous = $lastBeaconBucketByKey[$key]
+    $secondPrevious = $secondLastBeaconBucketByKey[$key]
+    $trendDb = $null
+    $trend10sDb = $null
+    if ($null -ne $previous) {
+        $trendDb = [math]::Round($row.AvgRssi - $previous.AvgRssi, 1)
+    }
+    if ($null -ne $secondPrevious) {
+        $trend10sDb = [math]::Round($row.AvgRssi - $secondPrevious.AvgRssi, 1)
+    }
+    $beaconBucketSummary.Add([pscustomobject]@{
+        Window = $row.Window
+        Device = $row.Device
+        Bucket = $row.Bucket
+        Ssid = $row.Ssid
+        Bssid = $row.Bssid
+        Frequency = $row.Frequency
+        Count = $row.Count
+        AvgRssi = $row.AvgRssi
+        MinRssi = $row.MinRssi
+        MaxRssi = $row.MaxRssi
+        RangeClass = $row.RangeClass
+        TrendDb = $trendDb
+        Trend10sDb = $trend10sDb
+        Trend = Get-BeaconTrend $trendDb
+        FirstSeen = $row.FirstSeenTime.ToString("yyyy-MM-dd HH:mm:ss.fff")
+        LastSeen = $row.LastSeenTime.ToString("yyyy-MM-dd HH:mm:ss.fff")
+    })
+    $secondLastBeaconBucketByKey[$key] = $previous
+    $lastBeaconBucketByKey[$key] = $row
+}
+$beaconBucketSummary = $beaconBucketSummary | Sort-Object FirstSeen, Device, Ssid, Bssid
+
+$beaconSummary = $beaconEntries |
+    Group-Object Window, Device, Ssid, Bssid |
+    ForEach-Object {
+        $items = $_.Group
+        $rssis = $items | ForEach-Object { $_.Rssi }
+        $first = ($items | Sort-Object Time | Select-Object -First 1).Time
+        $last = ($items | Sort-Object Time | Select-Object -Last 1).Time
+        [pscustomobject]@{
+            Window = $items[0].Window
+            Device = $items[0].Device
+            Ssid = $items[0].Ssid
+            Bssid = $items[0].Bssid
+            Count = $items.Count
+            AvgRssi = [math]::Round(($rssis | Measure-Object -Average).Average, 1)
+            MinRssi = ($rssis | Measure-Object -Minimum).Minimum
+            MaxRssi = ($rssis | Measure-Object -Maximum).Maximum
+            VeryClose = @($items | Where-Object RangeClass -eq "very_close").Count
+            Close = @($items | Where-Object RangeClass -eq "close").Count
+            Medium = @($items | Where-Object RangeClass -eq "medium").Count
+            Far = @($items | Where-Object RangeClass -eq "far").Count
+            Edge = @($items | Where-Object RangeClass -eq "edge").Count
+            FirstSeen = $first.ToString("yyyy-MM-dd HH:mm:ss.fff")
+            LastSeen = $last.ToString("yyyy-MM-dd HH:mm:ss.fff")
+            SeenSeconds = [math]::Round(($last - $first).TotalSeconds, 1)
+        }
+    } |
+    Sort-Object Window, Device, AvgRssi -Descending
 
 $eventSummary = $events |
     Group-Object Window, Device |
@@ -705,6 +882,9 @@ $crossValidationPredictions = $crossValidationEvaluation |
 
 $scanSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "scan-summary.csv")
 $bucketSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "bucket-summary.csv")
+$beaconTimeline | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "beacon-timeline.csv")
+$beaconBucketSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "beacon-bucket-summary.csv")
+$beaconSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "beacon-summary.csv")
 $eventSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "event-summary.csv")
 $freshnessTicks | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "freshness-timeline.csv")
 $freshnessSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "freshness-summary.csv")
@@ -774,6 +954,30 @@ if ($freshnessSummary.Count -eq 0) {
     }
 }
 $report.Add("")
+$report.Add("## Beacon Summary")
+$report.Add("")
+if ($beaconSummary.Count -eq 0) {
+    $patterns = if ($beaconSsidPatterns.Count -eq 0) { "(none)" } else { $beaconSsidPatterns -join ", " }
+    $report.Add("No beacon SSID entries matched: ``$patterns``.")
+} else {
+    $report.Add("Matched beacon SSID patterns: ``$($beaconSsidPatterns -join ', ')``.")
+    $report.Add("")
+    $report.Add("| Window | Device | SSID | BSSID | Count | Avg RSSI | Min | Max | Range counts |")
+    $report.Add("| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |")
+    foreach ($row in $beaconSummary) {
+        $ssid = ($row.Ssid -replace '\|', '/')
+        $rangeCounts = "vc=$($row.VeryClose), c=$($row.Close), m=$($row.Medium), far=$($row.Far), edge=$($row.Edge)"
+        $report.Add("| $($row.Window) | $($row.Device) | $ssid | $($row.Bssid) | $($row.Count) | $($row.AvgRssi) | $($row.MinRssi) | $($row.MaxRssi) | $rangeCounts |")
+    }
+    $report.Add("")
+    $report.Add("| Bucket | Device | SSID | Avg RSSI | Range | Trend | Delta dB |")
+    $report.Add("| --- | --- | --- | ---: | --- | --- | ---: |")
+    foreach ($row in ($beaconBucketSummary | Select-Object -First 40)) {
+        $ssid = ($row.Ssid -replace '\|', '/')
+        $report.Add("| $($row.Bucket) | $($row.Device) | $ssid | $($row.AvgRssi) | $($row.RangeClass) | $($row.Trend) | $($row.TrendDb) |")
+    }
+}
+$report.Add("")
 $report.Add("## Sensor Summary")
 $report.Add("")
 if ($sensorSummary.Count -eq 0) {
@@ -809,34 +1013,36 @@ foreach ($row in ($movementDeltas | Where-Object Candidate -eq $true | Select-Ob
 $report.Add("")
 $report.Add("## Zone Fingerprint Evaluation")
 $report.Add("")
-if ($zonePredictions.Count -eq 0) {
+$zonePredictionRows = @($zonePredictions | Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace($_.Bucket) })
+if ($zonePredictionRows.Count -eq 0) {
     $report.Add("No zone predictions generated.")
 } else {
-    $correct = ($zonePredictions | Where-Object Correct -eq $true).Count
-    $total = $zonePredictions.Count
+    $correct = ($zonePredictionRows | Where-Object Correct -eq $true).Count
+    $total = $zonePredictionRows.Count
     $accuracy = [math]::Round(($correct * 100.0) / $total, 1)
     $report.Add("Best-zone bucket accuracy against named windows: $correct/$total ($accuracy%).")
     $report.Add("")
     $report.Add("| Bucket | Device | Actual | Predicted | Correct | Shared | Error | Score |")
     $report.Add("| --- | --- | --- | --- | --- | ---: | ---: | ---: |")
-    foreach ($row in $zonePredictions) {
+    foreach ($row in $zonePredictionRows) {
         $report.Add("| $($row.Bucket) | $($row.Device) | $($row.ActualWindow) | $($row.PredictedZone) | $($row.Correct) | $($row.SharedBssid) | $($row.AvgAbsRssiError) | $($row.Score) |")
     }
 }
 $report.Add("")
 $report.Add("## Cross-Validated Zone Evaluation")
 $report.Add("")
-if ($crossValidationPredictions.Count -eq 0) {
+$crossValidationPredictionRows = @($crossValidationPredictions | Where-Object { $null -ne $_ -and -not [string]::IsNullOrWhiteSpace($_.Bucket) })
+if ($crossValidationPredictionRows.Count -eq 0) {
     $report.Add("No cross-validation predictions generated.")
 } else {
-    $cvCorrect = ($crossValidationPredictions | Where-Object Correct -eq $true).Count
-    $cvTotal = $crossValidationPredictions.Count
+    $cvCorrect = ($crossValidationPredictionRows | Where-Object Correct -eq $true).Count
+    $cvTotal = $crossValidationPredictionRows.Count
     $cvAccuracy = [math]::Round(($cvCorrect * 100.0) / $cvTotal, 1)
     $report.Add("Leave-one-bucket-out accuracy: $cvCorrect/$cvTotal ($cvAccuracy%).")
     $report.Add("")
     $report.Add("| Bucket | Device | Actual | Predicted | Correct | Shared | Error | Score |")
     $report.Add("| --- | --- | --- | --- | --- | ---: | ---: | ---: |")
-    foreach ($row in $crossValidationPredictions) {
+    foreach ($row in $crossValidationPredictionRows) {
         $report.Add("| $($row.Bucket) | $($row.Device) | $($row.ActualWindow) | $($row.PredictedZone) | $($row.Correct) | $($row.SharedBssid) | $($row.AvgAbsRssiError) | $($row.Score) |")
     }
 }

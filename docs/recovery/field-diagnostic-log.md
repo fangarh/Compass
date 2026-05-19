@@ -371,3 +371,66 @@ freshness-summary: avg fresh age 1048 ms, max fresh age 2031 ms, >3s = 0
 OnePlus installed the APK, but the device was locked during verification and
 the new physical-activity permission still needs manual approval before the next
 field run if step-counter data is needed.
+
+## 2026-05-19 Phase 8 Hotspot Beacon Ranging Analysis
+
+The next useful test should use one phone as the Wi-Fi object beacon and the
+other as the receiver. This better matches the forest problem than office AP
+topology. The current diagnostic APK already logs all raw `scan_entry` rows, so
+no APK change is required for this increment.
+
+Recommended hotspot names:
+
+```text
+COMPASS_BEACON_A
+COMPASS_BEACON_B
+```
+
+Run the analyzer with a beacon SSID filter:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\analyze-field-logs.ps1 `
+  -InputRoot artifacts\field-logs\<run> `
+  -OutputDir artifacts\field-analysis-<run> `
+  -Windows "route=HH:MM:SS..HH:MM:SS" `
+  -BucketSeconds 5 `
+  -BeaconSsids "COMPASS_BEACON*"
+```
+
+New outputs:
+
+```text
+beacon-timeline.csv
+beacon-bucket-summary.csv
+beacon-summary.csv
+```
+
+`beacon-bucket-summary.csv` is the main file for the next field run. It groups
+the target SSID by bucket, device, SSID, and BSSID, then reports average RSSI,
+rough range class, and trend:
+
+```text
+stronger  RSSI improved by at least 3 dB from the previous bucket
+weaker    RSSI dropped by at least 3 dB from the previous bucket
+stable    change stayed within +/-3 dB
+```
+
+Range classes are deliberately rough and device-specific:
+
+```text
+very_close  >= -45 dBm
+close       -55..-45 dBm
+medium      -67..-55 dBm
+far         -80..-67 dBm
+edge        < -80 dBm
+```
+
+These are not meter estimates. For gameplay, use them first as direction and
+approach/retreat evidence: did the target beacon get stronger, weaker, disappear,
+or remain stable over the last few seconds?
+
+Analyzer regression test:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\test-analyze-field-logs.ps1
+```
