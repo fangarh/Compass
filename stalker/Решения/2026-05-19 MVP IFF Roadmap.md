@@ -97,7 +97,7 @@ rough proximity
 - после выключения hotspot witness перешел в stale примерно на 20 секунде и в
   `UNKNOWN` примерно на 60 секунде.
 
-## Следующий срез
+## Реализованный срез Phase 12
 
 Сформализовать confidence model:
 
@@ -110,3 +110,32 @@ direction: witness geometry later / unknown
 
 После этого UI должен показывать не просто сырые состояния, а понятный уровень
 уверенности по каждому независимому слою.
+
+Текущая минимальная модель:
+
+- `identity`: локальный self/roster/radio claim, без crypto;
+- `proximity`: свежесть и RSSI beacon, либо stale/unknown;
+- `position`: пока `UNKNOWN 0%`;
+- `direction`: пока `UNKNOWN 0%`.
+
+Главное правило: высокий proximity score не повышает direction или GPS
+position. Это отдельные вопросы.
+
+Проверка на OnePlus:
+
+- без активного beacon `Петя` получает `ROSTER_ONLY 40%` и proximity
+  `UNKNOWN 0%`;
+- `Я ПОДХОЖУ` дает локальному игроку `LOCAL_SELF_APPROACH 80%`, но proximity
+  остается `LOCAL_DECLARED_UNKNOWN 20%`;
+- position и direction остаются `UNKNOWN 0%`.
+
+## Следующий срез
+
+Phase 13 должен стать field MVP test flow:
+
+```text
+2+ участника -> один beacon -> один receiver -> confidence UI -> журнал результата
+```
+
+Цель - проверить, что UI помогает принять боевое решение без ложного обещания
+направления или криптографической идентичности.

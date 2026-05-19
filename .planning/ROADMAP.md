@@ -213,9 +213,32 @@ then used Samsung hotspot SSID `COMPASS_IFF_PETYA` and OnePlus as receiver:
 and frequency `2462 MHz`. After hotspot shutdown, proximity moved from fresh to
 stale at about 20 s and to `UNKNOWN` at about 60 s.
 
+## Phase 12: IFF Confidence Model
+
+**Status:** completed
+
+**Goal:** Convert raw roster/radio witness states into an explicit confidence
+model for the four independent MVP layers: identity, proximity, position, and
+direction.
+
+**Scope:**
+
+- Add a small local confidence model for IFF contact decisions.
+- Score identity from local self, local roster, and fresh radio claim.
+- Score proximity from fresh/stale RSSI witness without treating local
+  `Я ПОДХОЖУ` as radio proof.
+- Keep position and direction as explicit `UNKNOWN 0%` layers.
+- Update `КОНТАКТ`, `КОМАНДА`, and `КАРТА` to show confidence scores.
+
+**Verification:** debug APK builds. APK installed on OnePlus `e089985a`.
+UIAutomator verified `КОМАНДА` shows `RADIO FRESH: 0`, `PROXIMITY OK: 0`, and
+per-player identity/proximity percentages. `Петя` without beacon shows
+`IDENTITY: ROSTER_ONLY 40%`, `PROXIMITY: UNKNOWN 0%`, `POSITION: UNKNOWN 0%`,
+and `DIRECTION: UNKNOWN 0%`. `Я ПОДХОЖУ` shows local self approach at 80% while
+proximity remains `LOCAL_DECLARED_UNKNOWN 20%` and explicitly not radio proof.
+
 ## Backlog
 
-- Phase 12: confidence model for identity, proximity, position, and direction.
-- Phase 13: IFF field MVP test with two or more teammates.
+- Phase 13: IFF field MVP test with two or more teammates using confidence UI.
 - Analyze customer Wi-Fi module behavior after the module is available.
 - Keep BLE as a deferred architecture option, not a near-term implementation.

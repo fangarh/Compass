@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 11: IFF Radio Witness completed.
+Phase 12: IFF Confidence Model completed.
 
 ## Last Verified Baseline
 
@@ -23,8 +23,9 @@ Phase 11: IFF Radio Witness completed.
 
 ## Next Action
 
-Start Phase 12: turn raw IFF witness states into an explicit confidence model
-for identity, proximity, position, and direction.
+Start Phase 13: field MVP test flow with two or more teammates using the
+confidence UI. The app now separates identity, proximity, position, and
+direction, but position/direction remain explicit `UNKNOWN 0%`.
 
 ## Verification
 
@@ -184,3 +185,22 @@ for identity, proximity, position, and direction.
     `bssid: 4a:56:ff:b8:21:0b`, `frequency: 2462 MHz`.
   - After hotspot shutdown, witness aged from fresh to stale around 20 s and
     to `UNKNOWN` around 60 s.
+
+2026-05-19 Phase 12:
+
+- Added `IffConfidence` as the local decision model for:
+  - identity;
+  - proximity;
+  - position;
+  - direction.
+- `КОНТАКТ` now shows a `CONFIDENCE` block with layer labels and percentages.
+- `КОМАНДА` now shows identity/proximity percentages per participant and
+  `PROXIMITY OK` count.
+- `КАРТА` keeps position and direction explicitly at `UNKNOWN 0%`.
+- Local `Я ПОДХОЖУ` produces `LOCAL_SELF_APPROACH 80%` but proximity remains
+  `LOCAL_DECLARED_UNKNOWN 20%`, not radio proof.
+- `:app:assembleDebug` completed successfully.
+- APK installed and checked on OnePlus `e089985a`:
+  - no active beacon: `Петя` is `ROSTER_ONLY 40%`, proximity `UNKNOWN 0%`;
+  - local approach: `Вы` is `LOCAL_SELF_APPROACH 80%`, proximity
+    `LOCAL_DECLARED_UNKNOWN 20%`.

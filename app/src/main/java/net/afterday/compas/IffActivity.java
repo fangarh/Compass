@@ -11,6 +11,8 @@ import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import net.afterday.compas.iff.IffConfidence;
+import net.afterday.compas.iff.IffConfidence.Snapshot;
 import net.afterday.compas.iff.IffRadioWitnessStore;
 import net.afterday.compas.iff.IffRadioWitnessStore.WitnessSnapshot;
 
@@ -188,24 +190,22 @@ public class IffActivity extends Activity {
         resetBody();
         IffPlayer selected = roster[selectedPlayerIndex];
         WitnessSnapshot witness = IffRadioWitnessStore.getWitness(selected.playerId);
+        Snapshot confidence = confidenceFor(selected, witness);
         boolean localApproachSelected = approachActive && selected.local;
         title.setText(localApproachSelected ? "ВЫ ПОДХОДИТЕ" : selected.displayName);
         subtitle.setText(selected.local ? "локальный игрок" : "локальный roster + radio witness");
-        status.setText("IDENTITY: " + identityStatus(selected, witness) + "\n"
-                + "PROXIMITY: " + proximityStatus(selected, witness) + "\n"
-                + "POSITION: UNKNOWN - GPS не доказывает близость\n"
-                + "DIRECTION: UNKNOWN - азимут не рассчитан");
+        status.setText("CONFIDENCE\n" + confidence.compactStatus());
         body.setText("ИГРОК\n"
                 + "- имя: " + selected.displayName + "\n"
                 + "- id: " + selected.playerId + "\n"
                 + "- команда: локальная IFF группа\n"
                 + "- ожидаемый beacon: " + IffRadioWitnessStore.expectedBeaconSsid(selected.playerId) + "\n\n"
+                + "СЛОИ УВЕРЕННОСТИ\n"
+                + confidenceDetails(confidence) + "\n\n"
                 + "СВИДЕТЕЛИ\n"
                 + witnessDetails(witness) + "\n\n"
                 + "РЕШЕНИЕ\n"
-                + "- roster подтверждает только заявленного участника\n"
-                + "- свежий radio witness подтверждает близость beacon, не крипто-identity\n"
-                + "- кнопка Я ПОДХОЖУ меняет только статус локального игрока");
+                + decisionText(confidence));
     }
 
     private void renderTeam() {
@@ -215,9 +215,10 @@ public class IffActivity extends Activity {
         status.setText((approachActive ? "ВЫ        ПОДХОДИТЕ   локально\n" : "")
                 + "УЧАСТНИКОВ: " + roster.length + "\n"
                 + "RADIO FRESH: " + freshWitnessCount() + "\n"
+                + "PROXIMITY OK: " + confidentProximityCount() + "\n"
                 + "DIRECTION: UNKNOWN");
         body.setText("Выберите участника, чтобы открыть карточку контакта.\n"
-                + "Beacon SSID дает только свежесть/близость, не криптографию.");
+                + "Проценты - текущая уверенность слоя, а не финальное доказательство.");
         for (int i = 0; i < roster.length; i++) {
             bodyContainer.addView(createRosterButton(i));
         }
@@ -227,31 +228,8 @@ public class IffActivity extends Activity {
         resetBody();
         title.setText("КАРТА");
         subtitle.setText("позиции и свидетели");
-        status.setText("ПОЗИЦИЯ: UNKNOWN\nСВИДЕТЕЛИ: " + freshWitnessCount() + " fresh\nНАПРАВЛЕНИЕ: UNKNOWN");
+        status.setText("POSITION: UNKNOWN 0%\nСВИДЕТЕЛИ: " + freshWitnessCount() + " fresh\nDIRECTION: UNKNOWN 0%");
         body.setText(mapWitnessList());
-    }
-
-    private String identityStatus(IffPlayer player, WitnessSnapshot witness) {
-        if (player.local) {
-            return approachActive ? "LOCAL_SELF_APPROACH" : "LOCAL_SELF";
-        }
-        if (witness != null && witness.isFresh()) {
-            return "ROSTER_ONLY + RADIO_CLAIM - не crypto";
-        }
-        return "ROSTER_ONLY - не подтверждено радио";
-    }
-
-    private String proximityStatus(IffPlayer player, WitnessSnapshot witness) {
-        if (player.local && approachActive) {
-            return "UNKNOWN - локальный подход не radio proof";
-        }
-        if (witness == null) {
-            return "UNKNOWN - beacon не слышен";
-        }
-        if (!witness.isFresh()) {
-            return "UNKNOWN - witness устарел " + formatAge(witness.ageMs());
-        }
-        return witness.proximityLabel() + " rssi=" + witness.rssi + " age=" + formatAge(witness.ageMs());
     }
 
     private void resetBody() {
@@ -270,8 +248,9 @@ public class IffActivity extends Activity {
         button.setBackgroundResource(R.drawable.popup_button);
         button.setTextColor(playerIndex == selectedPlayerIndex ? 0xffffd16a : 0xffffffff);
         WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
-        button.setText(player.displayName + "\nidentity: " + rosterIdentityLabel(player, witness)
-                + " / radio: " + rosterRadioLabel(player, witness));
+        Snapshot confidence = confidenceFor(player, witness);
+        button.setText(player.displayName + "\nidentity " + confidence.identity.score + "% / proximity "
+                + confidence.proximity.score + "% / " + rosterRadioLabel(player, witness));
         button.setTextSize(13);
         button.setTransformationMethod(null);
         button.setOnClickListener(new View.OnClickListener() {
@@ -285,16 +264,6 @@ public class IffActivity extends Activity {
         return button;
     }
 
-    private String rosterIdentityLabel(IffPlayer player, WitnessSnapshot witness) {
-        if (player.local) {
-            return approachActive ? "LOCAL_SELF_APPROACH" : "LOCAL_SELF";
-        }
-        if (witness != null && witness.isFresh()) {
-            return "ROSTER+RADIO";
-        }
-        return "ROSTER_ONLY";
-    }
-
     private String rosterRadioLabel(IffPlayer player, WitnessSnapshot witness) {
         if (player.local && approachActive) {
             return "LOCAL_ONLY";
@@ -306,6 +275,38 @@ public class IffActivity extends Activity {
             return "STALE " + formatAge(witness.ageMs());
         }
         return witness.proximityLabel() + " " + witness.rssi + "dBm";
+    }
+
+    private Snapshot confidenceFor(IffPlayer player, WitnessSnapshot witness) {
+        return IffConfidence.evaluate(player.playerId, player.local, approachActive, witness);
+    }
+
+    private String confidenceDetails(Snapshot confidence) {
+        return confidence.identity.detailLine("identity") + "\n"
+                + confidence.proximity.detailLine("proximity") + "\n"
+                + confidence.position.detailLine("position") + "\n"
+                + confidence.direction.detailLine("direction");
+    }
+
+    private String decisionText(Snapshot confidence) {
+        if (confidence.proximity.score >= 55) {
+            return "- рядом слышен свежий beacon заявленного участника\n"
+                    + "- это proximity proof, но не crypto identity\n"
+                    + "- direction и точная position пока неизвестны";
+        }
+        if ("LOCAL_DECLARED_UNKNOWN".equals(confidence.proximity.label)) {
+            return "- локальный игрок заявил подход\n"
+                    + "- это полезный UI-статус, но не radio proof\n"
+                    + "- direction и точная position пока неизвестны";
+        }
+        if (confidence.proximity.score > 0) {
+            return "- есть слабое или устаревшее radio-свидетельство\n"
+                    + "- для боевого решения держим proximity осторожной\n"
+                    + "- direction и точная position пока неизвестны";
+        }
+        return "- участник остается известен только по локальному roster\n"
+                + "- proximity не подтверждена\n"
+                + "- direction и точная position пока неизвестны";
     }
 
     private String witnessDetails(WitnessSnapshot witness) {
@@ -326,6 +327,19 @@ public class IffActivity extends Activity {
         for (int i = 0; i < roster.length; i++) {
             WitnessSnapshot witness = IffRadioWitnessStore.getWitness(roster[i].playerId);
             if (witness != null && witness.isFresh()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private int confidentProximityCount() {
+        int count = 0;
+        for (int i = 0; i < roster.length; i++) {
+            IffPlayer player = roster[i];
+            WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
+            Snapshot confidence = confidenceFor(player, witness);
+            if (confidence.proximity.score >= 55) {
                 count++;
             }
         }
