@@ -258,7 +258,10 @@ UIAutomator verified `IFF` -> `КОМАНДА` -> select `Петя` -> `ЗАПИ
 The contact screen showed the last field-check summary for `Петя`, and
 `field-radio-20260519-160400.log` contained
 `IFF_DIAG event=field_check playerId=petya identityScore=40 proximityScore=0
-witness=none`.
+witness=none`. Follow-up near/far/off session with Samsung hotspot
+`COMPASS_IFF_PETYA` and OnePlus receiver recorded:
+near `RADIO_NEAR 75% rssi=-39`, far `RADIO_MID 55% rssi=-68`, off/stale
+`STALE_RADIO 25%`, and off/unknown `UNKNOWN 0%`.
 
 ## Backlog
 

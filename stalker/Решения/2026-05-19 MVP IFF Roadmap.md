@@ -157,17 +157,21 @@ Phase 13 делает field MVP test flow:
 - UI показал последнюю запись: `Петя: identity 40% / proximity 0% / witness none`;
 - diagnostic log получил `IFF_DIAG event=field_check`.
 
+Near/far/off field session:
+
+- near: Samsung hotspot `COMPASS_IFF_PETYA`, OnePlus receiver,
+  `RADIO_NEAR`, proximity `75%`, RSSI `-39 dBm`;
+- far: `RADIO_MID`, proximity `55%`, RSSI `-68 dBm`;
+- off/stale: `STALE_RADIO`, proximity `25%`, witness age about `29s`;
+- off/unknown: `UNKNOWN`, proximity `0%`, witness age about `71s`.
+
 ## Следующий срез
 
-Провести короткий near/far/off field session:
+Разобрать near/far/off diagnostic log:
 
 ```text
-Samsung hotspot COMPASS_IFF_PETYA
-OnePlus receiver
-near -> record
-far -> record
-off -> record
+near/far/off records -> field report -> threshold notes
 ```
 
-Это даст первый журнал изменения confidence во времени, а не только одиночную
-точку проверки.
+Это нужно, чтобы понять, достаточно ли текущих порогов `RADIO_NEAR/MID/WEAK`
+для боевого UI или их нужно сделать осторожнее.

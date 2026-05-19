@@ -23,9 +23,8 @@ Phase 13: IFF Field MVP Test Flow completed.
 
 ## Next Action
 
-Next useful slice: run a deliberate two-phone field session with Samsung hotspot
-`COMPASS_IFF_PETYA`, OnePlus receiver, and `ЗАПИСАТЬ` pressed at near/far/off
-moments so the diagnostic log captures confidence changes over time.
+Next useful slice: analyze the captured near/far/off IFF field-check log and
+turn it into a compact field report or tune the confidence thresholds.
 
 ## Verification
 
@@ -222,3 +221,13 @@ moments so the diagnostic log captures confidence changes over time.
   `field-radio-20260519-160400.log` contains
   `IFF_DIAG event=field_check playerId=petya identityScore=40
   proximityScore=0 witness=none`.
+- Follow-up near/far/off session with Samsung hotspot `COMPASS_IFF_PETYA` and
+  OnePlus receiver was recorded in the same diagnostic file:
+  - near: `ROSTER_PLUS_RADIO_CLAIM`, `RADIO_NEAR`, proximity `75`,
+    RSSI `-39`, witness age `2269 ms`;
+  - far: `ROSTER_PLUS_RADIO_CLAIM`, `RADIO_MID`, proximity `55`,
+    RSSI `-68`, witness age `12161 ms`;
+  - off/stale: `ROSTER_ONLY`, `STALE_RADIO`, proximity `25`,
+    RSSI `-57`, witness age `28759 ms`;
+  - off/unknown: `ROSTER_ONLY`, `UNKNOWN`, proximity `0`,
+    witness age `70886 ms`.
