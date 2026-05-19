@@ -71,6 +71,15 @@
     <id name="home" />
     <id name="homeAsUp" />
     <id name="horizontal" />
+    <id name="iff_approach" />
+    <id name="iff_body" />
+    <id name="iff_contact_tab" />
+    <id name="iff_map_tab" />
+    <id name="iff_status" />
+    <id name="iff_subtitle" />
+    <id name="iff_team_tab" />
+    <id name="iff_title" />
+    <id name="iffbutton" />
     <id name="icon" />
     <id name="icon_group" />
     <id name="ifRoom" />

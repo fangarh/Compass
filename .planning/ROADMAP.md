@@ -143,9 +143,30 @@ phone as a Wi-Fi object beacon and the other phone as the receiver.
 2026-05-19 with a synthetic `COMPASS_BEACON_A` log and detected both stronger
 and weaker beacon trends.
 
+## Phase 9: IFF MVP Skeleton
+
+**Status:** in progress
+
+**Goal:** Start the real MVP path from Obsidian: a separate `свой-чужой` tactical
+layer for confirming known teammates, not a generic object-beacon finder.
+
+**Scope:**
+
+- Add an explicit `IFF` entry point on the main PDA screen.
+- Add a separate IFF screen with `КОНТАКТ`, `КОМАНДА`, and `КАРТА` tabs.
+- Add a local `Я ПОДХОЖУ` prototype state without pretending that radio
+  confirmation, roster, or witnesses already exist.
+- Keep existing gameplay, Wi-Fi influence calculation, QR, inventory, and field
+  diagnostics unchanged.
+
+**Verification:** debug APK builds. OnePlus `e089985a` installed the APK and
+verified the normal flow: main PDA -> `IFF` -> `Я ПОДХОЖУ` -> `ВЫ ПОДХОДИТЕ`.
+
 ## Backlog
 
+- Phase 10: local roster and trusted player identity model.
+- Phase 11: phone-to-phone approach beacon/witness exchange.
+- Phase 12: confidence model for identity, proximity, position, and direction.
+- Phase 13: IFF field MVP test with two or more teammates.
 - Analyze customer Wi-Fi module behavior after the module is available.
-- Tune long-range Wi-Fi detection intervals from field evidence.
 - Keep BLE as a deferred architecture option, not a near-term implementation.
-- Preserve unified object identity across possible future radio identifiers.

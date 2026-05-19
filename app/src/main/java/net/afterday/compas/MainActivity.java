@@ -23,6 +23,7 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.Toast;
 import io.reactivex.Observable;
@@ -95,6 +96,7 @@ public class MainActivity extends AppCompatActivity {
     private Geiger mGeiger;
     private Healthbar mHealthbar;
     private Indicator mIndicator;
+    private Button mIffButton;
     private ImageButton mQrButton;
     private Radbar mRadbar;
     private Bar mStaminaBar;
@@ -551,6 +553,12 @@ public class MainActivity extends AppCompatActivity {
         this.mStaminaBar.setOnTouchListener(new $$Lambda$MainActivity$VZ9qB0e2fUAruITEnkd9UBxI2_8(this));
         this.mDeviceBar.setOnTouchListener(new $$Lambda$MainActivity$sVd1cedN8VFuoHGhnGmBJj7SZ5M(this));
         this.mArmorBar.setOnTouchListener(new $$Lambda$MainActivity$xEvCYm98SWF5wyoXwHPpKT0iVPs(this));
+        this.mIffButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                openIff();
+            }
+        });
         this.mQrButton.setOnTouchListener(new $$Lambda$MainActivity$6uO8oY_j9sXKnjCLwnBqutuFrs(this));
         this.mRadbar.setOnTouchListener(new AnonymousClass2());
         this.mHealthbar.setOnTouchListener(new AnonymousClass3());
@@ -691,6 +699,7 @@ public class MainActivity extends AppCompatActivity {
         this.mDeviceBar = (Bar) findViewById(R.id.devicebar);
         this.mBattery = (Battery) findViewById(R.id.battery);
         this.mTube = (Tube) findViewById(R.id.tube);
+        this.mIffButton = (Button) findViewById(R.id.iffbutton);
         this.mQrButton = (ImageButton) findViewById(R.id.qrbutton);
         this.logList = (RecyclerView) findViewById(R.id.log_list);
         this.mIndicator = (Indicator) findViewById(R.id.indicator);
@@ -789,6 +798,10 @@ public class MainActivity extends AppCompatActivity {
         ft.addToBackStack(null);
         DialogFragment newFragment = ScannerFragment.newInstance();
         newFragment.show(ft, "scanner");
+    }
+
+    private void openIff() {
+        startActivity(new Intent(this, IffActivity.class));
     }
 
     private void setupListeners() {

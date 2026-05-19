@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#060a08"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:orientation="horizontal"
+        android:weightSum="3">
+
+        <Button
+            android:id="@id/iff_contact_tab"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginRight="4dp"
+            android:layout_weight="1"
+            android:background="@drawable/popup_button"
+            android:text="КОНТАКТ"
+            android:textColor="#ffd16a"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@id/iff_team_tab"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginLeft="4dp"
+            android:layout_marginRight="4dp"
+            android:layout_weight="1"
+            android:background="@drawable/popup_button"
+            android:text="КОМАНДА"
+            android:textColor="#b8c49a"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@id/iff_map_tab"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginLeft="4dp"
+            android:layout_weight="1"
+            android:background="@drawable/popup_button"
+            android:text="КАРТА"
+            android:textColor="#b8c49a"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@id/iff_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:textColor="#ffffff"
+        android:textSize="26sp" />
+
+    <TextView
+        android:id="@id/iff_subtitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textColor="#b8c49a"
+        android:textSize="15sp" />
+
+    <TextView
+        android:id="@id/iff_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:background="#182015"
+        android:padding="14dp"
+        android:textColor="#ffd16a"
+        android:textSize="16sp" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="14dp"
+        android:layout_weight="1">
+
+        <TextView
+            android:id="@id/iff_body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:lineSpacingExtra="4dp"
+            android:textColor="#d8dfca"
+            android:textSize="15sp" />
+    </ScrollView>
+
+    <Button
+        android:id="@id/iff_approach"
+        android:layout_width="match_parent"
+        android:layout_height="54dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/popup_button"
+        android:text="Я ПОДХОЖУ"
+        android:textColor="#ffffff"
+        android:textSize="16sp" />
+</LinearLayout>

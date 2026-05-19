@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 8: Hotspot Beacon Ranging Analysis completed.
+Phase 9: IFF MVP Skeleton in progress.
 
 ## Last Verified Baseline
 
@@ -23,9 +23,9 @@ Phase 8: Hotspot Beacon Ranging Analysis completed.
 
 ## Next Action
 
-Run a two-phone beacon test. Configure one phone hotspot SSID as
-`COMPASS_BEACON_A`, run Compass diagnostics on the other phone, then swap roles
-if needed. Analyze with `-BeaconSsids "COMPASS_BEACON*"`.
+Implement the next IFF slice: local roster and trusted player identity state.
+The current screen must not claim radio confirmation until phone-to-phone
+witness exchange exists.
 
 ## Verification
 
@@ -120,3 +120,16 @@ if needed. Analyze with `-BeaconSsids "COMPASS_BEACON*"`.
   - `beacon-summary.csv`
 - Verification script:
   `powershell -ExecutionPolicy Bypass -File scripts\test-analyze-field-logs.ps1`.
+
+2026-05-19 Phase 9:
+
+- Obsidian corrected the MVP target: real MVP is IFF / `свой-чужой`, not
+  object-beacon search.
+- Added `IffActivity` as a separate tactical layer with tabs:
+  `КОНТАКТ`, `КОМАНДА`, `КАРТА`.
+- Added explicit `IFF` button on the main PDA screen.
+- Added local `Я ПОДХОЖУ` prototype state.
+- Build verification passed with `:app:assembleDebug`.
+- Installed and checked on OnePlus `e089985a`:
+  main PDA -> `IFF` -> `Я ПОДХОЖУ` -> `ВЫ ПОДХОДИТЕ`.
+- Samsung `R3CT20C8A8N` was not visible over ADB during this install check.
