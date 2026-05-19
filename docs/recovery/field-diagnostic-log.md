@@ -89,6 +89,16 @@ artifacts/field-analysis/zone-predictions.csv
 `zone-predictions.csv` compares each time bucket against the fingerprints for
 the same device and selects the best matching zone.
 
+Cross-validation outputs:
+
+```text
+artifacts/field-analysis/zone-cross-validation-evaluation.csv
+artifacts/field-analysis/zone-cross-validation-predictions.csv
+```
+
+These files use leave-one-bucket-out scoring: the bucket being classified is
+removed before building the fingerprints.
+
 Named movement windows can be passed directly:
 
 ```powershell
@@ -252,3 +262,22 @@ Result:
 
 The three incorrect predictions are concentrated at movement boundary buckets,
 where the physical transition and the 30-second bucket boundary can overlap.
+
+Cross-validation output:
+
+```text
+artifacts/field-analysis-run-20260519-1045-cv/
+```
+
+Result:
+
+```text
+same-data bucket predictions: 29/32 correct (90.6%)
+leave-one-bucket-out predictions: 11/32 correct (34.4%)
+```
+
+Interpretation: the simple fingerprint score overfits this single run. It is
+good for exploration and finding discriminative BSSID, but it should not be
+ported to runtime as-is. Runtime detection should use a smaller set of stable
+discriminative BSSID, device-specific calibration, and smoothing over multiple
+consecutive windows.

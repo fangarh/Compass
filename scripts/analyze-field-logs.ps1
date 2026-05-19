@@ -449,6 +449,105 @@ $zonePredictions = $zoneEvaluation |
     } |
     Sort-Object Bucket, Device
 
+function New-FingerprintRows($sourceEntries) {
+    $sourceEntries |
+        Where-Object { $_.Window -ne "pre_test" -and $_.Window -ne "post_windows" } |
+        Group-Object Window, Device, Bssid |
+        ForEach-Object {
+            $items = $_.Group
+            if ($items.Count -lt 3) {
+                return
+            }
+            $ssid = (($items | Where-Object { $_.Ssid } | Group-Object Ssid | Sort-Object Count -Descending | Select-Object -First 1).Name)
+            [pscustomobject]@{
+                Device = $items[0].Device
+                Zone = $items[0].Window
+                Bssid = $items[0].Bssid
+                Ssid = $ssid
+                AvgRssi = [math]::Round(($items | Measure-Object Rssi -Average).Average, 1)
+                Count = $items.Count
+            }
+        }
+}
+
+function Score-Bucket($bucketItems, $zoneFingerprint) {
+    $shared = New-Object System.Collections.Generic.List[object]
+    foreach ($bucketItem in $bucketItems) {
+        $fingerprintItem = $zoneFingerprint | Where-Object Bssid -eq $bucketItem.Bssid | Select-Object -First 1
+        if ($fingerprintItem) {
+            $shared.Add([pscustomobject]@{
+                AbsError = [math]::Abs([double]$bucketItem.AvgRssi - [double]$fingerprintItem.AvgRssi)
+            })
+        }
+    }
+
+    $sharedCount = $shared.Count
+    $bucketBssidCount = ($bucketItems | Select-Object -ExpandProperty Bssid -Unique).Count
+    $fingerprintBssidCount = ($zoneFingerprint | Select-Object -ExpandProperty Bssid -Unique).Count
+    $avgAbsError = if ($sharedCount -gt 0) { [math]::Round(($shared | Measure-Object AbsError -Average).Average, 2) } else { 99.0 }
+    $overlapBucket = if ($bucketBssidCount -gt 0) { [math]::Round($sharedCount / $bucketBssidCount, 3) } else { 0 }
+    $overlapFingerprint = if ($fingerprintBssidCount -gt 0) { [math]::Round($sharedCount / $fingerprintBssidCount, 3) } else { 0 }
+    $score = [math]::Round(($sharedCount * 2.0) + ($overlapBucket * 20.0) + ($overlapFingerprint * 10.0) - $avgAbsError, 3)
+
+    [pscustomobject]@{
+        Score = $score
+        SharedBssid = $sharedCount
+        BucketBssid = $bucketBssidCount
+        FingerprintBssid = $fingerprintBssidCount
+        OverlapBucket = $overlapBucket
+        OverlapFingerprint = $overlapFingerprint
+        AvgAbsRssiError = $avgAbsError
+    }
+}
+
+$crossValidationEvaluation = New-Object System.Collections.Generic.List[object]
+foreach ($bucketGroup in $bucketGroups) {
+    $bucketItems = $bucketGroup.Group
+    $device = $bucketItems[0].Device
+    $bucket = $bucketItems[0].Bucket
+    $actualWindow = (($scanEntries | Where-Object { $_.Device -eq $device -and $_.Bucket -eq $bucket } | Select-Object -First 1).Window)
+    $trainingEntries = $scanEntries | Where-Object { -not ($_.Device -eq $device -and $_.Bucket -eq $bucket) }
+    $trainingFingerprints = New-FingerprintRows $trainingEntries
+    $zones = $trainingFingerprints | Where-Object Device -eq $device | Select-Object -ExpandProperty Zone -Unique
+    foreach ($zone in $zones) {
+        $zoneFingerprint = $trainingFingerprints | Where-Object { $_.Device -eq $device -and $_.Zone -eq $zone }
+        $score = Score-Bucket $bucketItems $zoneFingerprint
+        $crossValidationEvaluation.Add([pscustomobject]@{
+            Bucket = $bucket
+            Device = $device
+            ActualWindow = $actualWindow
+            CandidateZone = $zone
+            Score = $score.Score
+            SharedBssid = $score.SharedBssid
+            BucketBssid = $score.BucketBssid
+            FingerprintBssid = $score.FingerprintBssid
+            OverlapBucket = $score.OverlapBucket
+            OverlapFingerprint = $score.OverlapFingerprint
+            AvgAbsRssiError = $score.AvgAbsRssiError
+        })
+    }
+}
+
+$crossValidationPredictions = $crossValidationEvaluation |
+    Group-Object Bucket, Device |
+    ForEach-Object {
+        $best = $_.Group | Sort-Object Score -Descending | Select-Object -First 1
+        [pscustomobject]@{
+            Bucket = $best.Bucket
+            Device = $best.Device
+            ActualWindow = $best.ActualWindow
+            PredictedZone = $best.CandidateZone
+            Correct = ($best.ActualWindow -eq $best.CandidateZone)
+            Score = $best.Score
+            SharedBssid = $best.SharedBssid
+            BucketBssid = $best.BucketBssid
+            FingerprintBssid = $best.FingerprintBssid
+            OverlapBucket = $best.OverlapBucket
+            AvgAbsRssiError = $best.AvgAbsRssiError
+        }
+    } |
+    Sort-Object Bucket, Device
+
 $scanSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "scan-summary.csv")
 $bucketSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "bucket-summary.csv")
 $eventSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "event-summary.csv")
@@ -459,6 +558,8 @@ $movementDeltas | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $Outpu
 $fingerprints | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "zone-fingerprints.csv")
 $zoneEvaluation | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "zone-evaluation.csv")
 $zonePredictions | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "zone-predictions.csv")
+$crossValidationEvaluation | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "zone-cross-validation-evaluation.csv")
+$crossValidationPredictions | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "zone-cross-validation-predictions.csv")
 
 $report = New-Object System.Collections.Generic.List[string]
 $report.Add("# Field Log Analysis")
@@ -522,6 +623,23 @@ if ($zonePredictions.Count -eq 0) {
     $report.Add("| Bucket | Device | Actual | Predicted | Correct | Shared | Error | Score |")
     $report.Add("| --- | --- | --- | --- | --- | ---: | ---: | ---: |")
     foreach ($row in $zonePredictions) {
+        $report.Add("| $($row.Bucket) | $($row.Device) | $($row.ActualWindow) | $($row.PredictedZone) | $($row.Correct) | $($row.SharedBssid) | $($row.AvgAbsRssiError) | $($row.Score) |")
+    }
+}
+$report.Add("")
+$report.Add("## Cross-Validated Zone Evaluation")
+$report.Add("")
+if ($crossValidationPredictions.Count -eq 0) {
+    $report.Add("No cross-validation predictions generated.")
+} else {
+    $cvCorrect = ($crossValidationPredictions | Where-Object Correct -eq $true).Count
+    $cvTotal = $crossValidationPredictions.Count
+    $cvAccuracy = [math]::Round(($cvCorrect * 100.0) / $cvTotal, 1)
+    $report.Add("Leave-one-bucket-out accuracy: $cvCorrect/$cvTotal ($cvAccuracy%).")
+    $report.Add("")
+    $report.Add("| Bucket | Device | Actual | Predicted | Correct | Shared | Error | Score |")
+    $report.Add("| --- | --- | --- | --- | --- | ---: | ---: | ---: |")
+    foreach ($row in $crossValidationPredictions) {
         $report.Add("| $($row.Bucket) | $($row.Device) | $($row.ActualWindow) | $($row.PredictedZone) | $($row.Correct) | $($row.SharedBssid) | $($row.AvgAbsRssiError) | $($row.Score) |")
     }
 }

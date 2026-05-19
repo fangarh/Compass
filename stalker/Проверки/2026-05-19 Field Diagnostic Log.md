@@ -65,6 +65,15 @@ artifacts/field-analysis/zone-predictions.csv
 `zone-predictions.csv` сравнивает 30-секундные buckets с fingerprint-ами этого
 же устройства и выбирает наиболее похожую зону.
 
+Cross-validation:
+
+```text
+artifacts/field-analysis/zone-cross-validation-evaluation.csv
+artifacts/field-analysis/zone-cross-validation-predictions.csv
+```
+
+В этом режиме классифицируемый bucket исключается из обучения fingerprint.
+
 Именованные окна можно передавать прямо в analyzer:
 
 ```powershell
@@ -252,3 +261,21 @@ artifacts/field-analysis-run-20260519-1045-zone-eval/
 
 Три ошибки пришлись на buckets рядом с границами перемещения. Для ручных
 переходов и 30-секундных buckets это ожидаемо.
+
+Cross-validation:
+
+```text
+artifacts/field-analysis-run-20260519-1045-cv/
+```
+
+Результат:
+
+```text
+same-data bucket predictions: 29/32 correct (90.6%)
+leave-one-bucket-out predictions: 11/32 correct (34.4%)
+```
+
+Вывод: простой fingerprint-score переобучается на один прогон. Он полезен для
+исследования и поиска отличающих BSSID, но переносить его в runtime как есть
+нельзя. Следующая модель должна использовать стабильные discriminative BSSID,
+калибровку под устройство и сглаживание по нескольким последовательным окнам.

@@ -74,6 +74,7 @@ field logs.
 
 ## Backlog
 
+- Phase 5: Cross-Validated Zone Evaluator.
 - Analyze customer Wi-Fi module behavior after the module is available.
 - Tune long-range Wi-Fi detection intervals from field evidence.
 - Keep BLE as a deferred architecture option, not a near-term implementation.

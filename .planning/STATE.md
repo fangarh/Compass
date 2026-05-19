@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 4: Offline Zone Fingerprint Evaluator completed.
+Phase 5: Cross-Validated Zone Evaluator completed.
 
 ## Last Verified Baseline
 
@@ -23,9 +23,10 @@ Phase 4: Offline Zone Fingerprint Evaluator completed.
 
 ## Next Action
 
-Use offline zone fingerprint evaluation before adding runtime detection logic.
-Latest evaluator output:
-`artifacts/field-analysis-run-20260519-1045-zone-eval`.
+Do not move the naive fingerprint evaluator into runtime yet. Cross-validation
+showed the current scoring overfits the same log and needs a stronger model.
+Latest cross-validation output:
+`artifacts/field-analysis-run-20260519-1045-cv`.
 
 ## Verification
 
@@ -66,3 +67,12 @@ Latest evaluator output:
 - The 10:45 controlled run produced 29/32 correct bucket predictions (90.6%).
 - Errors were concentrated on movement boundary buckets, which is expected for
   30-second buckets around manual transition times.
+
+2026-05-19 Phase 5:
+
+- Leave-one-bucket-out cross-validation added.
+- Same-data evaluator accuracy remained 29/32 (90.6%).
+- Cross-validated accuracy dropped to 11/32 (34.4%).
+- This means the naive fingerprint score is useful for exploration but is not
+  ready as runtime detection logic. Next model should focus on discriminative
+  BSSID, transition smoothing, and device-specific stability.
