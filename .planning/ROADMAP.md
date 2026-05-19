@@ -72,9 +72,40 @@ field logs.
 - Analyzer scores 30-second buckets against per-device/per-zone fingerprints.
 - The 2026-05-19 10:45 run achieved 29/32 correct bucket predictions.
 
+## Phase 5: Cross-Validated Zone Evaluator
+
+**Status:** completed
+
+**Goal:** Check whether the offline Wi-Fi zone evaluator generalizes across
+30-second buckets instead of only matching fingerprints built from the same
+data.
+
+**Scope:**
+
+- Analyzer exports leave-one-bucket-out cross-validation outputs.
+- The 2026-05-19 10:45 run showed same-data accuracy of 90.6% and
+  cross-validated accuracy of 34.4%.
+- The result blocks direct runtime use of the naive fingerprint score.
+
+## Phase 6: 1 Hz Wi-Fi Freshness Test
+
+**Status:** completed
+
+**Goal:** Measure whether Wi-Fi scan freshness can support a 3-5 second game
+reaction window.
+
+**Scope:**
+
+- Request scans every 1 second in the diagnostic build.
+- Log freshness ticks and cached scan result count every second.
+- Analyze fresh receiver update intervals in 1s/3s/5s buckets.
+
+**Verification:** completed on both physical phones on 2026-05-19. Short
+verification logs showed `diagnostic-1s`, `intervalMs=1000`, `event=tick`, and
+fresh receiver updates. Analyzer emitted `freshness-summary.csv`.
+
 ## Backlog
 
-- Phase 5: Cross-Validated Zone Evaluator.
 - Analyze customer Wi-Fi module behavior after the module is available.
 - Tune long-range Wi-Fi detection intervals from field evidence.
 - Keep BLE as a deferred architecture option, not a near-term implementation.

@@ -123,6 +123,7 @@ if (-not $IncludeLegacyRootLogs) {
 $scanEntries = New-Object System.Collections.Generic.List[object]
 $events = New-Object System.Collections.Generic.List[object]
 $contexts = New-Object System.Collections.Generic.List[object]
+$freshnessTicks = New-Object System.Collections.Generic.List[object]
 
 function Get-FieldValue([string]$message, [string]$name) {
     if ($message -match "$name=""(?<quoted>[^""]*)""") {
@@ -174,6 +175,18 @@ foreach ($log in $logs) {
         $message = $Matches.message
         $window = Get-WindowName $time
         $bucket = Get-BucketName $time
+
+        if ($message -match 'event=tick .*?freshAgeMs=(?<freshAge>-?\d+) cachedCount=(?<cachedCount>-?\d+)') {
+            $freshnessTicks.Add([pscustomobject]@{
+                Device = $device
+                Time = $time
+                Window = $window
+                Bucket = $bucket
+                FreshAgeMs = [int64]$Matches.freshAge
+                CachedCount = [int]$Matches.cachedCount
+            })
+            continue
+        }
 
         if ($message -match 'event=scan_entry .*?ssid="(?<ssid>.*?)" bssid=(?<bssid>\S+) level=(?<level>-?\d+) frequency=(?<frequency>\d+) timestamp=(?<scanTimestamp>\d+)') {
             $scanEntries.Add([pscustomobject]@{
@@ -297,6 +310,39 @@ $windowDeviceSummary = $scanEntries |
             MediumEntries = ($items | Where-Object { $_.Rssi -lt -60 -and $_.Rssi -ge -75 }).Count
             WeakEntries = ($items | Where-Object { $_.Rssi -lt -75 -and $_.Rssi -ge -85 }).Count
             EdgeEntries = ($items | Where-Object { $_.Rssi -lt -85 }).Count
+        }
+    } |
+    Sort-Object Window, Device
+
+$freshnessSummary = $freshnessTicks |
+    Group-Object Window, Device |
+    ForEach-Object {
+        $items = $_.Group
+        $validFresh = $items | Where-Object { $_.FreshAgeMs -ge 0 }
+        $receiverUpdates = $events | Where-Object {
+            $_.Window -eq $items[0].Window -and
+            $_.Device -eq $items[0].Device -and
+            $_.Event -eq "results" -and
+            $_.Source -eq "receiver" -and
+            $_.Updated -eq "true"
+        } | Sort-Object Time
+        $gaps = New-Object System.Collections.Generic.List[double]
+        for ($i = 1; $i -lt $receiverUpdates.Count; $i++) {
+            $gaps.Add(($receiverUpdates[$i].Time - $receiverUpdates[$i - 1].Time).TotalSeconds)
+        }
+        [pscustomobject]@{
+            Window = $items[0].Window
+            Device = $items[0].Device
+            TickCount = $items.Count
+            ReceiverUpdated = $receiverUpdates.Count
+            AvgFreshAgeMs = if ($validFresh.Count -gt 0) { [math]::Round(($validFresh | Measure-Object FreshAgeMs -Average).Average, 0) } else { -1 }
+            MaxFreshAgeMs = if ($validFresh.Count -gt 0) { ($validFresh | Measure-Object FreshAgeMs -Maximum).Maximum } else { -1 }
+            StaleOver3000 = ($validFresh | Where-Object { $_.FreshAgeMs -gt 3000 }).Count
+            StaleOver5000 = ($validFresh | Where-Object { $_.FreshAgeMs -gt 5000 }).Count
+            NoFreshYet = ($items | Where-Object { $_.FreshAgeMs -lt 0 }).Count
+            AvgCachedCount = [math]::Round(($items | Measure-Object CachedCount -Average).Average, 1)
+            AvgReceiverGapSec = if ($gaps.Count -gt 0) { [math]::Round(($gaps | Measure-Object -Average).Average, 2) } else { -1 }
+            MaxReceiverGapSec = if ($gaps.Count -gt 0) { [math]::Round(($gaps | Measure-Object -Maximum).Maximum, 2) } else { -1 }
         }
     } |
     Sort-Object Window, Device
@@ -551,6 +597,8 @@ $crossValidationPredictions = $crossValidationEvaluation |
 $scanSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "scan-summary.csv")
 $bucketSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "bucket-summary.csv")
 $eventSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "event-summary.csv")
+$freshnessTicks | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "freshness-timeline.csv")
+$freshnessSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "freshness-summary.csv")
 $windowDeviceSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "window-device-summary.csv")
 $comparison | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "device-comparison.csv")
 $contexts | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "device-context.csv")
@@ -598,6 +646,18 @@ if ($contexts.Count -eq 0) {
     $report.Add("| --- | --- | ---: | ---: | --- | --- | --- | --- | --- |")
     foreach ($row in $contexts) {
         $report.Add("| $($row.Device) | $($row.Manufacturer) $($row.Model) | $($row.Sdk) | $($row.BatteryPercent) | $($row.Charging) | $($row.PowerSave) | $($row.WifiEnabled) | $($row.LocationEnabled) | $($row.AppVersionName) |")
+    }
+}
+$report.Add("")
+$report.Add("## Wi-Fi Freshness Summary")
+$report.Add("")
+if ($freshnessSummary.Count -eq 0) {
+    $report.Add("No `WIFI_DIAG event=tick` lines found. Rebuild and rerun the app with Phase 6 logging.")
+} else {
+    $report.Add("| Window | Device | Ticks | Receiver Updated | Avg Fresh ms | Max Fresh ms | >3s | >5s | No Fresh | Avg Cached | Avg Gap s | Max Gap s |")
+    $report.Add("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+    foreach ($row in $freshnessSummary) {
+        $report.Add("| $($row.Window) | $($row.Device) | $($row.TickCount) | $($row.ReceiverUpdated) | $($row.AvgFreshAgeMs) | $($row.MaxFreshAgeMs) | $($row.StaleOver3000) | $($row.StaleOver5000) | $($row.NoFreshYet) | $($row.AvgCachedCount) | $($row.AvgReceiverGapSec) | $($row.MaxReceiverGapSec) |")
     }
 }
 $report.Add("")

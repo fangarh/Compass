@@ -279,3 +279,48 @@ leave-one-bucket-out predictions: 11/32 correct (34.4%)
 исследования и поиска отличающих BSSID, но переносить его в runtime как есть
 нельзя. Следующая модель должна использовать стабильные discriminative BSSID,
 калибровку под устройство и сглаживание по нескольким последовательным окнам.
+
+## Phase 6 1 Hz Freshness Verification
+
+APK:
+
+```text
+1816-diagnostic-1s
+```
+
+Диагностический режим:
+
+```text
+WIFI_DIAG event=tick mode=diagnostic-1s intervalMs=1000 freshAgeMs=... cachedCount=...
+```
+
+Freshness analyzer:
+
+```text
+artifacts/field-analysis/freshness-timeline.csv
+artifacts/field-analysis/freshness-summary.csv
+```
+
+Логи проверки:
+
+```text
+artifacts/field-logs/phase6-verify/R3CT20C8A8N/field-radio-20260519-111900.log
+artifacts/field-logs/phase6-verify/e089985a/field-radio-20260519-111851.log
+```
+
+Analyzer:
+
+```text
+artifacts/field-analysis-phase6-verify/
+```
+
+Короткая проверка свежести:
+
+```text
+e089985a: avg fresh age 918 ms, max fresh age 2231 ms, avg receiver gap 2.41 s, max receiver gap 3.19 s
+R3CT20C8A8N: avg fresh age 1068 ms, max fresh age 2140 ms, avg receiver gap 2.17 s, max receiver gap 2.38 s
+```
+
+В коротком прогоне не было tick-ов со свежестью старше 3 секунд. Для цели
+реакции 3-5 секунд это обнадеживающий результат, но нужен более длинный тест
+с перемещением.

@@ -281,3 +281,46 @@ good for exploration and finding discriminative BSSID, but it should not be
 ported to runtime as-is. Runtime detection should use a smaller set of stable
 discriminative BSSID, device-specific calibration, and smoothing over multiple
 consecutive windows.
+
+## 2026-05-19 Phase 6 1 Hz Freshness Verification
+
+APK version:
+
+```text
+1816-diagnostic-1s
+```
+
+The diagnostic build requests Wi-Fi scans every second and logs:
+
+```text
+WIFI_DIAG event=tick mode=diagnostic-1s intervalMs=1000 freshAgeMs=... cachedCount=...
+```
+
+Freshness analyzer outputs:
+
+```text
+artifacts/field-analysis/freshness-timeline.csv
+artifacts/field-analysis/freshness-summary.csv
+```
+
+Verification logs:
+
+```text
+artifacts/field-logs/phase6-verify/R3CT20C8A8N/field-radio-20260519-111900.log
+artifacts/field-logs/phase6-verify/e089985a/field-radio-20260519-111851.log
+```
+
+Analyzer output:
+
+```text
+artifacts/field-analysis-phase6-verify/
+```
+
+Short-run freshness:
+
+```text
+e089985a: avg fresh age 918 ms, max fresh age 2231 ms, avg receiver gap 2.41 s, max receiver gap 3.19 s
+R3CT20C8A8N: avg fresh age 1068 ms, max fresh age 2140 ms, avg receiver gap 2.17 s, max receiver gap 2.38 s
+```
+
+No tick exceeded 3 seconds of fresh-age staleness in the short verification run.

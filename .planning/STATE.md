@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 5: Cross-Validated Zone Evaluator completed.
+Phase 6: 1 Hz Wi-Fi Freshness Test in progress.
 
 ## Last Verified Baseline
 
@@ -23,10 +23,10 @@ Phase 5: Cross-Validated Zone Evaluator completed.
 
 ## Next Action
 
-Do not move the naive fingerprint evaluator into runtime yet. Cross-validation
-showed the current scoring overfits the same log and needs a stronger model.
-Latest cross-validation output:
-`artifacts/field-analysis-run-20260519-1045-cv`.
+Phase 6 verified that, on a short run with screens on, Wi-Fi enabled, location
+enabled, charging, and power saving disabled, both phones produced fresh scan
+results within the 3-5 second reaction target. Next step is a longer movement
+test with the 1 Hz diagnostic build.
 
 ## Verification
 
@@ -76,3 +76,17 @@ Latest cross-validation output:
 - This means the naive fingerprint score is useful for exploration but is not
   ready as runtime detection logic. Next model should focus on discriminative
   BSSID, transition smoothing, and device-specific stability.
+
+2026-05-19 Phase 6:
+
+- Diagnostic scan request interval changed to 1000 ms.
+- App version changed to `1816-diagnostic-1s`.
+- `WIFI_DIAG event=tick` added with `freshAgeMs` and cached result count.
+- Analyzer now exports `freshness-timeline.csv` and `freshness-summary.csv`.
+- Verification output:
+  `artifacts/field-analysis-phase6-verify/freshness-summary.csv`.
+- Short verification freshness:
+  - `e089985a`: avg fresh age 918 ms, max fresh age 2231 ms, avg receiver gap
+    2.41 s, max receiver gap 3.19 s.
+  - `R3CT20C8A8N`: avg fresh age 1068 ms, max fresh age 2140 ms, avg receiver
+    gap 2.17 s, max receiver gap 2.38 s.

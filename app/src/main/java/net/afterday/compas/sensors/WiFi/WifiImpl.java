@@ -24,7 +24,7 @@ import net.afterday.compas.logging.Logger;
 
 /* JADX INFO: loaded from: classes.dex */
 public class WifiImpl implements WiFi {
-    private static final long DEFAULT_SCAN_INTERVAL_MS = 5000;
+    private static final long DEFAULT_SCAN_INTERVAL_MS = 1000;
     private static final long TICK_INTERVAL_SECONDS = 1;
     private static final long THROTTLE_LOG_INTERVAL_MS = 30000;
     private static final long DIAGNOSTIC_LOG_INTERVAL_MS = 30000;
@@ -42,6 +42,7 @@ public class WifiImpl implements WiFi {
     private long lastFreshResultsMs = 0;
     private long lastDiagnosticLogMs = 0;
     private long lastCachedDetailLogMs = 0;
+    private int lastCachedResultsCount = -1;
     private boolean lastOneHzMode = true;
 
     public WifiImpl(Context context) {
@@ -64,6 +65,7 @@ public class WifiImpl implements WiFi {
     public /* synthetic */ void lambda$new$1$WifiImpl(Long t) {
         requestScanIfDue(false);
         publishCachedResults();
+        logFreshnessTick();
         logPeriodicDiagnostic();
     }
 
@@ -173,12 +175,13 @@ public class WifiImpl implements WiFi {
     }
 
     private String getModeName() {
-        return "default-5s";
+        return "diagnostic-1s";
     }
 
     private void publishCachedResults() {
         List<ScanResult> results = getScanResultsSafely();
         if (results != null) {
+            this.lastCachedResultsCount = results.size();
             FieldDiagnosticLog.wifi("event=results source=cached count=" + results.size() + " mode=" + getModeName());
             long now = SystemClock.elapsedRealtime();
             if (now - this.lastCachedDetailLogMs >= CACHED_DETAIL_LOG_INTERVAL_MS) {
@@ -187,6 +190,12 @@ public class WifiImpl implements WiFi {
             }
             publishResults(results);
         }
+    }
+
+    private void logFreshnessTick() {
+        long now = SystemClock.elapsedRealtime();
+        long freshAgeMs = this.lastFreshResultsMs > 0 ? now - this.lastFreshResultsMs : -1;
+        FieldDiagnosticLog.wifi("event=tick mode=" + getModeName() + " intervalMs=" + getScanIntervalMs() + " freshAgeMs=" + freshAgeMs + " cachedCount=" + this.lastCachedResultsCount);
     }
 
     private List<ScanResult> getScanResultsSafely() {
