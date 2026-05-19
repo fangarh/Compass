@@ -313,6 +313,7 @@ foreach ($log in $logs) {
                     RemoteWitnessContract = Get-FieldValue $message "remoteWitnessContract"
                     RemoteReportCount = Get-NumberOrNull (Get-FieldValue $message "remoteReportCount")
                     RemoteFreshSources = Get-NumberOrNull (Get-FieldValue $message "remoteFreshSources")
+                    RemoteStaleSources = Get-NumberOrNull (Get-FieldValue $message "remoteStaleSources")
                     WitnessFreshness = Get-FieldValue $message "witness"
                     WitnessRssi = Get-NumberOrNull (Get-FieldValue $message "rssi")
                     WitnessAgeMs = Get-NumberOrNull (Get-FieldValue $message "ageMs")
@@ -700,6 +701,7 @@ $iffFieldCheckTimeline = $iffFieldChecks |
             RemoteWitnessContract = $_.RemoteWitnessContract
             RemoteReportCount = $_.RemoteReportCount
             RemoteFreshSources = $_.RemoteFreshSources
+            RemoteStaleSources = $_.RemoteStaleSources
             WitnessFreshness = $_.WitnessFreshness
             WitnessRssi = $_.WitnessRssi
             WitnessAgeMs = $_.WitnessAgeMs
@@ -744,6 +746,7 @@ $iffFieldCheckSummary = $iffFieldChecks |
             AvgProximityScore = [math]::Round(($items | Measure-Object ProximityScore -Average).Average, 1)
             MaxRemoteReportCount = ($items | Measure-Object RemoteReportCount -Maximum).Maximum
             MaxRemoteFreshSources = ($items | Measure-Object RemoteFreshSources -Maximum).Maximum
+            MaxRemoteStaleSources = ($items | Measure-Object RemoteStaleSources -Maximum).Maximum
             AvgRssi = if ($rssis.Count -gt 0) { [math]::Round(($rssis | Measure-Object -Average).Average, 1) } else { $null }
             MinRssi = if ($rssis.Count -gt 0) { ($rssis | Measure-Object -Minimum).Minimum } else { $null }
             MaxRssi = if ($rssis.Count -gt 0) { ($rssis | Measure-Object -Maximum).Maximum } else { $null }
@@ -1113,7 +1116,8 @@ if ($iffFieldCheckTimeline.Count -eq 0) {
         $rssi = if ($null -eq $row.WitnessRssi) { "" } else { $row.WitnessRssi }
         $age = if ($null -eq $row.WitnessAgeMs) { "" } else { $row.WitnessAgeMs }
         $quorum = if ([string]::IsNullOrWhiteSpace($row.WitnessQuorum)) { "" } else { "$($row.WitnessQuorum) $($row.WitnessFreshSources)/$($row.WitnessPossibleSources)" }
-        $remote = if ([string]::IsNullOrWhiteSpace($row.RemoteWitnessContract)) { "" } else { "$($row.RemoteReportCount) reports / $($row.RemoteFreshSources) fresh" }
+        $remoteStale = if ($null -eq $row.RemoteStaleSources) { 0 } else { $row.RemoteStaleSources }
+        $remote = if ([string]::IsNullOrWhiteSpace($row.RemoteWitnessContract)) { "" } else { "$($row.RemoteReportCount) reports / $($row.RemoteFreshSources) fresh / $remoteStale stale" }
         $report.Add("| $($row.Time) | $($row.Window) | $($row.Device) | $player | $($row.IdentityLabel) $($row.IdentityScore) | $($row.ProximityLabel) $($row.ProximityScore) | $quorum | $remote | $($row.WitnessFreshness) | $rssi | $age | $($row.PositionLabel) $($row.PositionScore) | $($row.DirectionLabel) $($row.DirectionScore) |")
     }
 
@@ -1123,7 +1127,8 @@ if ($iffFieldCheckTimeline.Count -eq 0) {
     foreach ($row in $iffFieldCheckSummary) {
         $avgRssi = if ($null -eq $row.AvgRssi) { "" } else { $row.AvgRssi }
         $avgAge = if ($null -eq $row.AvgAgeMs) { "" } else { $row.AvgAgeMs }
-        $remoteMax = if ($null -eq $row.MaxRemoteReportCount) { "" } else { "$($row.MaxRemoteReportCount) reports / $($row.MaxRemoteFreshSources) fresh" }
+        $remoteMaxStale = if ($null -eq $row.MaxRemoteStaleSources) { 0 } else { $row.MaxRemoteStaleSources }
+        $remoteMax = if ($null -eq $row.MaxRemoteReportCount) { "" } else { "$($row.MaxRemoteReportCount) reports / $($row.MaxRemoteFreshSources) fresh / $remoteMaxStale stale" }
         $report.Add("| $($row.Window) | $($row.Device) | $($row.DisplayName) ($($row.PlayerId)) | $($row.Count) | $($row.IdentityLabels) | $($row.ProximityLabels) | $($row.WitnessQuorumLabels) | $($row.RemoteWitnessContracts) | $remoteMax | $($row.WitnessFreshness) | $avgRssi | $avgAge |")
     }
 

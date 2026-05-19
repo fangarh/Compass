@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 19: IFF Remote Witness Simulation completed.
+Phase 20: IFF Remote Witness Expiry Fixture completed.
 
 ## Last Verified Baseline
 
@@ -23,9 +23,9 @@ Phase 19: IFF Remote Witness Simulation completed.
 
 ## Next Action
 
-Next useful slice: make remote witness freshness/expiry visible and controllable
-in the local fixture, so the UI can verify transitions from `MULTI_WITNESS` to
-stale/unknown without waiting on real transport.
+Next useful slice: define the first real remote witness transport stub while
+keeping reports unsigned and identity unchanged, or add a compact operator view
+that prioritizes current vs stale witness evidence.
 
 ## Verification
 
@@ -387,3 +387,27 @@ stale/unknown without waiting on real transport.
   `artifacts/iff-field-session-20260519-1716` ->
   `artifacts/iff-field-analysis-20260519-1716`, 1400 scan entries, CSV row
   `MULTI_WITNESS 2/3` with `2 reports / 2 fresh`.
+
+2026-05-19 Phase 20:
+
+- Split the remote witness fixture into `SIM FRESH` and `SIM STALE`.
+- `SIM FRESH` injects two fresh synthetic reports for the selected contact.
+- `SIM STALE` clears existing reports for the selected contact and injects two
+  stale synthetic reports.
+- Added `STALE_REMOTE_WITNESS` quorum label for stale remote evidence.
+- `IFF_DIAG event=field_check` now logs `remoteStaleSources`.
+- Analyzer timeline and Markdown summary now show remote report counts as
+  `reports / fresh / stale`.
+- `:app:assembleDebug` completed successfully.
+- `scripts/test-analyze-field-logs.ps1` passed.
+- APK installed on OnePlus `e089985a`.
+- UIAutomator/ADB verified:
+  `Main -> IFF -> КОМАНДА -> Петя -> SIM FRESH -> SIM STALE -> ЗАПИСАТЬ`.
+- UI showed `MULTI_WITNESS 2/3` for fresh simulation and
+  `STALE_REMOTE_WITNESS 0/3` for stale simulation.
+- Diagnostic log `field-radio-20260519-173501.log` recorded:
+  `witnessQuorum=STALE_REMOTE_WITNESS remoteReportCount=2 remoteFreshSources=0 remoteStaleSources=2`.
+- Analyzer check completed:
+  `artifacts/iff-field-session-20260519-1735` ->
+  `artifacts/iff-field-analysis-20260519-1735`, 743 scan entries, CSV row
+  `STALE_REMOTE_WITNESS 0/3` with `2 reports / 0 fresh / 2 stale`.

@@ -36,6 +36,8 @@ public final class IffWitnessQuorum {
             label = "LOCAL_WITNESS_ONLY";
         } else if (remoteFreshSources == 1) {
             label = "REMOTE_WITNESS_ONLY";
+        } else if (remoteStaleSources > 0) {
+            label = "STALE_REMOTE_WITNESS";
         } else if (staleSources == 1) {
             label = "STALE_LOCAL_WITNESS";
         } else {

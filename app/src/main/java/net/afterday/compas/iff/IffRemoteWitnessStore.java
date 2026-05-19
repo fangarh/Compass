@@ -55,6 +55,17 @@ public final class IffRemoteWitnessStore {
         }
     }
 
+    public static int clearReportsFor(String targetPlayerId) {
+        synchronized (LOCK) {
+            List<IffRemoteWitnessReport> reports = REPORTS_BY_TARGET.remove(targetPlayerId);
+            int removed = reports == null ? 0 : reports.size();
+            FieldDiagnosticLog.event("IFF_DIAG", "event=remote_witness_cleared"
+                    + " targetPlayerId=" + targetPlayerId
+                    + " removed=" + removed);
+            return removed;
+        }
+    }
+
     private static void replaceSameSource(List<IffRemoteWitnessReport> reports, IffRemoteWitnessReport next) {
         for (int i = 0; i < reports.size(); i++) {
             IffRemoteWitnessReport previous = reports.get(i);

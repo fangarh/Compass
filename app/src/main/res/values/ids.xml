@@ -77,6 +77,7 @@
     <id name="iff_contact_tab" />
     <id name="iff_map_tab" />
     <id name="iff_record_check" />
+    <id name="iff_sim_stale_witness" />
     <id name="iff_sim_witness" />
     <id name="iff_status" />
     <id name="iff_subtitle" />

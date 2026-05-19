@@ -413,6 +413,34 @@ UIAutomator verified main PDA -> `IFF` -> `КОМАНДА` -> select `Петя` 
 Analyzer verification on `artifacts/iff-field-session-20260519-1716` produced
 an IFF row for `Петя` with `MULTI_WITNESS 2/3` and `2 reports / 2 fresh`.
 
+## Phase 20: IFF Remote Witness Expiry Fixture
+
+**Status:** completed
+
+**Goal:** Make remote witness freshness and expiry explicitly testable without
+waiting for real time or adding network transport.
+
+**Scope:**
+
+- Split local simulation into `SIM FRESH` and `SIM STALE`.
+- Use `SIM FRESH` to inject fresh synthetic remote reports.
+- Use `SIM STALE` to replace reports with stale synthetic reports for the same
+  selected contact.
+- Show `STALE_REMOTE_WITNESS 0/3` when remote reports are present but no longer
+  current.
+- Log and analyze `remoteStaleSources`.
+- Keep expired remote reports visible without treating them as current proof.
+
+**Verification:** debug APK builds. Analyzer smoke test passes. APK installed
+on OnePlus `e089985a`. UIAutomator/ADB verified main PDA -> `IFF` ->
+`КОМАНДА` -> select `Петя` -> `SIM FRESH` -> `SIM STALE` -> `ЗАПИСАТЬ`.
+Fresh simulation showed `MULTI_WITNESS 2/3`; stale simulation showed
+`STALE_REMOTE_WITNESS 0/3` with two `REMOTE_STALE` reports.
+`field-radio-20260519-173501.log` recorded
+`remoteReportCount=2 remoteFreshSources=0 remoteStaleSources=2`. Analyzer
+verification on `artifacts/iff-field-session-20260519-1735` produced
+`2 reports / 0 fresh / 2 stale`.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

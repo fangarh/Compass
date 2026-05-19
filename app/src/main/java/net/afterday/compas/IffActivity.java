@@ -49,6 +49,7 @@ public class IffActivity extends Activity {
     private Button approachButton;
     private Button recordCheckButton;
     private Button simWitnessButton;
+    private Button simStaleWitnessButton;
     private TextView title;
     private TextView subtitle;
     private TextView status;
@@ -108,6 +109,7 @@ public class IffActivity extends Activity {
         approachButton = (Button) findViewById(R.id.iff_approach);
         recordCheckButton = (Button) findViewById(R.id.iff_record_check);
         simWitnessButton = (Button) findViewById(R.id.iff_sim_witness);
+        simStaleWitnessButton = (Button) findViewById(R.id.iff_sim_stale_witness);
         title = (TextView) findViewById(R.id.iff_title);
         subtitle = (TextView) findViewById(R.id.iff_subtitle);
         status = (TextView) findViewById(R.id.iff_status);
@@ -127,6 +129,7 @@ public class IffActivity extends Activity {
         approachButton.setTypeface(mono, Typeface.BOLD);
         recordCheckButton.setTypeface(mono, Typeface.BOLD);
         simWitnessButton.setTypeface(mono, Typeface.BOLD);
+        simStaleWitnessButton.setTypeface(mono, Typeface.BOLD);
     }
 
     private void setListeners() {
@@ -166,7 +169,13 @@ public class IffActivity extends Activity {
         simWitnessButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                simulateRemoteWitnesses();
+                simulateRemoteWitnesses(false);
+            }
+        });
+        simStaleWitnessButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                simulateRemoteWitnesses(true);
             }
         });
     }
@@ -191,7 +200,8 @@ public class IffActivity extends Activity {
 
     private void render() {
         approachButton.setText(approachActive ? "ОТМЕНИТЬ ПОДХОД" : "Я ПОДХОЖУ");
-        simWitnessButton.setText("SIM WITNESS");
+        simWitnessButton.setText("SIM FRESH");
+        simStaleWitnessButton.setText("SIM STALE");
         renderTabs();
         if (activeTab == TAB_CONTACT) {
             renderContact();
@@ -295,6 +305,7 @@ public class IffActivity extends Activity {
                 + " remoteWitnessContract=" + IffRemoteWitnessReport.CONTRACT_VERSION
                 + " remoteReportCount=" + quorum.remoteReportCount
                 + " remoteFreshSources=" + quorum.remoteFreshSources
+                + " remoteStaleSources=" + quorum.remoteStaleSources
                 + " witness=" + witnessState
                 + " localApproach=" + approachActive);
         lastFieldCheckSummary = selected.displayName + ": identity " + confidence.identity.score
@@ -303,9 +314,10 @@ public class IffActivity extends Activity {
         render();
     }
 
-    private void simulateRemoteWitnesses() {
+    private void simulateRemoteWitnesses(boolean stale) {
         IffPlayer target = roster[selectedPlayerIndex];
         long now = SystemClock.elapsedRealtime();
+        IffRemoteWitnessStore.clearReportsFor(target.playerId);
         int added = 0;
         for (int i = 0; i < roster.length && added < 2; i++) {
             IffPlayer source = roster[i];
@@ -317,10 +329,10 @@ public class IffActivity extends Activity {
                     source.playerId,
                     target.playerId,
                     IffRadioWitnessStore.expectedBeaconSsid(target.playerId),
-                    "sim:" + source.playerId + ":" + target.playerId,
+                    "sim:" + (stale ? "stale:" : "fresh:") + source.playerId + ":" + target.playerId,
                     rssi,
                     2412,
-                    now - (2500L + (added * 900L)),
+                    now - simulatedReportAgeMs(stale, added),
                     now,
                     IffRemoteWitnessReport.SIGNATURE_PENDING);
             if (IffRemoteWitnessStore.receiveReport(report)) {
@@ -330,12 +342,21 @@ public class IffActivity extends Activity {
         FieldDiagnosticLog.event("IFF_DIAG", "event=remote_witness_simulated"
                 + " targetPlayerId=" + target.playerId
                 + " added=" + added
+                + " mode=" + (stale ? "stale" : "fresh")
                 + " contract=" + IffRemoteWitnessReport.CONTRACT_VERSION
                 + " signatureStatus=" + IffRemoteWitnessReport.SIGNATURE_PENDING);
-        lastFieldCheckSummary = target.displayName + ": simulated remote witnesses " + added + " / "
+        lastFieldCheckSummary = target.displayName + ": simulated " + (stale ? "stale" : "fresh")
+                + " remote witnesses " + added + " / "
                 + IffRemoteWitnessReport.SIGNATURE_PENDING;
         activeTab = TAB_CONTACT;
         render();
+    }
+
+    private long simulatedReportAgeMs(boolean stale, int added) {
+        if (stale) {
+            return IffRadioWitnessStore.FRESH_MS + 5000L + (added * 900L);
+        }
+        return 2500L + (added * 900L);
     }
 
     private void resetBody() {
@@ -541,7 +562,7 @@ public class IffActivity extends Activity {
                     .append("\n");
         }
         builder.append("\nGPS и направление будут отдельными слоями уверенности.\n")
-                .append("Remote transport пока не подключен; SIM WITNESS добавляет local-only fixture.");
+                .append("Remote transport пока не подключен; SIM FRESH/STALE проверяют local-only fixture.");
         return builder.toString();
     }
 

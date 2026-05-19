@@ -339,3 +339,40 @@ fresh reports -> истечение freshness window -> stale/unknown transition
 
 Это нужно, чтобы явно проверять переход `MULTI_WITNESS` обратно в
 неподтвержденное состояние до подключения реального транспорта.
+
+## Реализованный срез Phase 20
+
+Сделали freshness/expiry remote reports проверяемыми без ожидания и без сети:
+
+```text
+SIM FRESH -> MULTI_WITNESS 2/3
+SIM STALE -> STALE_REMOTE_WITNESS 0/3
+```
+
+Что изменилось:
+
+- `SIM WITNESS` разделен на `SIM FRESH` и `SIM STALE`;
+- `SIM FRESH` добавляет два fresh synthetic reports;
+- `SIM STALE` заменяет их двумя stale reports;
+- stale reports остаются видимыми, но не считаются current witness proof;
+- diagnostic log пишет `remoteStaleSources`;
+- analyzer показывает `reports / fresh / stale`.
+
+Проверка на OnePlus:
+
+- `Main -> IFF -> Команда -> Петя -> SIM FRESH -> SIM STALE -> Записать`;
+- fresh state: `MULTI_WITNESS 2/3`;
+- stale state: `STALE_REMOTE_WITNESS 0/3`;
+- log: `remoteReportCount=2 remoteFreshSources=0 remoteStaleSources=2`;
+- analyzer по сессии `20260519-1735` подтвердил
+  `2 reports / 0 fresh / 2 stale`.
+
+Важно: expired remote reports - это память о старом свидетельстве, а не
+доказательство текущей близости. Identity/proximity/position/direction не
+повышаются от stale reports.
+
+## Следующий срез
+
+Либо первый transport stub для remote witness exchange, либо компактный
+operator view, который быстрее отделяет current witness evidence от stale
+evidence в боевом UI.
