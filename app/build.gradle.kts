@@ -15,7 +15,7 @@ android {
         minSdk = 23
         targetSdk = 35
         versionCode = 1816
-        versionName = "1816-diagnostic-1s"
+        versionName = "1816-diagnostic-sensors-1s"
     }
 
     compileOptions {

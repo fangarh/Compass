@@ -124,6 +124,8 @@ $scanEntries = New-Object System.Collections.Generic.List[object]
 $events = New-Object System.Collections.Generic.List[object]
 $contexts = New-Object System.Collections.Generic.List[object]
 $freshnessTicks = New-Object System.Collections.Generic.List[object]
+$sensorEvents = New-Object System.Collections.Generic.List[object]
+$locationEvents = New-Object System.Collections.Generic.List[object]
 
 function Get-FieldValue([string]$message, [string]$name) {
     if ($message -match "$name=""(?<quoted>[^""]*)""") {
@@ -133,6 +135,13 @@ function Get-FieldValue([string]$message, [string]$name) {
         return $Matches.plain
     }
     return ""
+}
+
+function Get-NumberOrNull([string]$value) {
+    if ([string]::IsNullOrWhiteSpace($value) -or $value -eq "na") {
+        return $null
+    }
+    return [double]::Parse($value, $culture)
 }
 
 foreach ($log in $logs) {
@@ -164,6 +173,64 @@ foreach ($log in $logs) {
                     LocationEnabled = Get-FieldValue $message "locationEnabled"
                 })
             }
+            continue
+        }
+
+        if ($line -match '^(?<time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) .*? SENSOR_DIAG (?<message>.*)$') {
+            $time = [datetime]::ParseExact($Matches.time, $timeFormat, $culture)
+            $message = $Matches.message
+            $window = Get-WindowName $time
+            $bucket = Get-BucketName $time
+            $sensorEvents.Add([pscustomobject]@{
+                Device = $device
+                LogFile = $log.Name
+                Time = $time
+                Window = $window
+                Bucket = $bucket
+                Event = Get-FieldValue $message "event"
+                Name = Get-FieldValue $message "name"
+                IntervalMs = Get-FieldValue $message "intervalMs"
+                Accel = Get-FieldValue $message "accel"
+                Gyro = Get-FieldValue $message "gyro"
+                Magnetic = Get-FieldValue $message "magnetic"
+                YawDeg = Get-FieldValue $message "yawDeg"
+                PitchDeg = Get-FieldValue $message "pitchDeg"
+                RollDeg = Get-FieldValue $message "rollDeg"
+                PressureHpa = Get-FieldValue $message "pressureHpa"
+                LightLux = Get-FieldValue $message "lightLux"
+                ProximityCm = Get-FieldValue $message "proximityCm"
+                StepCounter = Get-FieldValue $message "stepCounter"
+                LocationAgeMs = Get-FieldValue $message "locationAgeMs"
+                Registered = Get-FieldValue $message "registered"
+                Available = Get-FieldValue $message "available"
+                Message = $message
+            })
+            continue
+        }
+
+        if ($line -match '^(?<time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) .*? LOCATION_DIAG (?<message>.*)$') {
+            $time = [datetime]::ParseExact($Matches.time, $timeFormat, $culture)
+            $message = $Matches.message
+            $window = Get-WindowName $time
+            $bucket = Get-BucketName $time
+            $locationEvents.Add([pscustomobject]@{
+                Device = $device
+                LogFile = $log.Name
+                Time = $time
+                Window = $window
+                Bucket = $bucket
+                Event = Get-FieldValue $message "event"
+                Provider = Get-FieldValue $message "provider"
+                Lat = Get-FieldValue $message "lat"
+                Lon = Get-FieldValue $message "lon"
+                AccuracyM = Get-FieldValue $message "accuracyM"
+                AltitudeM = Get-FieldValue $message "altitudeM"
+                SpeedMps = Get-FieldValue $message "speedMps"
+                BearingDeg = Get-FieldValue $message "bearingDeg"
+                Satellites = Get-FieldValue $message "satellites"
+                LocationTimeMs = Get-FieldValue $message "timeMs"
+                Message = $message
+            })
             continue
         }
 
@@ -343,6 +410,48 @@ $freshnessSummary = $freshnessTicks |
             AvgCachedCount = [math]::Round(($items | Measure-Object CachedCount -Average).Average, 1)
             AvgReceiverGapSec = if ($gaps.Count -gt 0) { [math]::Round(($gaps | Measure-Object -Average).Average, 2) } else { -1 }
             MaxReceiverGapSec = if ($gaps.Count -gt 0) { [math]::Round(($gaps | Measure-Object -Maximum).Maximum, 2) } else { -1 }
+        }
+    } |
+    Sort-Object Window, Device
+
+$sensorSummary = $sensorEvents |
+    Group-Object Window, Device |
+    ForEach-Object {
+        $items = $_.Group
+        $ticks = $items | Where-Object Event -eq "tick"
+        [pscustomobject]@{
+            Window = $items[0].Window
+            Device = $items[0].Device
+            TickCount = $ticks.Count
+            SensorEvents = $items.Count
+            RegisteredSensors = ($items | Where-Object { $_.Event -eq "sensor_register" -and $_.Registered -eq "true" }).Count
+            UnavailableSensors = ($items | Where-Object { $_.Event -eq "sensor_register" -and $_.Available -eq "false" }).Count
+            YawSamples = ($ticks | Where-Object { $_.YawDeg -ne "" -and $_.YawDeg -ne "na" }).Count
+            PressureSamples = ($ticks | Where-Object { $_.PressureHpa -ne "" -and $_.PressureHpa -ne "na" }).Count
+            LightSamples = ($ticks | Where-Object { $_.LightLux -ne "" -and $_.LightLux -ne "na" }).Count
+            StepSamples = ($ticks | Where-Object { $_.StepCounter -ne "" -and $_.StepCounter -ne "na" }).Count
+        }
+    } |
+    Sort-Object Window, Device
+
+$locationSummary = $locationEvents |
+    Group-Object Window, Device |
+    ForEach-Object {
+        $items = $_.Group
+        $updates = $items | Where-Object { $_.Event -eq "update" -or $_.Event -eq "last_known" }
+        $accuracies = $updates |
+            ForEach-Object { Get-NumberOrNull $_.AccuracyM } |
+            Where-Object { $null -ne $_ }
+        [pscustomobject]@{
+            Window = $items[0].Window
+            Device = $items[0].Device
+            LocationEvents = $items.Count
+            Updates = ($items | Where-Object Event -eq "update").Count
+            LastKnown = ($items | Where-Object Event -eq "last_known").Count
+            GpsUpdates = ($items | Where-Object { $_.Event -eq "update" -and $_.Provider -eq "gps" }).Count
+            NetworkUpdates = ($items | Where-Object { $_.Event -eq "update" -and $_.Provider -eq "network" }).Count
+            BestAccuracyM = if ($accuracies.Count -gt 0) { [math]::Round(($accuracies | Measure-Object -Minimum).Minimum, 1) } else { -1 }
+            AvgAccuracyM = if ($accuracies.Count -gt 0) { [math]::Round(($accuracies | Measure-Object -Average).Average, 1) } else { -1 }
         }
     } |
     Sort-Object Window, Device
@@ -599,6 +708,10 @@ $bucketSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $Output
 $eventSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "event-summary.csv")
 $freshnessTicks | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "freshness-timeline.csv")
 $freshnessSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "freshness-summary.csv")
+$sensorEvents | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "sensor-timeline.csv")
+$sensorSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "sensor-summary.csv")
+$locationEvents | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "location-timeline.csv")
+$locationSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "location-summary.csv")
 $windowDeviceSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "window-device-summary.csv")
 $comparison | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "device-comparison.csv")
 $contexts | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "device-context.csv")
@@ -658,6 +771,30 @@ if ($freshnessSummary.Count -eq 0) {
     $report.Add("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
     foreach ($row in $freshnessSummary) {
         $report.Add("| $($row.Window) | $($row.Device) | $($row.TickCount) | $($row.ReceiverUpdated) | $($row.AvgFreshAgeMs) | $($row.MaxFreshAgeMs) | $($row.StaleOver3000) | $($row.StaleOver5000) | $($row.NoFreshYet) | $($row.AvgCachedCount) | $($row.AvgReceiverGapSec) | $($row.MaxReceiverGapSec) |")
+    }
+}
+$report.Add("")
+$report.Add("## Sensor Summary")
+$report.Add("")
+if ($sensorSummary.Count -eq 0) {
+    $report.Add("No `SENSOR_DIAG` lines found. Rebuild and rerun the app with sensor diagnostics.")
+} else {
+    $report.Add("| Window | Device | Ticks | Events | Registered | Unavailable | Yaw | Pressure | Light | Steps |")
+    $report.Add("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+    foreach ($row in $sensorSummary) {
+        $report.Add("| $($row.Window) | $($row.Device) | $($row.TickCount) | $($row.SensorEvents) | $($row.RegisteredSensors) | $($row.UnavailableSensors) | $($row.YawSamples) | $($row.PressureSamples) | $($row.LightSamples) | $($row.StepSamples) |")
+    }
+}
+$report.Add("")
+$report.Add("## Location Summary")
+$report.Add("")
+if ($locationSummary.Count -eq 0) {
+    $report.Add("No `LOCATION_DIAG` lines found. Rebuild and rerun the app with location diagnostics.")
+} else {
+    $report.Add("| Window | Device | Events | Updates | Last Known | GPS | Network | Best Accuracy m | Avg Accuracy m |")
+    $report.Add("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+    foreach ($row in $locationSummary) {
+        $report.Add("| $($row.Window) | $($row.Device) | $($row.LocationEvents) | $($row.Updates) | $($row.LastKnown) | $($row.GpsUpdates) | $($row.NetworkUpdates) | $($row.BestAccuracyM) | $($row.AvgAccuracyM) |")
     }
 }
 $report.Add("")

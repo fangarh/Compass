@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.afterday.compas.BuildConfig;
 import net.afterday.compas.logging.FieldDiagnosticLog;
+import net.afterday.compas.logging.FieldSensorDiagnosticSampler;
 import net.afterday.compas.logging.Logger;
 
 /* JADX INFO: loaded from: classes.dex */
@@ -48,6 +49,7 @@ public class WifiImpl implements WiFi {
     public WifiImpl(Context context) {
         this.appContext = context.getApplicationContext();
         FieldDiagnosticLog.start(this.appContext);
+        FieldSensorDiagnosticSampler.start(this.appContext);
         this.mWifi = (WifiManager) this.appContext.getSystemService(Context.WIFI_SERVICE);
         this.scanReceiver = new BroadcastReceiver() {
             @Override

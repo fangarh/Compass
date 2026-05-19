@@ -64,6 +64,14 @@ public final class FieldDiagnosticLog {
         event("WIFI_DIAG", message);
     }
 
+    public static void sensor(String message) {
+        event("SENSOR_DIAG", message);
+    }
+
+    public static void location(String message) {
+        event("LOCATION_DIAG", message);
+    }
+
     public static void wifiScanResults(String source, boolean updated, List<ScanResult> results) {
         if (results == null) {
             wifi("event=scan_results source=" + source + " count=0 null=true");

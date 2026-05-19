@@ -23,10 +23,9 @@ Phase 6: 1 Hz Wi-Fi Freshness Test in progress.
 
 ## Next Action
 
-Phase 6 verified that, on a short run with screens on, Wi-Fi enabled, location
-enabled, charging, and power saving disabled, both phones produced fresh scan
-results within the 3-5 second reaction target. Next step is a longer movement
-test with the 1 Hz diagnostic build.
+Phase 7 added multisensor diagnostics. Before the next blind route test, make
+sure both phones are unlocked after install and all startup permissions are
+granted, especially physical activity on OnePlus for step counter data.
 
 ## Verification
 
@@ -90,3 +89,19 @@ test with the 1 Hz diagnostic build.
     2.41 s, max receiver gap 3.19 s.
   - `R3CT20C8A8N`: avg fresh age 1068 ms, max fresh age 2140 ms, avg receiver
     gap 2.17 s, max receiver gap 2.38 s.
+
+2026-05-19 Phase 7:
+
+- App version changed to `1816-diagnostic-sensors-1s`.
+- Added diagnostic-only `FieldSensorDiagnosticSampler`.
+- Field logs now include:
+  - `SENSOR_DIAG event=tick` with accelerometer, gyroscope, magnetic field,
+    yaw/pitch/roll, pressure, light, proximity, step counter, and location age.
+  - `LOCATION_DIAG` provider status, last-known locations, and updates.
+- Analyzer now exports `sensor-timeline.csv`, `sensor-summary.csv`,
+  `location-timeline.csv`, and `location-summary.csv`.
+- `:app:assembleDebug` completed successfully.
+- Samsung verification log produced 34 sensor ticks, 8 registered sensors,
+  9 location events, and intact Wi-Fi freshness output.
+- OnePlus installed the APK but still needs manual unlock/permission handling
+  for the new physical-activity permission before the next test.

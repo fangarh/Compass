@@ -324,3 +324,50 @@ R3CT20C8A8N: avg fresh age 1068 ms, max fresh age 2140 ms, avg receiver gap 2.17
 ```
 
 No tick exceeded 3 seconds of fresh-age staleness in the short verification run.
+
+## 2026-05-19 Phase 7 Multisensor Diagnostics
+
+APK version:
+
+```text
+1816-diagnostic-sensors-1s
+```
+
+The diagnostic build now keeps 1 Hz Wi-Fi logging and also writes:
+
+```text
+SENSOR_DIAG event=tick intervalMs=1000 accel=... gyro=... magnetic=... yawDeg=... pitchDeg=... rollDeg=... pressureHpa=... lightLux=... proximityCm=... stepCounter=... locationAgeMs=...
+LOCATION_DIAG event=provider_status ...
+LOCATION_DIAG event=update provider=... lat=... lon=... accuracyM=... speedMps=... bearingDeg=...
+```
+
+The sampler is diagnostic-only. It does not change gameplay influence
+calculation.
+
+Analyzer outputs added:
+
+```text
+sensor-timeline.csv
+sensor-summary.csv
+location-timeline.csv
+location-summary.csv
+```
+
+Samsung verification:
+
+```text
+artifacts/field-logs/phase7-sensors-verify/R3CT20C8A8N/field-radio-20260519-120208.log
+artifacts/field-analysis-phase7-sensors-verify/
+```
+
+Result:
+
+```text
+sensor-summary: 34 ticks, 8 registered sensors, yaw/pressure/light/step data present
+location-summary: 9 events, 4 network updates, best accuracy 6 m, average accuracy 75.3 m
+freshness-summary: avg fresh age 1048 ms, max fresh age 2031 ms, >3s = 0
+```
+
+OnePlus installed the APK, but the device was locked during verification and
+the new physical-activity permission still needs manual approval before the next
+field run if step-counter data is needed.

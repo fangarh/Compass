@@ -104,6 +104,25 @@ reaction window.
 verification logs showed `diagnostic-1s`, `intervalMs=1000`, `event=tick`, and
 fresh receiver updates. Analyzer emitted `freshness-summary.csv`.
 
+## Phase 7: Multisensor Field Diagnostics
+
+**Status:** completed
+
+**Goal:** Capture all practical phone-side signals that may help classify short
+indoor route segments in later offline analysis.
+
+**Scope:**
+
+- Add diagnostic logging for accelerometer, gyroscope, magnetic field, rotation
+  vector orientation, pressure, light, proximity, step counter, and location.
+- Keep the sampler diagnostic-only; do not feed it into gameplay calculations.
+- Extend the analyzer with sensor and location timeline/summary CSV files.
+
+**Verification:** `:app:assembleDebug` completed on 2026-05-19. Samsung
+SM-S908B produced `SENSOR_DIAG` and `LOCATION_DIAG` lines with app version
+`1816-diagnostic-sensors-1s`; analyzer emitted sensor/location CSV files and
+existing Wi-Fi freshness output remained valid.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

@@ -294,6 +294,54 @@ APK:
 WIFI_DIAG event=tick mode=diagnostic-1s intervalMs=1000 freshAgeMs=... cachedCount=...
 ```
 
+## Phase 7: расширение полевого лога датчиками
+
+Версия APK:
+
+```text
+1816-diagnostic-sensors-1s
+```
+
+Добавлены диагностические строки:
+
+```text
+SENSOR_DIAG event=tick intervalMs=1000 accel=... gyro=... magnetic=... yawDeg=... pitchDeg=... rollDeg=... pressureHpa=... lightLux=... proximityCm=... stepCounter=... locationAgeMs=...
+LOCATION_DIAG event=provider_status ...
+LOCATION_DIAG event=update provider=... lat=... lon=... accuracyM=... speedMps=... bearingDeg=...
+```
+
+Назначение: следующий слепой проход должен собрать не только Wi-Fi, но и
+инерциальные, ориентационные, световые, барометрические, шаговые и
+локационные признаки. Эти данные пока не участвуют в игровой логике.
+
+Новые CSV анализатора:
+
+```text
+sensor-timeline.csv
+sensor-summary.csv
+location-timeline.csv
+location-summary.csv
+```
+
+Проверка Samsung:
+
+```text
+artifacts/field-logs/phase7-sensors-verify/R3CT20C8A8N/field-radio-20260519-120208.log
+artifacts/field-analysis-phase7-sensors-verify/
+```
+
+Результат:
+
+```text
+sensor-summary: 34 tick, 8 зарегистрированных датчиков
+location-summary: 9 events, 4 network update, best accuracy 6 m
+freshness-summary: avg fresh age 1048 ms, max fresh age 2031 ms, >3s = 0
+```
+
+OnePlus установил APK, но во время проверки был заблокирован; перед следующим
+тестом надо разблокировать его и подтвердить новое разрешение физической
+активности, иначе `stepCounter` может быть пустым.
+
 Freshness analyzer:
 
 ```text
