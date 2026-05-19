@@ -77,6 +77,15 @@ artifacts/field-analysis/movement-deltas.csv
 marks candidate rows when the absolute delta is at least 8 dB with enough
 samples on both sides.
 
+Named movement windows can be passed directly:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\analyze-field-logs.ps1 `
+  -InputRoot artifacts\field-logs\run-20260519-1045 `
+  -OutputDir artifacts\field-analysis-run-20260519-1045-named `
+  -Windows "cabinet=10:45:10..10:47:10;corridor=10:47:10..10:49:10;cabinet_return=10:49:10..10:51:10;near_30cm=10:51:10.."
+```
+
 ## Expected Lines
 
 Useful anchors for analysis:
@@ -166,3 +175,53 @@ Phase 2 verification on 2026-05-19:
 R3CT20C8A8N: Samsung SM-S908B, SDK 36, battery 74, charging=false, powerSave=true
 e089985a: OnePlus NE2215, SDK 35, battery 73, charging=true, powerSave=false
 ```
+
+## 2026-05-19 Phase 2 Controlled Run
+
+Logs were cleared before the run. Both phones were unlocked, charging, Wi-Fi
+enabled, location enabled, and power saving disabled.
+
+Raw logs:
+
+```text
+artifacts/field-logs/run-20260519-1045/R3CT20C8A8N/diagnostics/field-radio-20260519-104237.log
+artifacts/field-logs/run-20260519-1045/e089985a/diagnostics/field-radio-20260519-104238.log
+```
+
+Analyzer output:
+
+```text
+artifacts/field-analysis-run-20260519-1045/
+artifacts/field-analysis-run-20260519-1045-named/
+```
+
+Samsung movement markers:
+
+```text
+10:45:10 - placed on cabinet
+10:47:10 - moved to corridor
+10:49:10 - returned to cabinet
+10:51:10 - placed about 30 cm from the other phone
+```
+
+Named analyzer windows for this run:
+
+```text
+cabinet        => 10:45:10..10:47:10
+corridor       => 10:47:10..10:49:10
+cabinet_return => 10:49:10..10:51:10
+near_30cm      => from 10:51:10
+```
+
+Run summary:
+
+```text
+Scan entries: 9352
+R3CT20C8A8N: Samsung SM-S908B, battery 71, charging=true, powerSave=false
+e089985a: OnePlus NE2215, battery 72, charging=true, powerSave=false
+```
+
+Every window had fresh receiver results and no rejected scan requests. The
+strongest movement candidates were on Samsung when moving from corridor back to
+the later near/cabinet state, with common office BSSID RSSI deltas around
+25-28 dB.

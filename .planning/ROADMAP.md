@@ -44,6 +44,20 @@ with movement delta candidates.
 Both devices produced `FIELD_DIAG event=device_context`, and analyzer output
 confirmed context rows for Samsung SM-S908B and OnePlus NE2215.
 
+## Phase 3: Named Analysis Windows
+
+**Status:** completed
+
+**Goal:** Allow field-log reports to use real movement point names.
+
+**Scope:**
+
+- Analyzer accepts `-Windows` with named time ranges.
+- Movement deltas are generated between adjacent named windows and the first to
+  last window.
+- The 2026-05-19 10:45 run was regenerated as
+  `artifacts/field-analysis-run-20260519-1045-named`.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

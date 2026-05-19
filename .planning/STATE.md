@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 2: Diagnostic Context And Movement Analysis completed.
+Phase 3: Named Analysis Windows completed.
 
 ## Last Verified Baseline
 
@@ -23,9 +23,8 @@ Phase 2: Diagnostic Context And Movement Analysis completed.
 
 ## Next Action
 
-Use Phase 2 logs for the next field run. Both physical phones now write
-`FIELD_DIAG event=device_context`; analyzer outputs include `device-context.csv`
-and `movement-deltas.csv`.
+Use named analyzer windows for future field runs. Latest named output:
+`artifacts/field-analysis-run-20260519-1045-named`.
 
 ## Verification
 
@@ -51,3 +50,11 @@ and `movement-deltas.csv`.
 - Both devices produced `FIELD_DIAG event=device_context`.
 - Analyzer successfully parsed both context headers into
   `artifacts/field-analysis-phase2/device-context.csv`.
+
+2026-05-19 Phase 3:
+
+- Analyzer accepts named windows via `-Windows`.
+- The 10:45 controlled run was regenerated with `cabinet`, `corridor`,
+  `cabinet_return`, and `near_30cm` windows.
+- Named report output:
+  `artifacts/field-analysis-run-20260519-1045-named/summary.md`.

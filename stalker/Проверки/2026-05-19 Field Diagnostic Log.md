@@ -53,6 +53,15 @@ artifacts/field-analysis/movement-deltas.csv
 `movement-deltas.csv` показывает BSSID, у которых RSSI заметно изменился между
 окнами теста.
 
+Именованные окна можно передавать прямо в analyzer:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\analyze-field-logs.ps1 `
+  -InputRoot artifacts\field-logs\run-20260519-1045 `
+  -OutputDir artifacts\field-analysis-run-20260519-1045-named `
+  -Windows "cabinet=10:45:10..10:47:10;corridor=10:47:10..10:49:10;cabinet_return=10:49:10..10:51:10;near_30cm=10:51:10.."
+```
+
 ## Что Проверять В Логе
 
 - `FIELD_DIAG event=logger_start`
@@ -166,3 +175,53 @@ locationEnabled=...
 R3CT20C8A8N: Samsung SM-S908B, SDK 36, battery 74, charging=false, powerSave=true
 e089985a: OnePlus NE2215, SDK 35, battery 73, charging=true, powerSave=false
 ```
+
+## Phase 2 Controlled Run 10:45
+
+Перед прогоном diagnostics очищены на обоих телефонах. Оба телефона
+разблокированы, подключены к питанию, Wi-Fi включен, геолокация включена,
+энергосбережение отключено.
+
+Логи:
+
+```text
+artifacts/field-logs/run-20260519-1045/R3CT20C8A8N/diagnostics/field-radio-20260519-104237.log
+artifacts/field-logs/run-20260519-1045/e089985a/diagnostics/field-radio-20260519-104238.log
+```
+
+Analyzer:
+
+```text
+artifacts/field-analysis-run-20260519-1045/
+artifacts/field-analysis-run-20260519-1045-named/
+```
+
+Маркеры перемещения Samsung:
+
+```text
+10:45:10 - положил на шкаф
+10:47:10 - унес в коридор
+10:49:10 - вернул на шкаф
+10:51:10 - положил примерно на 30 см
+```
+
+Именованные окна analyzer:
+
+```text
+cabinet        => шкаф, 10:45:10..10:47:10
+corridor       => коридор, 10:47:10..10:49:10
+cabinet_return => возврат на шкаф, 10:49:10..10:51:10
+near_30cm      => около 30 см, после 10:51:10
+```
+
+Итог:
+
+```text
+Scan entries: 9352
+R3CT20C8A8N: Samsung SM-S908B, battery 71, charging=true, powerSave=false
+e089985a: OnePlus NE2215, battery 72, charging=true, powerSave=false
+```
+
+Во всех окнах были свежие receiver results, отклоненных scan request не было.
+Самые сильные movement candidates на Samsung показали изменение RSSI по общим
+офисным BSSID примерно на 25-28 dB.

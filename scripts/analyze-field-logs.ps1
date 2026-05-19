@@ -5,6 +5,7 @@ param(
     [string]$NearEnd = "2026-05-19 10:00:00",
     [string]$RoomEnd = "2026-05-19 10:01:55",
     [string]$CorridorStart = "2026-05-19 10:02:05",
+    [string]$Windows = "",
     [int]$BucketSeconds = 30,
     [switch]$IncludeLegacyRootLogs
 )
@@ -18,25 +19,74 @@ function Parse-Marker([string]$value) {
     return [datetime]::ParseExact($value, "yyyy-MM-dd HH:mm:ss", $culture)
 }
 
+function Parse-WindowTime([string]$value, [datetime]$dateHint) {
+    $trimmed = $value.Trim()
+    if ([string]::IsNullOrWhiteSpace($trimmed)) {
+        return $null
+    }
+    if ($trimmed -match '^\d{2}:\d{2}:\d{2}$') {
+        return [datetime]::ParseExact($dateHint.ToString("yyyy-MM-dd") + " " + $trimmed, "yyyy-MM-dd HH:mm:ss", $culture)
+    }
+    return Parse-Marker $trimmed
+}
+
+function New-Window([string]$name, [datetime]$start, [Nullable[datetime]]$end) {
+    [pscustomobject]@{
+        Name = $name
+        Start = $start
+        End = $end
+    }
+}
+
 $testStartTime = Parse-Marker $TestStart
 $nearEndTime = Parse-Marker $NearEnd
 $roomEndTime = Parse-Marker $RoomEnd
 $corridorStartTime = Parse-Marker $CorridorStart
+$analysisWindows = New-Object System.Collections.Generic.List[object]
+
+if (-not [string]::IsNullOrWhiteSpace($Windows)) {
+    foreach ($spec in ($Windows -split ';')) {
+        if ([string]::IsNullOrWhiteSpace($spec)) {
+            continue
+        }
+        $parts = $spec -split '=', 2
+        if ($parts.Count -ne 2) {
+            throw "Invalid window spec '$spec'. Expected name=start..end."
+        }
+        $name = $parts[0].Trim()
+        $range = $parts[1] -split '\.\.', 2
+        if ($range.Count -ne 2) {
+            throw "Invalid window range '$($parts[1])'. Expected start..end."
+        }
+        $start = Parse-WindowTime $range[0] $testStartTime
+        $end = Parse-WindowTime $range[1] $testStartTime
+        if ($null -eq $start) {
+            throw "Window '$name' must have a start time."
+        }
+        $analysisWindows.Add((New-Window $name $start $end))
+    }
+    if ($analysisWindows.Count -eq 0) {
+        throw "No valid windows were parsed from -Windows."
+    }
+    $analysisWindows = [System.Collections.Generic.List[object]]($analysisWindows | Sort-Object Start)
+    $testStartTime = ($analysisWindows | Select-Object -First 1).Start
+} else {
+    $analysisWindows.Add((New-Window "near_30cm" $testStartTime $nearEndTime))
+    $analysisWindows.Add((New-Window "room_5m" $nearEndTime $roomEndTime))
+    $analysisWindows.Add((New-Window "corridor_transition" $roomEndTime $corridorStartTime))
+    $analysisWindows.Add((New-Window "corridor_or_later" $corridorStartTime $null))
+}
 
 function Get-WindowName([datetime]$time) {
     if ($time -lt $testStartTime) {
         return "pre_test"
     }
-    if ($time -lt $nearEndTime) {
-        return "near_30cm"
+    foreach ($window in $analysisWindows) {
+        if ($time -ge $window.Start -and ($null -eq $window.End -or $time -lt $window.End)) {
+            return $window.Name
+        }
     }
-    if ($time -lt $roomEndTime) {
-        return "room_5m"
-    }
-    if ($time -lt $corridorStartTime) {
-        return "corridor_transition"
-    }
-    return "corridor_or_later"
+    return "post_windows"
 }
 
 function Get-BucketName([datetime]$time) {
@@ -273,16 +323,19 @@ $comparison = $scanSummary |
     } |
     Sort-Object Window, Bssid
 
-$windowsForDelta = @("near_30cm", "room_5m", "corridor_or_later")
+$deltaPairs = New-Object System.Collections.Generic.List[object]
+for ($i = 0; $i -lt $analysisWindows.Count - 1; $i++) {
+    $deltaPairs.Add(@($analysisWindows[$i].Name, $analysisWindows[$i + 1].Name))
+}
+if ($analysisWindows.Count -gt 2) {
+    $deltaPairs.Add(@($analysisWindows[0].Name, $analysisWindows[$analysisWindows.Count - 1].Name))
+}
+
 $movementDeltas = New-Object System.Collections.Generic.List[object]
 foreach ($device in ($scanSummary | Select-Object -ExpandProperty Device -Unique)) {
     foreach ($bssid in ($scanSummary | Where-Object Device -eq $device | Select-Object -ExpandProperty Bssid -Unique)) {
         $rows = $scanSummary | Where-Object { $_.Device -eq $device -and $_.Bssid -eq $bssid }
-        foreach ($pair in @(
-            @("near_30cm", "room_5m"),
-            @("room_5m", "corridor_or_later"),
-            @("near_30cm", "corridor_or_later")
-        )) {
+        foreach ($pair in $deltaPairs) {
             $from = $rows | Where-Object Window -eq $pair[0] | Select-Object -First 1
             $to = $rows | Where-Object Window -eq $pair[1] | Select-Object -First 1
             if ($from -and $to) {
@@ -327,10 +380,10 @@ $report.Add("Input: ``$InputRoot``")
 $report.Add("")
 $report.Add("## Windows")
 $report.Add("")
-$report.Add("- ``near_30cm``: $TestStart to $NearEnd")
-$report.Add("- ``room_5m``: $NearEnd to $RoomEnd")
-$report.Add("- ``corridor_transition``: $RoomEnd to $CorridorStart")
-$report.Add("- ``corridor_or_later``: from $CorridorStart")
+foreach ($window in $analysisWindows) {
+    $endText = if ($null -eq $window.End) { "open" } else { $window.End.ToString("yyyy-MM-dd HH:mm:ss") }
+    $report.Add("- ``$($window.Name)``: $($window.Start.ToString('yyyy-MM-dd HH:mm:ss')) to $endText")
+}
 $report.Add("")
 $report.Add("## Device Window Summary")
 $report.Add("")
