@@ -237,8 +237,30 @@ per-player identity/proximity percentages. `Петя` without beacon shows
 and `DIRECTION: UNKNOWN 0%`. `Я ПОДХОЖУ` shows local self approach at 80% while
 proximity remains `LOCAL_DECLARED_UNKNOWN 20%` and explicitly not radio proof.
 
+## Phase 13: IFF Field MVP Test Flow
+
+**Status:** completed
+
+**Goal:** Make the IFF MVP field check repeatable by letting the operator record
+the current selected contact verdict, confidence layers, and radio witness into
+the diagnostic log.
+
+**Scope:**
+
+- Add a `ЗАПИСАТЬ` action to the IFF screen.
+- Record selected player identity/proximity/position/direction confidence.
+- Record current witness SSID/BSSID/RSSI/age when present.
+- Show the last recorded field-check summary on `КОНТАКТ` and `КОМАНДА`.
+- Keep the flow manual and local; no sync, crypto, GPS, or direction geometry.
+
+**Verification:** debug APK builds. APK installed on OnePlus `e089985a`.
+UIAutomator verified `IFF` -> `КОМАНДА` -> select `Петя` -> `ЗАПИСАТЬ`.
+The contact screen showed the last field-check summary for `Петя`, and
+`field-radio-20260519-160400.log` contained
+`IFF_DIAG event=field_check playerId=petya identityScore=40 proximityScore=0
+witness=none`.
+
 ## Backlog
 
-- Phase 13: IFF field MVP test with two or more teammates using confidence UI.
 - Analyze customer Wi-Fi module behavior after the module is available.
 - Keep BLE as a deferred architecture option, not a near-term implementation.

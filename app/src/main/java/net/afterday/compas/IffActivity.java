@@ -15,6 +15,7 @@ import net.afterday.compas.iff.IffConfidence;
 import net.afterday.compas.iff.IffConfidence.Snapshot;
 import net.afterday.compas.iff.IffRadioWitnessStore;
 import net.afterday.compas.iff.IffRadioWitnessStore.WitnessSnapshot;
+import net.afterday.compas.logging.FieldDiagnosticLog;
 
 public class IffActivity extends Activity {
     private static final int TAB_CONTACT = 0;
@@ -41,11 +42,13 @@ public class IffActivity extends Activity {
     private Button teamTab;
     private Button mapTab;
     private Button approachButton;
+    private Button recordCheckButton;
     private TextView title;
     private TextView subtitle;
     private TextView status;
     private TextView body;
     private LinearLayout bodyContainer;
+    private String lastFieldCheckSummary = "нет записанных проверок";
 
     private final Runnable expireApproach = new Runnable() {
         @Override
@@ -97,6 +100,7 @@ public class IffActivity extends Activity {
         teamTab = (Button) findViewById(R.id.iff_team_tab);
         mapTab = (Button) findViewById(R.id.iff_map_tab);
         approachButton = (Button) findViewById(R.id.iff_approach);
+        recordCheckButton = (Button) findViewById(R.id.iff_record_check);
         title = (TextView) findViewById(R.id.iff_title);
         subtitle = (TextView) findViewById(R.id.iff_subtitle);
         status = (TextView) findViewById(R.id.iff_status);
@@ -114,6 +118,7 @@ public class IffActivity extends Activity {
         teamTab.setTypeface(mono, Typeface.BOLD);
         mapTab.setTypeface(mono, Typeface.BOLD);
         approachButton.setTypeface(mono, Typeface.BOLD);
+        recordCheckButton.setTypeface(mono, Typeface.BOLD);
     }
 
     private void setListeners() {
@@ -142,6 +147,12 @@ public class IffActivity extends Activity {
             @Override
             public void onClick(View v) {
                 toggleApproach();
+            }
+        });
+        recordCheckButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                recordFieldCheck();
             }
         });
     }
@@ -205,7 +216,9 @@ public class IffActivity extends Activity {
                 + "СВИДЕТЕЛИ\n"
                 + witnessDetails(witness) + "\n\n"
                 + "РЕШЕНИЕ\n"
-                + decisionText(confidence));
+                + decisionText(confidence) + "\n\n"
+                + "FIELD CHECK\n"
+                + "- последняя запись: " + lastFieldCheckSummary);
     }
 
     private void renderTeam() {
@@ -218,7 +231,8 @@ public class IffActivity extends Activity {
                 + "PROXIMITY OK: " + confidentProximityCount() + "\n"
                 + "DIRECTION: UNKNOWN");
         body.setText("Выберите участника, чтобы открыть карточку контакта.\n"
-                + "Проценты - текущая уверенность слоя, а не финальное доказательство.");
+                + "Проценты - текущая уверенность слоя, а не финальное доказательство.\n"
+                + "Последняя проверка: " + lastFieldCheckSummary);
         for (int i = 0; i < roster.length; i++) {
             bodyContainer.addView(createRosterButton(i));
         }
@@ -230,6 +244,33 @@ public class IffActivity extends Activity {
         subtitle.setText("позиции и свидетели");
         status.setText("POSITION: UNKNOWN 0%\nСВИДЕТЕЛИ: " + freshWitnessCount() + " fresh\nDIRECTION: UNKNOWN 0%");
         body.setText(mapWitnessList());
+    }
+
+    private void recordFieldCheck() {
+        IffPlayer selected = roster[selectedPlayerIndex];
+        WitnessSnapshot witness = IffRadioWitnessStore.getWitness(selected.playerId);
+        Snapshot confidence = confidenceFor(selected, witness);
+        String witnessState = witness == null
+                ? "none"
+                : witness.freshnessLabel() + " rssi=" + witness.rssi + " ageMs=" + witness.ageMs()
+                + " ssid=\"" + safe(witness.ssid) + "\" bssid=" + safe(witness.bssid);
+        FieldDiagnosticLog.event("IFF_DIAG", "event=field_check"
+                + " playerId=" + selected.playerId
+                + " displayName=\"" + safe(selected.displayName) + "\""
+                + " identityLabel=" + confidence.identity.label
+                + " identityScore=" + confidence.identity.score
+                + " proximityLabel=" + confidence.proximity.label
+                + " proximityScore=" + confidence.proximity.score
+                + " positionLabel=" + confidence.position.label
+                + " positionScore=" + confidence.position.score
+                + " directionLabel=" + confidence.direction.label
+                + " directionScore=" + confidence.direction.score
+                + " witness=" + witnessState
+                + " localApproach=" + approachActive);
+        lastFieldCheckSummary = selected.displayName + ": identity " + confidence.identity.score
+                + "% / proximity " + confidence.proximity.score + "% / witness " + (witness == null ? "none" : witness.freshnessLabel());
+        activeTab = TAB_CONTACT;
+        render();
     }
 
     private void resetBody() {
@@ -366,6 +407,10 @@ public class IffActivity extends Activity {
             return ageMs + "ms";
         }
         return (ageMs / 1000L) + "s";
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value.replace('\n', ' ').replace('\r', ' ');
     }
 
     private int dp(int value) {

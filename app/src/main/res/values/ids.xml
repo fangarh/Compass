@@ -76,6 +76,7 @@
     <id name="iff_body_container" />
     <id name="iff_contact_tab" />
     <id name="iff_map_tab" />
+    <id name="iff_record_check" />
     <id name="iff_status" />
     <id name="iff_subtitle" />
     <id name="iff_team_tab" />

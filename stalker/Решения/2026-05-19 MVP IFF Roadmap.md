@@ -129,9 +129,9 @@ position. Это отдельные вопросы.
   остается `LOCAL_DECLARED_UNKNOWN 20%`;
 - position и direction остаются `UNKNOWN 0%`.
 
-## Следующий срез
+## Реализованный срез Phase 13
 
-Phase 13 должен стать field MVP test flow:
+Phase 13 делает field MVP test flow:
 
 ```text
 2+ участника -> один beacon -> один receiver -> confidence UI -> журнал результата
@@ -139,3 +139,35 @@ Phase 13 должен стать field MVP test flow:
 
 Цель - проверить, что UI помогает принять боевое решение без ложного обещания
 направления или криптографической идентичности.
+
+Минимальный flow:
+
+1. Открыть `IFF`.
+2. Выбрать участника.
+3. Посмотреть confidence layers.
+4. Нажать `ЗАПИСАТЬ`.
+5. Получить `IFF_DIAG event=field_check` в diagnostic log.
+
+Это даст воспроизводимый журнал проверок для дальнейших полевых прогонов.
+
+Проверка на OnePlus:
+
+- выбран `Петя`;
+- нажата кнопка `ЗАПИСАТЬ`;
+- UI показал последнюю запись: `Петя: identity 40% / proximity 0% / witness none`;
+- diagnostic log получил `IFF_DIAG event=field_check`.
+
+## Следующий срез
+
+Провести короткий near/far/off field session:
+
+```text
+Samsung hotspot COMPASS_IFF_PETYA
+OnePlus receiver
+near -> record
+far -> record
+off -> record
+```
+
+Это даст первый журнал изменения confidence во времени, а не только одиночную
+точку проверки.

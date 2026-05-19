@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 12: IFF Confidence Model completed.
+Phase 13: IFF Field MVP Test Flow completed.
 
 ## Last Verified Baseline
 
@@ -23,9 +23,9 @@ Phase 12: IFF Confidence Model completed.
 
 ## Next Action
 
-Start Phase 13: field MVP test flow with two or more teammates using the
-confidence UI. The app now separates identity, proximity, position, and
-direction, but position/direction remain explicit `UNKNOWN 0%`.
+Next useful slice: run a deliberate two-phone field session with Samsung hotspot
+`COMPASS_IFF_PETYA`, OnePlus receiver, and `ЗАПИСАТЬ` pressed at near/far/off
+moments so the diagnostic log captures confidence changes over time.
 
 ## Verification
 
@@ -204,3 +204,21 @@ direction, but position/direction remain explicit `UNKNOWN 0%`.
   - no active beacon: `Петя` is `ROSTER_ONLY 40%`, proximity `UNKNOWN 0%`;
   - local approach: `Вы` is `LOCAL_SELF_APPROACH 80%`, proximity
     `LOCAL_DECLARED_UNKNOWN 20%`.
+
+2026-05-19 Phase 13:
+
+- Added `ЗАПИСАТЬ` action to the IFF screen.
+- The action records `IFF_DIAG event=field_check` with:
+  - selected player id/name;
+  - identity/proximity/position/direction confidence labels and scores;
+  - current witness state;
+  - local approach state.
+- `КОНТАКТ` and `КОМАНДА` show the last recorded field-check summary.
+- `:app:assembleDebug` completed successfully.
+- APK installed and checked on OnePlus `e089985a`.
+- UIAutomator verification:
+  `IFF` -> `КОМАНДА` -> select `Петя` -> `ЗАПИСАТЬ`.
+- Diagnostic file verified:
+  `field-radio-20260519-160400.log` contains
+  `IFF_DIAG event=field_check playerId=petya identityScore=40
+  proximityScore=0 witness=none`.
