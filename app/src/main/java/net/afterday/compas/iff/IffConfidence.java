@@ -39,15 +39,15 @@ public final class IffConfidence {
             return new Confidence("UNKNOWN", 0, "последний witness старше 60s");
         }
         if (!witness.isFresh()) {
-            return new Confidence("STALE_RADIO", 25, "beacon был слышен, но старше 15s");
+            return new Confidence("STALE_RADIO", 25, "beacon был слышен, но это уже не current proof");
         }
         if (witness.rssi >= -55) {
-            return new Confidence("RADIO_NEAR", 75, "свежий сильный RSSI");
+            return new Confidence("RADIO_NEAR", 75, "свежий сильный RSSI; близость вероятна, азимута нет");
         }
         if (witness.rssi >= -70) {
-            return new Confidence("RADIO_MID", 55, "свежий средний RSSI");
+            return new Confidence("RADIO_WEAK_HINT", 45, "свежий RSSI слышен, но дистанция не точная");
         }
-        return new Confidence("RADIO_WEAK", 35, "свежий слабый RSSI");
+        return new Confidence("RADIO_EDGE_HINT", 30, "свежий слабый RSSI; только факт слышимости");
     }
 
     public static final class Snapshot {

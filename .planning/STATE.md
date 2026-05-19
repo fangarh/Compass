@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 15: IFF Second Field Run completed.
+Phase 16: IFF Cautious Proximity UI completed.
 
 ## Last Verified Baseline
 
@@ -23,9 +23,8 @@ Phase 15: IFF Second Field Run completed.
 
 ## Next Action
 
-Next useful slice: decide whether to keep the current IFF proximity thresholds
-or add a more cautious `RADIO_CLOSE`/`RADIO_MID` split before multi-witness
-work.
+Next useful slice: start multi-witness design, where another teammate can
+report hearing the same claimed player without turning RSSI into direction.
 
 ## Verification
 
@@ -277,3 +276,21 @@ work.
   Distance/walls moved the signal into `RADIO_MID`. After hotspot shutdown,
   freshness gating correctly overrode the old RSSI and dropped proximity to
   stale/unknown.
+
+2026-05-19 Phase 16:
+
+- Kept RSSI threshold bands unchanged.
+- Renamed cautious proximity labels:
+  - `RADIO_MID` -> `RADIO_WEAK_HINT`;
+  - `RADIO_WEAK` -> `RADIO_EDGE_HINT`.
+- Updated confidence scores:
+  - `RADIO_NEAR`: `75%`;
+  - `RADIO_WEAK_HINT`: `45%`;
+  - `RADIO_EDGE_HINT`: `30%`;
+  - `STALE_RADIO`: `25%`;
+  - `UNKNOWN`: `0%`.
+- Team summary now says `PROXIMITY STRONG` and counts only `RADIO_NEAR`.
+- `:app:assembleDebug` completed successfully.
+- APK installed on OnePlus `e089985a`.
+- UIAutomator verified main PDA -> `IFF`; team screen showed
+  `RADIO FRESH: 0`, `PROXIMITY STRONG: 0`, and `DIRECTION: UNKNOWN`.

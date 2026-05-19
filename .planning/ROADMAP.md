@@ -310,6 +310,26 @@ through office/walls -> `RADIO_MID`; return-near 2 samples avg `-21 dBm` ->
 cabinet-shielded 3 samples avg `-43.7 dBm` -> `RADIO_NEAR`; off 3 samples
 transitioned from `STALE_RADIO` to `UNKNOWN`.
 
+## Phase 16: IFF Cautious Proximity UI
+
+**Status:** completed
+
+**Goal:** Make the IFF proximity wording safer so medium RSSI is a weak hint,
+not a strong or exact distance confirmation.
+
+**Scope:**
+
+- Keep RSSI thresholds unchanged.
+- Rename medium fresh radio from `RADIO_MID` to `RADIO_WEAK_HINT`.
+- Rename edge fresh radio from `RADIO_WEAK` to `RADIO_EDGE_HINT`.
+- Lower medium/edge scores to 45%/30%.
+- Count only `RADIO_NEAR` in the team summary as `PROXIMITY STRONG`.
+- Keep identity, position, and direction separate.
+
+**Verification:** debug APK builds. APK installed on OnePlus `e089985a`.
+UIAutomator verified main PDA -> `IFF`; team screen showed
+`RADIO FRESH: 0`, `PROXIMITY STRONG: 0`, and `DIRECTION: UNKNOWN`.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

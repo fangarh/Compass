@@ -173,9 +173,9 @@ public final class IffRadioWitnessStore {
                 return "RADIO_NEAR";
             }
             if (this.rssi >= -70) {
-                return "RADIO_MID";
+                return "RADIO_WEAK_HINT";
             }
-            return "RADIO_WEAK";
+            return "RADIO_EDGE_HINT";
         }
     }
 }

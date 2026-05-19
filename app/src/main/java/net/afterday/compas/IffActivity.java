@@ -228,7 +228,7 @@ public class IffActivity extends Activity {
         status.setText((approachActive ? "ВЫ        ПОДХОДИТЕ   локально\n" : "")
                 + "УЧАСТНИКОВ: " + roster.length + "\n"
                 + "RADIO FRESH: " + freshWitnessCount() + "\n"
-                + "PROXIMITY OK: " + confidentProximityCount() + "\n"
+                + "PROXIMITY STRONG: " + strongProximityCount() + "\n"
                 + "DIRECTION: UNKNOWN");
         body.setText("Выберите участника, чтобы открыть карточку контакта.\n"
                 + "Проценты - текущая уверенность слоя, а не финальное доказательство.\n"
@@ -330,9 +330,15 @@ public class IffActivity extends Activity {
     }
 
     private String decisionText(Snapshot confidence) {
-        if (confidence.proximity.score >= 55) {
+        if ("RADIO_NEAR".equals(confidence.proximity.label)) {
             return "- рядом слышен свежий beacon заявленного участника\n"
-                    + "- это proximity proof, но не crypto identity\n"
+                    + "- это сильный proximity hint, но не crypto identity\n"
+                    + "- direction и точная position пока неизвестны";
+        }
+        if ("RADIO_WEAK_HINT".equals(confidence.proximity.label)
+                || "RADIO_EDGE_HINT".equals(confidence.proximity.label)) {
+            return "- beacon слышен свежо, но RSSI не дает точную дистанцию\n"
+                    + "- это слабая proximity-подсказка, не подтверждение близкого контакта\n"
                     + "- direction и точная position пока неизвестны";
         }
         if ("LOCAL_DECLARED_UNKNOWN".equals(confidence.proximity.label)) {
@@ -374,13 +380,13 @@ public class IffActivity extends Activity {
         return count;
     }
 
-    private int confidentProximityCount() {
+    private int strongProximityCount() {
         int count = 0;
         for (int i = 0; i < roster.length; i++) {
             IffPlayer player = roster[i];
             WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
             Snapshot confidence = confidenceFor(player, witness);
-            if (confidence.proximity.score >= 55) {
+            if ("RADIO_NEAR".equals(confidence.proximity.label)) {
                 count++;
             }
         }

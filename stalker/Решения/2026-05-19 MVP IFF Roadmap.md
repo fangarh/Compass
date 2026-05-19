@@ -213,10 +213,33 @@ proximity-hint. Важнее свежесть: после выключения h
 
 ## Следующий срез
 
-Решить, нужен ли более осторожный слой UI до multi-witness:
+## Реализованный срез Phase 16
+
+Сделали более осторожный UI proximity до multi-witness:
 
 ```text
-RADIO_NEAR / RADIO_MID -> возможно RADIO_CLOSE / RADIO_WEAK_HINT
+RADIO_NEAR / RADIO_MID -> RADIO_NEAR / RADIO_WEAK_HINT
 ```
 
-Но не добавлять direction и не усиливать identity без криптографии.
+Решение:
+
+- RSSI-пороги не менялись;
+- `RADIO_MID` переименован в `RADIO_WEAK_HINT`;
+- `RADIO_WEAK` переименован в `RADIO_EDGE_HINT`;
+- medium/edge scores снижены до `45%` и `30%`;
+- summary команды теперь показывает `PROXIMITY STRONG`, а не `PROXIMITY OK`;
+- сильным proximity считается только `RADIO_NEAR`.
+
+Это сохраняет полевой вывод Phase 15: far через стены остается полезной
+подсказкой, но не выглядит как точное расстояние или подтверждение близкого
+контакта.
+
+## Следующий срез
+
+Начать multi-witness design:
+
+```text
+один заявленный игрок -> несколько телефонов слышат beacon -> confidence выше
+```
+
+При этом не добавлять direction и не усиливать identity без криптографии.
