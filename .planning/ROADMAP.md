@@ -207,9 +207,11 @@ witness evidence.
 
 **Verification:** debug APK builds. APK installed on Samsung `R3CT20C8A8N` and
 OnePlus `e089985a`. Samsung UIAutomator flow verified: main PDA -> `IFF` ->
-`КОМАНДА` -> select `Петя` -> `КОНТАКТ` -> `Я ПОДХОЖУ`. With no active
-`COMPASS_IFF_*` hotspot in the room, radio witness stayed at `RADIO FRESH: 0`
-and proximity stayed `UNKNOWN`, which is the correct honest state.
+`КОМАНДА` -> select `Петя` -> `КОНТАКТ` -> `Я ПОДХОЖУ`. A real two-phone check
+then used Samsung hotspot SSID `COMPASS_IFF_PETYA` and OnePlus as receiver:
+`Петя` showed `RADIO_FRESH`, `RADIO_NEAR`, RSSI down to `-55 dBm`, age `1s`,
+and frequency `2462 MHz`. After hotspot shutdown, proximity moved from fresh to
+stale at about 20 s and to `UNKNOWN` at about 60 s.
 
 ## Backlog
 

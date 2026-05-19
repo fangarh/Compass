@@ -88,12 +88,25 @@ rough proximity
 Реализация подключена к существующему 1 Hz Wi-Fi scan pipeline. Если beacon
 не слышен, UI остается в честном состоянии `UNKNOWN`.
 
+Полевой двухтелефонный smoke-test прошел:
+
+- Samsung поднял hotspot `COMPASS_IFF_PETYA`;
+- OnePlus на `КОМАНДА` увидел `RADIO FRESH: 1`;
+- карточка `Петя` показала `RADIO_NEAR`, RSSI `-55 dBm`, age `1s`,
+  frequency `2462 MHz`;
+- после выключения hotspot witness перешел в stale примерно на 20 секунде и в
+  `UNKNOWN` примерно на 60 секунде.
+
 ## Следующий срез
 
-Провести реальный двухтелефонный тест:
+Сформализовать confidence model:
 
-1. На одном телефоне поднять хотспот с SSID `COMPASS_IFF_PETYA` или другим
-   известным `COMPASS_IFF_*`.
-2. На втором открыть Compass -> `IFF` -> `КОМАНДА`.
-3. Проверить, что появляется fresh witness с age/RSSI.
-4. Отойти/выключить hotspot и проверить переход в stale/unknown.
+```text
+identity: roster / radio claim / crypto later
+proximity: fresh RSSI witness / stale / unknown
+position: GPS point + error circle / unknown
+direction: witness geometry later / unknown
+```
+
+После этого UI должен показывать не просто сырые состояния, а понятный уровень
+уверенности по каждому независимому слою.

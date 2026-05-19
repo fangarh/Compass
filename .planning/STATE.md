@@ -23,9 +23,8 @@ Phase 11: IFF Radio Witness completed.
 
 ## Next Action
 
-Run a real two-phone field check: set one phone hotspot SSID to a known
-`COMPASS_IFF_*` name, run Compass on the other phone, and verify fresh RSSI and
-age appear in `КОМАНДА` and `КОНТАКТ`.
+Start Phase 12: turn raw IFF witness states into an explicit confidence model
+for identity, proximity, position, and direction.
 
 ## Verification
 
@@ -176,3 +175,12 @@ age appear in `КОМАНДА` and `КОНТАКТ`.
   `Я ПОДХОЖУ`.
 - No real `COMPASS_IFF_*` hotspot was active during this verification, so
   `RADIO FRESH: 0` and proximity `UNKNOWN` were the expected result.
+- Follow-up two-phone check succeeded with Samsung hotspot SSID
+  `COMPASS_IFF_PETYA` and OnePlus receiver:
+  - `RADIO FRESH: 1` appeared on `КОМАНДА`.
+  - `Петя` showed `IDENTITY: ROSTER_ONLY + RADIO_CLAIM - не crypto`.
+  - `Петя` showed `PROXIMITY: RADIO_NEAR rssi=-55 age=1s`.
+  - Witness details showed `ssid: COMPASS_IFF_PETYA`,
+    `bssid: 4a:56:ff:b8:21:0b`, `frequency: 2462 MHz`.
+  - After hotspot shutdown, witness aged from fresh to stale around 20 s and
+    to `UNKNOWN` around 60 s.
