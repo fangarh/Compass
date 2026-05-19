@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 13: IFF Field MVP Test Flow completed.
+Phase 14: IFF Field Log Analysis completed.
 
 ## Last Verified Baseline
 
@@ -23,8 +23,8 @@ Phase 13: IFF Field MVP Test Flow completed.
 
 ## Next Action
 
-Next useful slice: analyze the captured near/far/off IFF field-check log and
-turn it into a compact field report or tune the confidence thresholds.
+Next useful slice: collect a second IFF field run with repeated near/far/body
+shield/pocket/off samples before changing runtime thresholds.
 
 ## Verification
 
@@ -231,3 +231,23 @@ turn it into a compact field report or tune the confidence thresholds.
     RSSI `-57`, witness age `28759 ms`;
   - off/unknown: `ROSTER_ONLY`, `UNKNOWN`, proximity `0`,
     witness age `70886 ms`.
+
+2026-05-19 Phase 14:
+
+- `scripts/analyze-field-logs.ps1` now parses
+  `IFF_DIAG event=field_check`.
+- New analyzer outputs:
+  - `iff-field-checks.csv`;
+  - `iff-field-check-summary.csv`;
+  - `summary.md` section `IFF Field Checks`.
+- Analyzer verification completed:
+  `artifacts/iff-field-session-20260519-1613` ->
+  `artifacts/iff-field-analysis-20260519-1613`.
+- Input: 1 log file, 8036 scan entries.
+- Field-check summary:
+  - near: `RADIO_NEAR 75%`, RSSI `-39`, age `2269 ms`;
+  - far: `RADIO_MID 55%`, RSSI `-68`, age `12161 ms`;
+  - off/stale: `STALE_RADIO 25%`, age `28759 ms`;
+  - off/unknown: `UNKNOWN 0%`, age `70886 ms`.
+- Threshold note: current labels are usable as coarse MVP proximity hints, but
+  RSSI still must not raise direction or position confidence.

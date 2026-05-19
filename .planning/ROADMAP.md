@@ -263,6 +263,28 @@ witness=none`. Follow-up near/far/off session with Samsung hotspot
 near `RADIO_NEAR 75% rssi=-39`, far `RADIO_MID 55% rssi=-68`, off/stale
 `STALE_RADIO 25%`, and off/unknown `UNKNOWN 0%`.
 
+## Phase 14: IFF Field Log Analysis
+
+**Status:** completed
+
+**Goal:** Convert the captured near/far/off IFF session into analyzer outputs
+and threshold notes for the MVP confidence model.
+
+**Scope:**
+
+- Parse `IFF_DIAG event=field_check` in the field-log analyzer.
+- Export `iff-field-checks.csv` and `iff-field-check-summary.csv`.
+- Add an IFF field-check section to `summary.md`.
+- Keep Android runtime behavior unchanged.
+
+**Verification:** analyzer completed on
+`artifacts/iff-field-session-20260519-1613` with 1 log file and 8036 scan
+entries. It produced IFF timeline/summary CSV outputs and a Markdown section
+with the near/far/off field-check table. Field notes:
+near `RADIO_NEAR 75% rssi=-39 age=2269ms`, far `RADIO_MID 55% rssi=-68
+age=12161ms`, off/stale `STALE_RADIO 25% age=28759ms`, off/unknown
+`UNKNOWN 0% age=70886ms`.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

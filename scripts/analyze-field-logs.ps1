@@ -117,7 +117,7 @@ $logs = Get-ChildItem -Path $InputRoot -Recurse -Filter "field-radio-*.log" -Fil
 if (-not $IncludeLegacyRootLogs) {
     $logs = $logs | Where-Object {
         $device = Get-DeviceName $_.FullName
-        $device -ne "diagnostics"
+        $device -ne "diagnostics" -and $device -notlike "field-radio-*.log"
     }
 }
 
@@ -128,6 +128,7 @@ $contexts = New-Object System.Collections.Generic.List[object]
 $freshnessTicks = New-Object System.Collections.Generic.List[object]
 $sensorEvents = New-Object System.Collections.Generic.List[object]
 $locationEvents = New-Object System.Collections.Generic.List[object]
+$iffFieldChecks = New-Object System.Collections.Generic.List[object]
 
 function Get-FieldValue([string]$message, [string]$name) {
     if ($message -match "$name=""(?<quoted>[^""]*)""") {
@@ -280,6 +281,41 @@ foreach ($log in $logs) {
                 LocationTimeMs = Get-FieldValue $message "timeMs"
                 Message = $message
             })
+            continue
+        }
+
+        if ($line -match '^(?<time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) .*? IFF_DIAG (?<message>.*)$') {
+            $time = [datetime]::ParseExact($Matches.time, $timeFormat, $culture)
+            $message = $Matches.message
+            $event = Get-FieldValue $message "event"
+            if ($event -eq "field_check") {
+                $window = Get-WindowName $time
+                $bucket = Get-BucketName $time
+                $iffFieldChecks.Add([pscustomobject]@{
+                    Device = $device
+                    LogFile = $log.Name
+                    Time = $time
+                    Window = $window
+                    Bucket = $bucket
+                    PlayerId = Get-FieldValue $message "playerId"
+                    DisplayName = Get-FieldValue $message "displayName"
+                    IdentityLabel = Get-FieldValue $message "identityLabel"
+                    IdentityScore = Get-NumberOrNull (Get-FieldValue $message "identityScore")
+                    ProximityLabel = Get-FieldValue $message "proximityLabel"
+                    ProximityScore = Get-NumberOrNull (Get-FieldValue $message "proximityScore")
+                    PositionLabel = Get-FieldValue $message "positionLabel"
+                    PositionScore = Get-NumberOrNull (Get-FieldValue $message "positionScore")
+                    DirectionLabel = Get-FieldValue $message "directionLabel"
+                    DirectionScore = Get-NumberOrNull (Get-FieldValue $message "directionScore")
+                    WitnessFreshness = Get-FieldValue $message "witness"
+                    WitnessRssi = Get-NumberOrNull (Get-FieldValue $message "rssi")
+                    WitnessAgeMs = Get-NumberOrNull (Get-FieldValue $message "ageMs")
+                    WitnessSsid = Get-FieldValue $message "ssid"
+                    WitnessBssid = Get-FieldValue $message "bssid"
+                    LocalApproach = Get-FieldValue $message "localApproach"
+                    Message = $message
+                })
+            }
             continue
         }
 
@@ -633,6 +669,75 @@ $locationSummary = $locationEvents |
     } |
     Sort-Object Window, Device
 
+$iffFieldCheckTimeline = $iffFieldChecks |
+    Sort-Object Time, Device, PlayerId |
+    ForEach-Object {
+        [pscustomobject]@{
+            Device = $_.Device
+            LogFile = $_.LogFile
+            Time = $_.Time.ToString("yyyy-MM-dd HH:mm:ss.fff")
+            Window = $_.Window
+            Bucket = $_.Bucket
+            PlayerId = $_.PlayerId
+            DisplayName = $_.DisplayName
+            IdentityLabel = $_.IdentityLabel
+            IdentityScore = $_.IdentityScore
+            ProximityLabel = $_.ProximityLabel
+            ProximityScore = $_.ProximityScore
+            PositionLabel = $_.PositionLabel
+            PositionScore = $_.PositionScore
+            DirectionLabel = $_.DirectionLabel
+            DirectionScore = $_.DirectionScore
+            WitnessFreshness = $_.WitnessFreshness
+            WitnessRssi = $_.WitnessRssi
+            WitnessAgeMs = $_.WitnessAgeMs
+            WitnessSsid = $_.WitnessSsid
+            WitnessBssid = $_.WitnessBssid
+            LocalApproach = $_.LocalApproach
+        }
+    }
+
+function Get-LabelCountsText($items, [string]$propertyName) {
+    $counts = @(
+        $items |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_.$propertyName) } |
+            Group-Object $propertyName |
+            Sort-Object @{ Expression = "Count"; Descending = $true }, Name |
+            ForEach-Object { "$($_.Name)=$($_.Count)" }
+    )
+    if ($counts.Count -eq 0) {
+        return "none"
+    }
+    return $counts -join ", "
+}
+
+$iffFieldCheckSummary = $iffFieldChecks |
+    Group-Object Window, Device, PlayerId |
+    ForEach-Object {
+        $items = @($_.Group | Sort-Object Time)
+        $rssis = @($items | ForEach-Object { $_.WitnessRssi } | Where-Object { $null -ne $_ })
+        $ages = @($items | ForEach-Object { $_.WitnessAgeMs } | Where-Object { $null -ne $_ })
+        [pscustomobject]@{
+            Window = $items[0].Window
+            Device = $items[0].Device
+            PlayerId = $items[0].PlayerId
+            DisplayName = $items[0].DisplayName
+            Count = $items.Count
+            IdentityLabels = Get-LabelCountsText $items "IdentityLabel"
+            ProximityLabels = Get-LabelCountsText $items "ProximityLabel"
+            WitnessFreshness = Get-LabelCountsText $items "WitnessFreshness"
+            AvgIdentityScore = [math]::Round(($items | Measure-Object IdentityScore -Average).Average, 1)
+            AvgProximityScore = [math]::Round(($items | Measure-Object ProximityScore -Average).Average, 1)
+            AvgRssi = if ($rssis.Count -gt 0) { [math]::Round(($rssis | Measure-Object -Average).Average, 1) } else { $null }
+            MinRssi = if ($rssis.Count -gt 0) { ($rssis | Measure-Object -Minimum).Minimum } else { $null }
+            MaxRssi = if ($rssis.Count -gt 0) { ($rssis | Measure-Object -Maximum).Maximum } else { $null }
+            AvgAgeMs = if ($ages.Count -gt 0) { [math]::Round(($ages | Measure-Object -Average).Average, 0) } else { $null }
+            FirstCheck = $items[0].Time.ToString("yyyy-MM-dd HH:mm:ss.fff")
+            LastCheck = $items[$items.Count - 1].Time.ToString("yyyy-MM-dd HH:mm:ss.fff")
+        }
+    } |
+    Sort-Object Window, Device, PlayerId
+
 $comparison = $scanSummary |
     Group-Object Window, Bssid |
     Where-Object { ($_.Group | Select-Object -ExpandProperty Device -Unique).Count -gt 1 } |
@@ -892,6 +997,8 @@ $sensorEvents | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputD
 $sensorSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "sensor-summary.csv")
 $locationEvents | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "location-timeline.csv")
 $locationSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "location-summary.csv")
+$iffFieldCheckTimeline | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "iff-field-checks.csv")
+$iffFieldCheckSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "iff-field-check-summary.csv")
 $windowDeviceSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "window-device-summary.csv")
 $comparison | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "device-comparison.csv")
 $contexts | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "device-context.csv")
@@ -976,6 +1083,51 @@ if ($beaconSummary.Count -eq 0) {
         $ssid = ($row.Ssid -replace '\|', '/')
         $report.Add("| $($row.Bucket) | $($row.Device) | $ssid | $($row.AvgRssi) | $($row.RangeClass) | $($row.Trend) | $($row.TrendDb) |")
     }
+}
+$report.Add("")
+$report.Add("## IFF Field Checks")
+$report.Add("")
+if ($iffFieldCheckTimeline.Count -eq 0) {
+    $report.Add("No `IFF_DIAG event=field_check` lines found. Tap the IFF record button during field checks to capture identity/proximity snapshots.")
+} else {
+    $report.Add("| Time | Window | Device | Player | Identity | Proximity | Witness | RSSI | Age ms | Position | Direction |")
+    $report.Add("| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |")
+    foreach ($row in $iffFieldCheckTimeline) {
+        $player = if ([string]::IsNullOrWhiteSpace($row.DisplayName)) { $row.PlayerId } else { "$($row.DisplayName) ($($row.PlayerId))" }
+        $rssi = if ($null -eq $row.WitnessRssi) { "" } else { $row.WitnessRssi }
+        $age = if ($null -eq $row.WitnessAgeMs) { "" } else { $row.WitnessAgeMs }
+        $report.Add("| $($row.Time) | $($row.Window) | $($row.Device) | $player | $($row.IdentityLabel) $($row.IdentityScore) | $($row.ProximityLabel) $($row.ProximityScore) | $($row.WitnessFreshness) | $rssi | $age | $($row.PositionLabel) $($row.PositionScore) | $($row.DirectionLabel) $($row.DirectionScore) |")
+    }
+
+    $report.Add("")
+    $report.Add("| Window | Device | Player | Checks | Identity labels | Proximity labels | Witness | Avg RSSI | Avg age ms |")
+    $report.Add("| --- | --- | --- | ---: | --- | --- | --- | ---: | ---: |")
+    foreach ($row in $iffFieldCheckSummary) {
+        $avgRssi = if ($null -eq $row.AvgRssi) { "" } else { $row.AvgRssi }
+        $avgAge = if ($null -eq $row.AvgAgeMs) { "" } else { $row.AvgAgeMs }
+        $report.Add("| $($row.Window) | $($row.Device) | $($row.DisplayName) ($($row.PlayerId)) | $($row.Count) | $($row.IdentityLabels) | $($row.ProximityLabels) | $($row.WitnessFreshness) | $avgRssi | $avgAge |")
+    }
+
+    $report.Add("")
+    $report.Add("Threshold notes:")
+    foreach ($group in ($iffFieldChecks | Group-Object ProximityLabel | Sort-Object Name)) {
+        $items = $group.Group
+        $rssis = @($items | ForEach-Object { $_.WitnessRssi } | Where-Object { $null -ne $_ })
+        $ages = @($items | ForEach-Object { $_.WitnessAgeMs } | Where-Object { $null -ne $_ })
+        $rssiText = if ($rssis.Count -gt 0) {
+            "RSSI avg $([math]::Round(($rssis | Measure-Object -Average).Average, 1)), min $(($rssis | Measure-Object -Minimum).Minimum), max $(($rssis | Measure-Object -Maximum).Maximum)"
+        } else {
+            "no RSSI"
+        }
+        $ageText = if ($ages.Count -gt 0) {
+            "age avg $([math]::Round(($ages | Measure-Object -Average).Average, 0)) ms"
+        } else {
+            "no age"
+        }
+        $report.Add("- ``$($group.Name)``: $($items.Count) check(s), $rssiText, $ageText.")
+    }
+    $report.Add("- Current field evidence supports RSSI as a coarse proximity hint only. Keep direction independent: radio freshness does not provide azimuth.")
+    $report.Add("- `RADIO_NEAR` can mean strong short-range evidence; `RADIO_MID` is a weaker proximity hint; stale or missing radio keeps identity and proximity below confirmation.")
 }
 $report.Add("")
 $report.Add("## Sensor Summary")

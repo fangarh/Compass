@@ -165,13 +165,36 @@ Near/far/off field session:
 - off/stale: `STALE_RADIO`, proximity `25%`, witness age about `29s`;
 - off/unknown: `UNKNOWN`, proximity `0%`, witness age about `71s`.
 
-## Следующий срез
+## Реализованный срез Phase 14
 
-Разобрать near/far/off diagnostic log:
+Разобран near/far/off diagnostic log:
 
 ```text
 near/far/off records -> field report -> threshold notes
 ```
 
-Это нужно, чтобы понять, достаточно ли текущих порогов `RADIO_NEAR/MID/WEAK`
-для боевого UI или их нужно сделать осторожнее.
+Анализатор теперь понимает `IFF_DIAG event=field_check`, пишет
+`iff-field-checks.csv`, `iff-field-check-summary.csv` и добавляет секцию
+`IFF Field Checks` в `summary.md`.
+
+Полевой вывод:
+
+- near: `RADIO_NEAR 75%`, RSSI `-39 dBm`, age `2269 ms`;
+- far: `RADIO_MID 55%`, RSSI `-68 dBm`, age `12161 ms`;
+- off/stale: `STALE_RADIO 25%`, age `28759 ms`;
+- off/unknown: `UNKNOWN 0%`, age `70886 ms`.
+
+Текущие пороги годятся как грубая MVP-подсказка близости, но не как азимут,
+позиция или криптографическое подтверждение. RSSI не должен повышать
+`direction` или `position`.
+
+## Следующий срез
+
+Повторить field run с несколькими замерами на каждое состояние:
+
+```text
+near / far / body-shielded / pocket / off -> стабильность порогов
+```
+
+После этого можно осторожно решать, менять ли runtime-пороги
+`RADIO_NEAR/MID/WEAK` или оставить текущие до появления второго свидетеля.
