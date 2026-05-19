@@ -145,7 +145,7 @@ and weaker beacon trends.
 
 ## Phase 9: IFF MVP Skeleton
 
-**Status:** in progress
+**Status:** completed
 
 **Goal:** Start the real MVP path from Obsidian: a separate `свой-чужой` tactical
 layer for confirming known teammates, not a generic object-beacon finder.
@@ -162,9 +162,30 @@ layer for confirming known teammates, not a generic object-beacon finder.
 **Verification:** debug APK builds. OnePlus `e089985a` installed the APK and
 verified the normal flow: main PDA -> `IFF` -> `Я ПОДХОЖУ` -> `ВЫ ПОДХОДИТЕ`.
 
+## Phase 10: Local IFF Roster
+
+**Status:** completed
+
+**Goal:** Turn the IFF team tab from a placeholder into a local roster of known
+teammates while keeping all unverified proximity, position, and direction
+signals as `UNKNOWN`.
+
+**Scope:**
+
+- Add a local roster with `Вы`, `Петя`, `Вася`, and `Женя`.
+- Render the roster on the `КОМАНДА` tab.
+- Let a selected roster participant open the `КОНТАКТ` tab.
+- Keep `Я ПОДХОЖУ` scoped to the local player.
+- Keep radio, proximity, GPS, direction, network exchange, and cryptography out
+  of this slice.
+
+**Verification:** debug APK builds. OnePlus `e089985a` installed the APK and
+verified the flow: main PDA -> `IFF` -> `КОМАНДА` -> select `Петя` ->
+`КОНТАКТ` -> `Я ПОДХОЖУ`. The roster scrolls to `Женя`, and radio/proximity,
+position, and direction remain explicitly `UNKNOWN`.
+
 ## Backlog
 
-- Phase 10: local roster and trusted player identity model.
 - Phase 11: phone-to-phone approach beacon/witness exchange.
 - Phase 12: confidence model for identity, proximity, position, and direction.
 - Phase 13: IFF field MVP test with two or more teammates.

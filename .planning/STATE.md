@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 9: IFF MVP Skeleton in progress.
+Phase 10: Local IFF Roster completed.
 
 ## Last Verified Baseline
 
@@ -23,9 +23,9 @@ Phase 9: IFF MVP Skeleton in progress.
 
 ## Next Action
 
-Implement the next IFF slice: local roster and trusted player identity state.
-The current screen must not claim radio confirmation until phone-to-phone
-witness exchange exists.
+Start Phase 11: phone-to-phone approach beacon/witness exchange. Keep the
+current roster as local identity input only; radio freshness is the next proof
+layer.
 
 ## Verification
 
@@ -133,3 +133,22 @@ witness exchange exists.
 - Installed and checked on OnePlus `e089985a`:
   main PDA -> `IFF` -> `Я ПОДХОЖУ` -> `ВЫ ПОДХОДИТЕ`.
 - Samsung `R3CT20C8A8N` was not visible over ADB during this install check.
+
+2026-05-19 Phase 10:
+
+- Added fixed local IFF roster:
+  - `Вы`
+  - `Петя`
+  - `Вася`
+  - `Женя`
+- `КОМАНДА` renders the roster as selectable entries.
+- Selecting a roster entry opens `КОНТАКТ` for that participant.
+- `Я ПОДХОЖУ` remains scoped to local player `Вы`.
+- Contact confidence is split into identity, proximity, position, and
+  direction, with unimplemented proof layers shown as `UNKNOWN`.
+- `:app:assembleDebug` completed successfully.
+- Installed and checked on OnePlus `e089985a`:
+  main PDA -> `IFF` -> `КОМАНДА` -> select `Петя` -> `КОНТАКТ` ->
+  `Я ПОДХОЖУ`.
+- Roster scrolling exposed `Женя`; Samsung is still not required for this
+  slice.

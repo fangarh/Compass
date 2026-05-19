@@ -73,6 +73,7 @@
     <id name="horizontal" />
     <id name="iff_approach" />
     <id name="iff_body" />
+    <id name="iff_body_container" />
     <id name="iff_contact_tab" />
     <id name="iff_map_tab" />
     <id name="iff_status" />
