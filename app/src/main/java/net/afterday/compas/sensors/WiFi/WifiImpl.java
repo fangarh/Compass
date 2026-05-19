@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.afterday.compas.BuildConfig;
+import net.afterday.compas.logging.FieldDiagnosticLog;
 import net.afterday.compas.logging.Logger;
 
 /* JADX INFO: loaded from: classes.dex */
@@ -27,6 +28,7 @@ public class WifiImpl implements WiFi {
     private static final long TICK_INTERVAL_SECONDS = 1;
     private static final long THROTTLE_LOG_INTERVAL_MS = 30000;
     private static final long DIAGNOSTIC_LOG_INTERVAL_MS = 30000;
+    private static final long CACHED_DETAIL_LOG_INTERVAL_MS = 30000;
     private final Context appContext;
     private final WifiManager mWifi;
     private final BroadcastReceiver scanReceiver;
@@ -39,10 +41,12 @@ public class WifiImpl implements WiFi {
     private long lastThrottleLogMs = 0;
     private long lastFreshResultsMs = 0;
     private long lastDiagnosticLogMs = 0;
+    private long lastCachedDetailLogMs = 0;
     private boolean lastOneHzMode = true;
 
     public WifiImpl(Context context) {
         this.appContext = context.getApplicationContext();
+        FieldDiagnosticLog.start(this.appContext);
         this.mWifi = (WifiManager) this.appContext.getSystemService(Context.WIFI_SERVICE);
         this.scanReceiver = new BroadcastReceiver() {
             @Override
@@ -66,6 +70,7 @@ public class WifiImpl implements WiFi {
     @Override // net.afterday.compas.sensors.Sensor
     public void start() {
         Log.d(this.TAG, "WIFI Sensor started " + Thread.currentThread().getName());
+        FieldDiagnosticLog.wifi("event=sensor_start thread=" + Thread.currentThread().getName() + " mode=" + getModeName() + " intervalMs=" + getScanIntervalMs());
         registerScanReceiver();
         this.isRunning.set(true);
         this.lastOneHzMode = isOneHzModeEnabled();
@@ -77,6 +82,7 @@ public class WifiImpl implements WiFi {
 
     @Override // net.afterday.compas.sensors.Sensor
     public void stop() {
+        FieldDiagnosticLog.wifi("event=sensor_stop mode=" + getModeName());
         this.isRunning.set(false);
         this.isRunningSubj.onNext(false);
         unregisterScanReceiver();
@@ -98,6 +104,7 @@ public class WifiImpl implements WiFi {
             this.appContext.registerReceiver(this.scanReceiver, filter);
         }
         this.scanReceiverRegistered = true;
+        FieldDiagnosticLog.wifi("event=receiver_registered sdk=" + Build.VERSION.SDK_INT);
     }
 
     private void unregisterScanReceiver() {
@@ -108,8 +115,10 @@ public class WifiImpl implements WiFi {
             this.appContext.unregisterReceiver(this.scanReceiver);
         } catch (IllegalArgumentException e) {
             Log.w(this.TAG, "WiFi scan receiver was already unregistered", e);
+            FieldDiagnosticLog.wifi("event=receiver_unregister_failed error=\"" + e.getClass().getSimpleName() + "\"");
         }
         this.scanReceiverRegistered = false;
+        FieldDiagnosticLog.wifi("event=receiver_unregistered");
     }
 
     private void onScanResultsAvailable(Intent intent) {
@@ -125,6 +134,8 @@ public class WifiImpl implements WiFi {
             this.lastFreshResultsMs = SystemClock.elapsedRealtime();
         }
         Log.d(this.TAG, "WIFI_DIAG event=results source=receiver updated=" + resultsUpdated + " count=" + results.size() + " mode=" + getModeName());
+        FieldDiagnosticLog.wifi("event=results source=receiver updated=" + resultsUpdated + " count=" + results.size() + " mode=" + getModeName());
+        FieldDiagnosticLog.wifiScanResults("receiver", resultsUpdated, results);
         publishResults(results);
     }
 
@@ -142,11 +153,14 @@ public class WifiImpl implements WiFi {
             boolean requested = this.mWifi.startScan();
             if (requested) {
                 Log.d(this.TAG, "WIFI_DIAG event=request accepted=true intervalMs=" + intervalMs + " mode=" + getModeName());
+                FieldDiagnosticLog.wifi("event=request accepted=true force=" + force + " intervalMs=" + intervalMs + " mode=" + getModeName());
             } else {
+                FieldDiagnosticLog.wifi("event=request accepted=false force=" + force + " intervalMs=" + intervalMs + " mode=" + getModeName());
                 logThrottled(now);
             }
         } catch (SecurityException e) {
             Log.w(this.TAG, "WiFi scan request denied by Android permissions/policy", e);
+            FieldDiagnosticLog.wifi("event=request denied=true error=\"SecurityException\" message=\"" + e.getMessage() + "\"");
         }
     }
 
@@ -165,6 +179,12 @@ public class WifiImpl implements WiFi {
     private void publishCachedResults() {
         List<ScanResult> results = getScanResultsSafely();
         if (results != null) {
+            FieldDiagnosticLog.wifi("event=results source=cached count=" + results.size() + " mode=" + getModeName());
+            long now = SystemClock.elapsedRealtime();
+            if (now - this.lastCachedDetailLogMs >= CACHED_DETAIL_LOG_INTERVAL_MS) {
+                this.lastCachedDetailLogMs = now;
+                FieldDiagnosticLog.wifiScanResults("cached", false, results);
+            }
             publishResults(results);
         }
     }
@@ -177,6 +197,7 @@ public class WifiImpl implements WiFi {
             return this.mWifi.getScanResults();
         } catch (SecurityException e) {
             Log.w(this.TAG, "WiFi scan results denied by Android permissions/policy", e);
+            FieldDiagnosticLog.wifi("event=results denied=true error=\"SecurityException\" message=\"" + e.getMessage() + "\"");
             return null;
         }
     }
@@ -210,11 +231,13 @@ public class WifiImpl implements WiFi {
         this.lastDiagnosticLogMs = now;
         long freshAgeMs = this.lastFreshResultsMs > 0 ? now - this.lastFreshResultsMs : -1;
         Log.d(this.TAG, "WIFI_DIAG event=status mode=" + getModeName() + " intervalMs=" + getScanIntervalMs() + " freshAgeMs=" + freshAgeMs);
+        FieldDiagnosticLog.wifi("event=status mode=" + getModeName() + " intervalMs=" + getScanIntervalMs() + " freshAgeMs=" + freshAgeMs);
     }
 
     private void logDiagnostic(String message, boolean inGameLog) {
         String fullMessage = "WIFI_DIAG " + message;
         Log.w(this.TAG, fullMessage);
+        FieldDiagnosticLog.wifi(message);
         if (!BuildConfig.DEBUG || !inGameLog) {
             return;
         }
