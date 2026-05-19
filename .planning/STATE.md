@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 14: IFF Field Log Analysis completed.
+Phase 15: IFF Second Field Run completed.
 
 ## Last Verified Baseline
 
@@ -23,8 +23,9 @@ Phase 14: IFF Field Log Analysis completed.
 
 ## Next Action
 
-Next useful slice: collect a second IFF field run with repeated near/far/body
-shield/pocket/off samples before changing runtime thresholds.
+Next useful slice: decide whether to keep the current IFF proximity thresholds
+or add a more cautious `RADIO_CLOSE`/`RADIO_MID` split before multi-witness
+work.
 
 ## Verification
 
@@ -251,3 +252,28 @@ shield/pocket/off samples before changing runtime thresholds.
   - off/unknown: `UNKNOWN 0%`, age `70886 ms`.
 - Threshold note: current labels are usable as coarse MVP proximity hints, but
   RSSI still must not raise direction or position confidence.
+
+2026-05-19 Phase 15:
+
+- Ran a second controlled IFF field session:
+  - Samsung `SM-S908B` hotspot `COMPASS_IFF_PETYA`;
+  - OnePlus `NE2215` / `e089985a` receiver;
+  - selected player `Петя`;
+  - repeated `ЗАПИСАТЬ` snapshots per state.
+- Pulled the updated diagnostic log to
+  `artifacts/iff-field-session-20260519-1643`.
+- Analyzer verification completed:
+  `artifacts/iff-field-session-20260519-1643` ->
+  `artifacts/iff-field-analysis-20260519-1643`.
+- Input: 1 log file, 27644 scan entries.
+- Field-check summary:
+  - near: 3 samples, `RADIO_NEAR 75%`, avg RSSI `-28.0`;
+  - far through office/walls: 3 samples, `RADIO_MID 55%`, avg RSSI `-59.7`;
+  - return near: 2 samples, `RADIO_NEAR 75%`, avg RSSI `-21.0`;
+  - body-shielded: 3 samples, `RADIO_NEAR 75%`, avg RSSI `-45.3`;
+  - cabinet-shielded: 3 samples, `RADIO_NEAR 75%`, avg RSSI `-43.7`;
+  - off: 3 samples, `STALE_RADIO` then `UNKNOWN`, avg age `77337 ms`.
+- Threshold note: office shielding did not break near detection in this run.
+  Distance/walls moved the signal into `RADIO_MID`. After hotspot shutdown,
+  freshness gating correctly overrode the old RSSI and dropped proximity to
+  stale/unknown.

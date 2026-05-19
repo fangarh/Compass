@@ -285,6 +285,31 @@ near `RADIO_NEAR 75% rssi=-39 age=2269ms`, far `RADIO_MID 55% rssi=-68
 age=12161ms`, off/stale `STALE_RADIO 25% age=28759ms`, off/unknown
 `UNKNOWN 0% age=70886ms`.
 
+## Phase 15: IFF Second Field Run
+
+**Status:** completed
+
+**Goal:** Repeat the IFF field check with multiple samples per state to see
+whether current proximity labels remain stable under office distance and
+shielding.
+
+**Scope:**
+
+- Use Samsung `SM-S908B` as hotspot `COMPASS_IFF_PETYA`.
+- Use OnePlus `NE2215` as receiver.
+- Record near, far, return-near, body-shielded, cabinet-shielded, and off
+  states through the IFF `ЗАПИСАТЬ` action.
+- Analyze the pulled diagnostic log with named windows.
+
+**Verification:** analyzer completed on
+`artifacts/iff-field-session-20260519-1643` with 1 log file and 27644 scan
+entries. Summary:
+near 3 samples avg `-28 dBm` -> `RADIO_NEAR`; far 3 samples avg `-59.7 dBm`
+through office/walls -> `RADIO_MID`; return-near 2 samples avg `-21 dBm` ->
+`RADIO_NEAR`; body-shielded 3 samples avg `-45.3 dBm` -> `RADIO_NEAR`;
+cabinet-shielded 3 samples avg `-43.7 dBm` -> `RADIO_NEAR`; off 3 samples
+transitioned from `STALE_RADIO` to `UNKNOWN`.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

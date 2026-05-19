@@ -190,11 +190,33 @@ near/far/off records -> field report -> threshold notes
 
 ## Следующий срез
 
-Повторить field run с несколькими замерами на каждое состояние:
+## Реализованный срез Phase 15
+
+Повторили field run с несколькими замерами на каждое состояние:
 
 ```text
 near / far / body-shielded / pocket / off -> стабильность порогов
 ```
 
-После этого можно осторожно решать, менять ли runtime-пороги
-`RADIO_NEAR/MID/WEAK` или оставить текущие до появления второго свидетеля.
+Фактические состояния:
+
+- near: 3 samples, `RADIO_NEAR 75%`, avg RSSI `-28.0 dBm`;
+- far, офис 5-7 м + стены: 3 samples, `RADIO_MID 55%`, avg RSSI `-59.7 dBm`;
+- return near: 2 samples, `RADIO_NEAR 75%`, avg RSSI `-21.0 dBm`;
+- body-shielded: 3 samples, `RADIO_NEAR 75%`, avg RSSI `-45.3 dBm`;
+- cabinet-shielded: 3 samples, `RADIO_NEAR 75%`, avg RSSI `-43.7 dBm`;
+- off: `STALE_RADIO` примерно на `56s`, затем `UNKNOWN` после `75s+`.
+
+Вывод: текущие runtime-пороги можно оставить для MVP как грубый
+proximity-hint. Важнее свежесть: после выключения hotspot старый сильный RSSI
+не должен подтверждать близость, и текущая модель это делает правильно.
+
+## Следующий срез
+
+Решить, нужен ли более осторожный слой UI до multi-witness:
+
+```text
+RADIO_NEAR / RADIO_MID -> возможно RADIO_CLOSE / RADIO_WEAK_HINT
+```
+
+Но не добавлять direction и не усиливать identity без криптографии.
