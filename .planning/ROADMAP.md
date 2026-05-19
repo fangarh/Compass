@@ -26,6 +26,24 @@ field testing.
 **Verification:** completed on `R3CT20C8A8N` on 2026-05-19. Pulled sample log:
 `artifacts/field-logs/diagnostics/field-radio-20260519-092839.log`.
 
+## Phase 2: Diagnostic Context And Movement Analysis
+
+**Status:** completed
+
+**Goal:** Add device context headers to field logs and extend analyzer output
+with movement delta candidates.
+
+**Scope:**
+
+- Log model, SDK, app version, battery, charging, power-save, Wi-Fi, and
+  location state at startup.
+- Parse `FIELD_DIAG event=device_context` in the analyzer.
+- Generate `device-context.csv` and `movement-deltas.csv`.
+
+**Verification:** completed on `R3CT20C8A8N` and `e089985a` on 2026-05-19.
+Both devices produced `FIELD_DIAG event=device_context`, and analyzer output
+confirmed context rows for Samsung SM-S908B and OnePlus NE2215.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

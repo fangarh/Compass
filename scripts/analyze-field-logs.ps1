@@ -72,10 +72,50 @@ if (-not $IncludeLegacyRootLogs) {
 
 $scanEntries = New-Object System.Collections.Generic.List[object]
 $events = New-Object System.Collections.Generic.List[object]
+$contexts = New-Object System.Collections.Generic.List[object]
+
+function Get-FieldValue([string]$message, [string]$name) {
+    if ($message -match "$name=""(?<quoted>[^""]*)""") {
+        return $Matches.quoted
+    }
+    if ($message -match "$name=(?<plain>\S+)") {
+        return $Matches.plain
+    }
+    return ""
+}
 
 foreach ($log in $logs) {
     $device = Get-DeviceName $log.FullName
     foreach ($line in [System.IO.File]::ReadLines($log.FullName)) {
+        if ($line -match '^(?<time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) .*? FIELD_DIAG (?<message>.*)$') {
+            $time = [datetime]::ParseExact($Matches.time, $timeFormat, $culture)
+            $message = $Matches.message
+            if ($message -match 'event=device_context') {
+                $contexts.Add([pscustomobject]@{
+                    Device = $device
+                    LogFile = $log.Name
+                    Time = $time.ToString("yyyy-MM-dd HH:mm:ss.fff")
+                    Manufacturer = Get-FieldValue $message "manufacturer"
+                    Brand = Get-FieldValue $message "brand"
+                    Model = Get-FieldValue $message "model"
+                    DeviceName = Get-FieldValue $message "device"
+                    Product = Get-FieldValue $message "product"
+                    Hardware = Get-FieldValue $message "hardware"
+                    Sdk = Get-FieldValue $message "sdk"
+                    Release = Get-FieldValue $message "release"
+                    AppVersionName = Get-FieldValue $message "appVersionName"
+                    AppVersionCode = Get-FieldValue $message "appVersionCode"
+                    AndroidIdHash = Get-FieldValue $message "androidIdHash"
+                    BatteryPercent = Get-FieldValue $message "batteryPercent"
+                    Charging = Get-FieldValue $message "charging"
+                    PowerSave = Get-FieldValue $message "powerSave"
+                    WifiEnabled = Get-FieldValue $message "wifiEnabled"
+                    LocationEnabled = Get-FieldValue $message "locationEnabled"
+                })
+            }
+            continue
+        }
+
         if ($line -notmatch '^(?<time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) .*? WIFI_DIAG (?<message>.*)$') {
             continue
         }
@@ -233,11 +273,52 @@ $comparison = $scanSummary |
     } |
     Sort-Object Window, Bssid
 
+$windowsForDelta = @("near_30cm", "room_5m", "corridor_or_later")
+$movementDeltas = New-Object System.Collections.Generic.List[object]
+foreach ($device in ($scanSummary | Select-Object -ExpandProperty Device -Unique)) {
+    foreach ($bssid in ($scanSummary | Where-Object Device -eq $device | Select-Object -ExpandProperty Bssid -Unique)) {
+        $rows = $scanSummary | Where-Object { $_.Device -eq $device -and $_.Bssid -eq $bssid }
+        foreach ($pair in @(
+            @("near_30cm", "room_5m"),
+            @("room_5m", "corridor_or_later"),
+            @("near_30cm", "corridor_or_later")
+        )) {
+            $from = $rows | Where-Object Window -eq $pair[0] | Select-Object -First 1
+            $to = $rows | Where-Object Window -eq $pair[1] | Select-Object -First 1
+            if ($from -and $to) {
+                $delta = [math]::Round([double]$to.AvgRssi - [double]$from.AvgRssi, 1)
+                $movementDeltas.Add([pscustomobject]@{
+                    Device = $device
+                    Bssid = $bssid
+                    Ssid = if ($from.Ssid) { $from.Ssid } else { $to.Ssid }
+                    FromWindow = $pair[0]
+                    ToWindow = $pair[1]
+                    FromAvgRssi = $from.AvgRssi
+                    ToAvgRssi = $to.AvgRssi
+                    DeltaRssi = $delta
+                    AbsDeltaRssi = [math]::Abs($delta)
+                    FromCount = $from.Count
+                    ToCount = $to.Count
+                    Candidate = ([math]::Abs($delta) -ge 8 -and [int]$from.Count -ge 3 -and [int]$to.Count -ge 3)
+                })
+            }
+        }
+    }
+}
+
+$movementDeltas = $movementDeltas | Sort-Object `
+    @{ Expression = "Candidate"; Descending = $true },
+    @{ Expression = "AbsDeltaRssi"; Descending = $true },
+    Device,
+    Bssid
+
 $scanSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "scan-summary.csv")
 $bucketSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "bucket-summary.csv")
 $eventSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "event-summary.csv")
 $windowDeviceSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "window-device-summary.csv")
 $comparison | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "device-comparison.csv")
+$contexts | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "device-context.csv")
+$movementDeltas | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "movement-deltas.csv")
 
 $report = New-Object System.Collections.Generic.List[string]
 $report.Add("# Field Log Analysis")
@@ -265,6 +346,27 @@ $report.Add("| Window | Device | Requests OK | Requests Rejected | Receiver Upda
 $report.Add("| --- | --- | ---: | ---: | ---: | ---: | ---: |")
 foreach ($row in $eventSummary) {
     $report.Add("| $($row.Window) | $($row.Device) | $($row.RequestsAccepted) | $($row.RequestsRejected) | $($row.ReceiverUpdated) | $($row.ReceiverCached) | $($row.CachedResultEvents) |")
+}
+$report.Add("")
+$report.Add("## Device Context")
+$report.Add("")
+if ($contexts.Count -eq 0) {
+    $report.Add("No `FIELD_DIAG event=device_context` lines found. Rebuild and rerun the app to collect Phase 2 context headers.")
+} else {
+    $report.Add("| Device | Model | SDK | Battery | Charging | Power Save | Wi-Fi | Location | App |")
+    $report.Add("| --- | --- | ---: | ---: | --- | --- | --- | --- | --- |")
+    foreach ($row in $contexts) {
+        $report.Add("| $($row.Device) | $($row.Manufacturer) $($row.Model) | $($row.Sdk) | $($row.BatteryPercent) | $($row.Charging) | $($row.PowerSave) | $($row.WifiEnabled) | $($row.LocationEnabled) | $($row.AppVersionName) |")
+    }
+}
+$report.Add("")
+$report.Add("## Movement Candidates")
+$report.Add("")
+$report.Add("| Device | BSSID | SSID | From | To | From Avg | To Avg | Delta | Counts |")
+$report.Add("| --- | --- | --- | --- | --- | ---: | ---: | ---: | --- |")
+foreach ($row in ($movementDeltas | Where-Object Candidate -eq $true | Select-Object -First 30)) {
+    $ssid = ($row.Ssid -replace '\|', '/')
+    $report.Add("| $($row.Device) | $($row.Bssid) | $ssid | $($row.FromWindow) | $($row.ToWindow) | $($row.FromAvgRssi) | $($row.ToAvgRssi) | $($row.DeltaRssi) | $($row.FromCount)/$($row.ToCount) |")
 }
 $report.Add("")
 $report.Add("## Strongest BSSID Per Window")

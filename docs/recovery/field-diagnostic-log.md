@@ -67,7 +67,15 @@ artifacts/field-analysis/bucket-summary.csv
 artifacts/field-analysis/event-summary.csv
 artifacts/field-analysis/window-device-summary.csv
 artifacts/field-analysis/device-comparison.csv
+artifacts/field-analysis/device-context.csv
+artifacts/field-analysis/movement-deltas.csv
 ```
+
+`device-context.csv` is populated by Phase 2 logs that contain
+`FIELD_DIAG event=device_context`. Older Phase 1 logs do not have this header.
+`movement-deltas.csv` highlights BSSID RSSI changes between field windows and
+marks candidate rows when the absolute delta is at least 8 dB with enough
+samples on both sides.
 
 ## Expected Lines
 
@@ -140,3 +148,21 @@ NE2215 e089985a receiver updated events: 266
 Initial observation: once the second phone moved away from the near baseline,
 the two devices started diverging strongly on common BSSID RSSI. This confirms
 that analysis must be windowed by field marker and grouped per device.
+
+Phase 2 adds a startup context line:
+
+```text
+FIELD_DIAG event=device_context manufacturer=... model=... sdk=...
+batteryPercent=... charging=... powerSave=... wifiEnabled=...
+locationEnabled=...
+```
+
+This lets later analysis separate radio behavior from device state, battery
+state, power saving, disabled Wi-Fi, or disabled location.
+
+Phase 2 verification on 2026-05-19:
+
+```text
+R3CT20C8A8N: Samsung SM-S908B, SDK 36, battery 74, charging=false, powerSave=true
+e089985a: OnePlus NE2215, SDK 35, battery 73, charging=true, powerSave=false
+```

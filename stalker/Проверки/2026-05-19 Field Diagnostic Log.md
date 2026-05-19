@@ -44,7 +44,14 @@ artifacts/field-analysis/bucket-summary.csv
 artifacts/field-analysis/event-summary.csv
 artifacts/field-analysis/window-device-summary.csv
 artifacts/field-analysis/device-comparison.csv
+artifacts/field-analysis/device-context.csv
+artifacts/field-analysis/movement-deltas.csv
 ```
+
+`device-context.csv` заполняется логами Phase 2, где есть строка
+`FIELD_DIAG event=device_context`. Старые Phase 1 логи такого header-а не имеют.
+`movement-deltas.csv` показывает BSSID, у которых RSSI заметно изменился между
+окнами теста.
 
 ## Что Проверять В Логе
 
@@ -139,3 +146,23 @@ Analyzer обработал 3 файла и 21416 `scan_entry`.
 появляется сильное расхождение RSSI по общим BSSID. Это подтверждает выбранный
 подход: анализировать по временным окнам, device serial/model и BSSID, а не
 считать дистанцию из одного абсолютного RSSI.
+
+## Phase 2 Header
+
+В следующий APK добавляется стартовая строка:
+
+```text
+FIELD_DIAG event=device_context manufacturer=... model=... sdk=...
+batteryPercent=... charging=... powerSave=... wifiEnabled=...
+locationEnabled=...
+```
+
+Это нужно, чтобы отделять радиокартину от состояния телефона: модель, Android,
+заряд, зарядка, энергосбережение, включенный Wi-Fi и включенная геолокация.
+
+Проверка Phase 2 выполнена 2026-05-19:
+
+```text
+R3CT20C8A8N: Samsung SM-S908B, SDK 36, battery 74, charging=false, powerSave=true
+e089985a: OnePlus NE2215, SDK 35, battery 73, charging=true, powerSave=false
+```

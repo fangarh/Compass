@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 1: Field Diagnostic Log completed.
+Phase 2: Diagnostic Context And Movement Analysis completed.
 
 ## Last Verified Baseline
 
@@ -23,9 +23,9 @@ Phase 1: Field Diagnostic Log completed.
 
 ## Next Action
 
-Review the pulled field log in
-`artifacts/field-logs/diagnostics/field-radio-20260519-092839.log` and use it
-as the first real-device Wi-Fi radio baseline.
+Use Phase 2 logs for the next field run. Both physical phones now write
+`FIELD_DIAG event=device_context`; analyzer outputs include `device-context.csv`
+and `movement-deltas.csv`.
 
 ## Verification
 
@@ -42,3 +42,12 @@ as the first real-device Wi-Fi radio baseline.
 - Log contains `FIELD_DIAG event=logger_start`, `WIFI_DIAG event=sensor_start`,
   `WIFI_DIAG event=request`, receiver results with `updated=true`, cached
   results with `updated=false`, and raw `WIFI_DIAG event=scan_entry` lines.
+
+2026-05-19 Phase 2:
+
+- `:app:assembleDebug` completed successfully outside sandbox.
+- Phase 2 APK installed and launched on `R3CT20C8A8N`.
+- Phase 2 APK installed and launched on `e089985a`.
+- Both devices produced `FIELD_DIAG event=device_context`.
+- Analyzer successfully parsed both context headers into
+  `artifacts/field-analysis-phase2/device-context.csv`.
