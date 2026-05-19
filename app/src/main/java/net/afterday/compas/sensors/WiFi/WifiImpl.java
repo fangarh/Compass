@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.afterday.compas.BuildConfig;
+import net.afterday.compas.iff.IffRadioWitnessStore;
 import net.afterday.compas.logging.FieldDiagnosticLog;
 import net.afterday.compas.logging.FieldSensorDiagnosticSampler;
 import net.afterday.compas.logging.Logger;
@@ -140,6 +141,7 @@ public class WifiImpl implements WiFi {
         Log.d(this.TAG, "WIFI_DIAG event=results source=receiver updated=" + resultsUpdated + " count=" + results.size() + " mode=" + getModeName());
         FieldDiagnosticLog.wifi("event=results source=receiver updated=" + resultsUpdated + " count=" + results.size() + " mode=" + getModeName());
         FieldDiagnosticLog.wifiScanResults("receiver", resultsUpdated, results);
+        IffRadioWitnessStore.updateFromScanResults(resultsUpdated, results);
         publishResults(results);
     }
 
@@ -190,6 +192,7 @@ public class WifiImpl implements WiFi {
                 this.lastCachedDetailLogMs = now;
                 FieldDiagnosticLog.wifiScanResults("cached", false, results);
             }
+            IffRadioWitnessStore.updateFromScanResults(false, results);
             publishResults(results);
         }
     }

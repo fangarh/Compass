@@ -184,9 +184,35 @@ verified the flow: main PDA -> `IFF` -> `КОМАНДА` -> select `Петя` ->
 `КОНТАКТ` -> `Я ПОДХОЖУ`. The roster scrolls to `Женя`, and radio/proximity,
 position, and direction remain explicitly `UNKNOWN`.
 
+## Phase 11: IFF Radio Witness
+
+**Status:** completed
+
+**Goal:** Add the first phone-to-phone proximity proof layer by detecting known
+IFF Wi-Fi beacon SSIDs in scan results and showing freshness/RSSI as radio
+witness evidence.
+
+**Scope:**
+
+- Recognize only known roster beacon SSIDs:
+  - `COMPASS_IFF_YOU`
+  - `COMPASS_IFF_PETYA`
+  - `COMPASS_IFF_VASYA`
+  - `COMPASS_IFF_ZHENYA`
+- Store the newest witness per player from Android `ScanResult` data.
+- Show radio freshness, age, RSSI, and rough proximity on `КОНТАКТ`.
+- Show radio witness status on `КОМАНДА`.
+- Keep identity, proximity, position, and direction separate.
+- Treat unknown `COMPASS_IFF_*` SSIDs as unknown, not teammates.
+
+**Verification:** debug APK builds. APK installed on Samsung `R3CT20C8A8N` and
+OnePlus `e089985a`. Samsung UIAutomator flow verified: main PDA -> `IFF` ->
+`КОМАНДА` -> select `Петя` -> `КОНТАКТ` -> `Я ПОДХОЖУ`. With no active
+`COMPASS_IFF_*` hotspot in the room, radio witness stayed at `RADIO FRESH: 0`
+and proximity stayed `UNKNOWN`, which is the correct honest state.
+
 ## Backlog
 
-- Phase 11: phone-to-phone approach beacon/witness exchange.
 - Phase 12: confidence model for identity, proximity, position, and direction.
 - Phase 13: IFF field MVP test with two or more teammates.
 - Analyze customer Wi-Fi module behavior after the module is available.

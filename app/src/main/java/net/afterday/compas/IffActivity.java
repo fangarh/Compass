@@ -11,6 +11,8 @@ import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import net.afterday.compas.iff.IffRadioWitnessStore;
+import net.afterday.compas.iff.IffRadioWitnessStore.WitnessSnapshot;
 
 public class IffActivity extends Activity {
     private static final int TAB_CONTACT = 0;
@@ -18,6 +20,7 @@ public class IffActivity extends Activity {
     private static final int TAB_MAP = 2;
     private static final int LOCAL_PLAYER_INDEX = 0;
     private static final long APPROACH_DURATION_MS = 120000L;
+    private static final long RADIO_REFRESH_MS = 2000L;
 
     private final IffPlayer[] roster = new IffPlayer[] {
             new IffPlayer("local-you", "Вы", true),
@@ -49,6 +52,13 @@ public class IffActivity extends Activity {
             render();
         }
     };
+    private final Runnable refreshRadioState = new Runnable() {
+        @Override
+        public void run() {
+            render();
+            handler.postDelayed(this, RADIO_REFRESH_MS);
+        }
+    };
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -69,11 +79,14 @@ public class IffActivity extends Activity {
         if (approachActive) {
             scheduleApproachExpire();
         }
+        handler.removeCallbacks(refreshRadioState);
+        handler.postDelayed(refreshRadioState, RADIO_REFRESH_MS);
     }
 
     @Override
     protected void onPause() {
         handler.removeCallbacks(expireApproach);
+        handler.removeCallbacks(refreshRadioState);
         super.onPause();
     }
 
@@ -174,35 +187,37 @@ public class IffActivity extends Activity {
     private void renderContact() {
         resetBody();
         IffPlayer selected = roster[selectedPlayerIndex];
+        WitnessSnapshot witness = IffRadioWitnessStore.getWitness(selected.playerId);
         boolean localApproachSelected = approachActive && selected.local;
         title.setText(localApproachSelected ? "ВЫ ПОДХОДИТЕ" : selected.displayName);
-        subtitle.setText(selected.local ? "локальный игрок" : "локальный roster");
-        status.setText("IDENTITY: " + identityStatus(selected) + "\n"
-                + "PROXIMITY: UNKNOWN - радио не подтверждено\n"
+        subtitle.setText(selected.local ? "локальный игрок" : "локальный roster + radio witness");
+        status.setText("IDENTITY: " + identityStatus(selected, witness) + "\n"
+                + "PROXIMITY: " + proximityStatus(selected, witness) + "\n"
                 + "POSITION: UNKNOWN - GPS не доказывает близость\n"
                 + "DIRECTION: UNKNOWN - азимут не рассчитан");
         body.setText("ИГРОК\n"
                 + "- имя: " + selected.displayName + "\n"
                 + "- id: " + selected.playerId + "\n"
-                + "- команда: локальная IFF группа\n\n"
+                + "- команда: локальная IFF группа\n"
+                + "- ожидаемый beacon: " + IffRadioWitnessStore.expectedBeaconSsid(selected.playerId) + "\n\n"
                 + "СВИДЕТЕЛИ\n"
-                + "- нет phone-to-phone событий\n"
-                + "- нет свежего радиосигнала\n\n"
+                + witnessDetails(witness) + "\n\n"
                 + "РЕШЕНИЕ\n"
-                + "- участник известен только из локального roster\n"
-                + "- неподтвержденная близость остается UNKNOWN\n"
+                + "- roster подтверждает только заявленного участника\n"
+                + "- свежий radio witness подтверждает близость beacon, не крипто-identity\n"
                 + "- кнопка Я ПОДХОЖУ меняет только статус локального игрока");
     }
 
     private void renderTeam() {
         resetBody();
         title.setText("КОМАНДА");
-        subtitle.setText("локальный roster, без радиоподтверждения");
+        subtitle.setText("локальный roster + Wi-Fi beacon witness");
         status.setText((approachActive ? "ВЫ        ПОДХОДИТЕ   локально\n" : "")
                 + "УЧАСТНИКОВ: " + roster.length + "\n"
-                + "БЛИЗОСТЬ: UNKNOWN для всех");
+                + "RADIO FRESH: " + freshWitnessCount() + "\n"
+                + "DIRECTION: UNKNOWN");
         body.setText("Выберите участника, чтобы открыть карточку контакта.\n"
-                + "Roster подтверждает только заявленную личность в локальном списке.");
+                + "Beacon SSID дает только свежесть/близость, не криптографию.");
         for (int i = 0; i < roster.length; i++) {
             bodyContainer.addView(createRosterButton(i));
         }
@@ -212,15 +227,31 @@ public class IffActivity extends Activity {
         resetBody();
         title.setText("КАРТА");
         subtitle.setText("позиции и свидетели");
-        status.setText("ПОЗИЦИЯ: нет данных\nСВИДЕТЕЛИ: нет данных\nНАПРАВЛЕНИЕ: не подтверждено");
-        body.setText("Карта MVP будет показывать своих, свежесть точек, круг ошибки GPS и связи свидетелей.");
+        status.setText("ПОЗИЦИЯ: UNKNOWN\nСВИДЕТЕЛИ: " + freshWitnessCount() + " fresh\nНАПРАВЛЕНИЕ: UNKNOWN");
+        body.setText(mapWitnessList());
     }
 
-    private String identityStatus(IffPlayer player) {
+    private String identityStatus(IffPlayer player, WitnessSnapshot witness) {
         if (player.local) {
             return approachActive ? "LOCAL_SELF_APPROACH" : "LOCAL_SELF";
         }
+        if (witness != null && witness.isFresh()) {
+            return "ROSTER_ONLY + RADIO_CLAIM - не crypto";
+        }
         return "ROSTER_ONLY - не подтверждено радио";
+    }
+
+    private String proximityStatus(IffPlayer player, WitnessSnapshot witness) {
+        if (player.local && approachActive) {
+            return "UNKNOWN - локальный подход не radio proof";
+        }
+        if (witness == null) {
+            return "UNKNOWN - beacon не слышен";
+        }
+        if (!witness.isFresh()) {
+            return "UNKNOWN - witness устарел " + formatAge(witness.ageMs());
+        }
+        return witness.proximityLabel() + " rssi=" + witness.rssi + " age=" + formatAge(witness.ageMs());
     }
 
     private void resetBody() {
@@ -238,8 +269,9 @@ public class IffActivity extends Activity {
         button.setLayoutParams(params);
         button.setBackgroundResource(R.drawable.popup_button);
         button.setTextColor(playerIndex == selectedPlayerIndex ? 0xffffd16a : 0xffffffff);
-        button.setText(player.displayName + "\nidentity: " + rosterIdentityLabel(player)
-                + " / proximity: UNKNOWN");
+        WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
+        button.setText(player.displayName + "\nidentity: " + rosterIdentityLabel(player, witness)
+                + " / radio: " + rosterRadioLabel(player, witness));
         button.setTextSize(13);
         button.setTransformationMethod(null);
         button.setOnClickListener(new View.OnClickListener() {
@@ -253,11 +285,73 @@ public class IffActivity extends Activity {
         return button;
     }
 
-    private String rosterIdentityLabel(IffPlayer player) {
+    private String rosterIdentityLabel(IffPlayer player, WitnessSnapshot witness) {
         if (player.local) {
             return approachActive ? "LOCAL_SELF_APPROACH" : "LOCAL_SELF";
         }
+        if (witness != null && witness.isFresh()) {
+            return "ROSTER+RADIO";
+        }
         return "ROSTER_ONLY";
+    }
+
+    private String rosterRadioLabel(IffPlayer player, WitnessSnapshot witness) {
+        if (player.local && approachActive) {
+            return "LOCAL_ONLY";
+        }
+        if (witness == null) {
+            return "UNKNOWN";
+        }
+        if (!witness.isFresh()) {
+            return "STALE " + formatAge(witness.ageMs());
+        }
+        return witness.proximityLabel() + " " + witness.rssi + "dBm";
+    }
+
+    private String witnessDetails(WitnessSnapshot witness) {
+        if (witness == null) {
+            return "- нет свежего или старого beacon witness\n"
+                    + "- телефон ищет SSID формата " + IffRadioWitnessStore.SSID_PREFIX + "*";
+        }
+        return "- ssid: " + witness.ssid + "\n"
+                + "- bssid: " + witness.bssid + "\n"
+                + "- freshness: " + witness.freshnessLabel() + "\n"
+                + "- age: " + formatAge(witness.ageMs()) + "\n"
+                + "- rssi: " + witness.rssi + " dBm\n"
+                + "- frequency: " + witness.frequency + " MHz";
+    }
+
+    private int freshWitnessCount() {
+        int count = 0;
+        for (int i = 0; i < roster.length; i++) {
+            WitnessSnapshot witness = IffRadioWitnessStore.getWitness(roster[i].playerId);
+            if (witness != null && witness.isFresh()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private String mapWitnessList() {
+        StringBuilder builder = new StringBuilder();
+        builder.append("КАРТА ПОКА НЕ РИСУЕТ АЗИМУТ\n\n");
+        for (int i = 0; i < roster.length; i++) {
+            IffPlayer player = roster[i];
+            WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
+            builder.append(player.displayName)
+                    .append(": ")
+                    .append(witness == null ? "radio UNKNOWN" : witness.freshnessLabel() + " " + witness.rssi + "dBm age=" + formatAge(witness.ageMs()))
+                    .append("\n");
+        }
+        builder.append("\nGPS и направление будут отдельными слоями уверенности.");
+        return builder.toString();
+    }
+
+    private String formatAge(long ageMs) {
+        if (ageMs < 1000L) {
+            return ageMs + "ms";
+        }
+        return (ageMs / 1000L) + "s";
     }
 
     private int dp(int value) {

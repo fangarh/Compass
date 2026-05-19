@@ -62,17 +62,38 @@ phone-to-phone witnesses.
 Важно: roster не доказывает близость. До phone-to-phone обмена proximity,
 position и direction остаются `UNKNOWN`.
 
-## Следующий срез
+## Реализованный срез Phase 11
 
-Добавить phone-to-phone подход и свидетельства свежего радиосигнала:
+Добавить первый phone-to-phone witness через Wi-Fi scan:
 
 ```text
-approach announcement
+known beacon SSID
 radio freshness
-witness player id
-signal age
-rough proximity confidence
+RSSI
+signal age from ScanResult timestamp
+rough proximity
 ```
 
-После этого `КОМАНДА` и `КОНТАКТ` смогут отличать локально заявленного своего
-от участника, которого кто-то действительно слышит рядом.
+Паттерн beacon:
+
+- `COMPASS_IFF_YOU`
+- `COMPASS_IFF_PETYA`
+- `COMPASS_IFF_VASYA`
+- `COMPASS_IFF_ZHENYA`
+
+Это не криптографическая идентичность. Такой beacon доказывает только то, что
+рядом недавно был слышен SSID, заявляющий известного участника. Поэтому
+`identity`, `proximity`, `position` и `direction` остаются раздельными.
+
+Реализация подключена к существующему 1 Hz Wi-Fi scan pipeline. Если beacon
+не слышен, UI остается в честном состоянии `UNKNOWN`.
+
+## Следующий срез
+
+Провести реальный двухтелефонный тест:
+
+1. На одном телефоне поднять хотспот с SSID `COMPASS_IFF_PETYA` или другим
+   известным `COMPASS_IFF_*`.
+2. На втором открыть Compass -> `IFF` -> `КОМАНДА`.
+3. Проверить, что появляется fresh witness с age/RSSI.
+4. Отойти/выключить hotspot и проверить переход в stale/unknown.

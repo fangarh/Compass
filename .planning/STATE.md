@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 10: Local IFF Roster completed.
+Phase 11: IFF Radio Witness completed.
 
 ## Last Verified Baseline
 
@@ -23,9 +23,9 @@ Phase 10: Local IFF Roster completed.
 
 ## Next Action
 
-Start Phase 11: phone-to-phone approach beacon/witness exchange. Keep the
-current roster as local identity input only; radio freshness is the next proof
-layer.
+Run a real two-phone field check: set one phone hotspot SSID to a known
+`COMPASS_IFF_*` name, run Compass on the other phone, and verify fresh RSSI and
+age appear in `КОМАНДА` and `КОНТАКТ`.
 
 ## Verification
 
@@ -152,3 +152,27 @@ layer.
   `Я ПОДХОЖУ`.
 - Roster scrolling exposed `Женя`; Samsung is still not required for this
   slice.
+
+2026-05-19 Phase 11:
+
+- Added `IffRadioWitnessStore` for known IFF Wi-Fi beacon SSIDs.
+- Connected the store to the existing 1 Hz `WifiImpl` scan pipeline.
+- Known beacon SSIDs:
+  - `COMPASS_IFF_YOU`
+  - `COMPASS_IFF_PETYA`
+  - `COMPASS_IFF_VASYA`
+  - `COMPASS_IFF_ZHENYA`
+- Unknown `COMPASS_IFF_*` tokens are logged as unknown and are not promoted to
+  teammates.
+- Cached Wi-Fi results use `ScanResult.timestamp`, so cached entries do not
+  become falsely fresh.
+- `КОМАНДА` now shows radio witness status and fresh witness count.
+- `КОНТАКТ` shows expected beacon SSID, witness age, RSSI, frequency, rough
+  proximity, and keeps position/direction separate as `UNKNOWN`.
+- `:app:assembleDebug` completed successfully.
+- APK installed on Samsung `R3CT20C8A8N` and OnePlus `e089985a`.
+- Samsung UIAutomator verification passed:
+  main PDA -> `IFF` -> `КОМАНДА` -> select `Петя` -> `КОНТАКТ` ->
+  `Я ПОДХОЖУ`.
+- No real `COMPASS_IFF_*` hotspot was active during this verification, so
+  `RADIO FRESH: 0` and proximity `UNKNOWN` were the expected result.
