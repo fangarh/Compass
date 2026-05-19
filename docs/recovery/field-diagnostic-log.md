@@ -77,6 +77,18 @@ artifacts/field-analysis/movement-deltas.csv
 marks candidate rows when the absolute delta is at least 8 dB with enough
 samples on both sides.
 
+Zone fingerprint outputs:
+
+```text
+artifacts/field-analysis/zone-fingerprints.csv
+artifacts/field-analysis/zone-evaluation.csv
+artifacts/field-analysis/zone-predictions.csv
+```
+
+`zone-fingerprints.csv` stores per-device/per-window BSSID fingerprints.
+`zone-predictions.csv` compares each time bucket against the fingerprints for
+the same device and selects the best matching zone.
+
 Named movement windows can be passed directly:
 
 ```powershell
@@ -225,3 +237,18 @@ Every window had fresh receiver results and no rejected scan requests. The
 strongest movement candidates were on Samsung when moving from corridor back to
 the later near/cabinet state, with common office BSSID RSSI deltas around
 25-28 dB.
+
+Offline zone evaluator output:
+
+```text
+artifacts/field-analysis-run-20260519-1045-zone-eval/
+```
+
+Result:
+
+```text
+30-second bucket predictions: 29/32 correct (90.6%)
+```
+
+The three incorrect predictions are concentrated at movement boundary buckets,
+where the physical transition and the 30-second bucket boundary can overlap.

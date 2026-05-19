@@ -365,6 +365,90 @@ $movementDeltas = $movementDeltas | Sort-Object `
     Device,
     Bssid
 
+$fingerprints = $scanSummary |
+    Where-Object { $_.Window -ne "pre_test" -and $_.Window -ne "post_windows" -and [int]$_.Count -ge 3 } |
+    ForEach-Object {
+        [pscustomobject]@{
+            Device = $_.Device
+            Zone = $_.Window
+            Bssid = $_.Bssid
+            Ssid = $_.Ssid
+            AvgRssi = [double]$_.AvgRssi
+            Count = [int]$_.Count
+        }
+    } |
+    Sort-Object Device, Zone, Bssid
+
+$zoneEvaluation = New-Object System.Collections.Generic.List[object]
+$bucketGroups = $bucketSummary |
+    Where-Object { $_.Bucket -ne "pre_test" } |
+    Group-Object Bucket, Device
+
+foreach ($bucketGroup in $bucketGroups) {
+    $bucketItems = $bucketGroup.Group
+    $device = $bucketItems[0].Device
+    $actualWindow = (($scanEntries | Where-Object { $_.Device -eq $device -and $_.Bucket -eq $bucketItems[0].Bucket } | Select-Object -First 1).Window)
+    $zones = $fingerprints | Where-Object Device -eq $device | Select-Object -ExpandProperty Zone -Unique
+    foreach ($zone in $zones) {
+        $zoneFingerprint = $fingerprints | Where-Object { $_.Device -eq $device -and $_.Zone -eq $zone }
+        $shared = New-Object System.Collections.Generic.List[object]
+        foreach ($bucketItem in $bucketItems) {
+            $fingerprintItem = $zoneFingerprint | Where-Object Bssid -eq $bucketItem.Bssid | Select-Object -First 1
+            if ($fingerprintItem) {
+                $shared.Add([pscustomobject]@{
+                    Bssid = $bucketItem.Bssid
+                    BucketAvgRssi = [double]$bucketItem.AvgRssi
+                    FingerprintAvgRssi = [double]$fingerprintItem.AvgRssi
+                    AbsError = [math]::Abs([double]$bucketItem.AvgRssi - [double]$fingerprintItem.AvgRssi)
+                })
+            }
+        }
+
+        $sharedCount = $shared.Count
+        $bucketBssidCount = ($bucketItems | Select-Object -ExpandProperty Bssid -Unique).Count
+        $fingerprintBssidCount = ($zoneFingerprint | Select-Object -ExpandProperty Bssid -Unique).Count
+        $avgAbsError = if ($sharedCount -gt 0) { [math]::Round(($shared | Measure-Object AbsError -Average).Average, 2) } else { 99.0 }
+        $overlapBucket = if ($bucketBssidCount -gt 0) { [math]::Round($sharedCount / $bucketBssidCount, 3) } else { 0 }
+        $overlapFingerprint = if ($fingerprintBssidCount -gt 0) { [math]::Round($sharedCount / $fingerprintBssidCount, 3) } else { 0 }
+        $score = [math]::Round(($sharedCount * 2.0) + ($overlapBucket * 20.0) + ($overlapFingerprint * 10.0) - $avgAbsError, 3)
+
+        $zoneEvaluation.Add([pscustomobject]@{
+            Bucket = $bucketItems[0].Bucket
+            Device = $device
+            ActualWindow = $actualWindow
+            CandidateZone = $zone
+            Score = $score
+            SharedBssid = $sharedCount
+            BucketBssid = $bucketBssidCount
+            FingerprintBssid = $fingerprintBssidCount
+            OverlapBucket = $overlapBucket
+            OverlapFingerprint = $overlapFingerprint
+            AvgAbsRssiError = $avgAbsError
+        })
+    }
+}
+
+$zoneEvaluation = $zoneEvaluation | Sort-Object Bucket, Device, Score -Descending
+$zonePredictions = $zoneEvaluation |
+    Group-Object Bucket, Device |
+    ForEach-Object {
+        $best = $_.Group | Sort-Object Score -Descending | Select-Object -First 1
+        [pscustomobject]@{
+            Bucket = $best.Bucket
+            Device = $best.Device
+            ActualWindow = $best.ActualWindow
+            PredictedZone = $best.CandidateZone
+            Correct = ($best.ActualWindow -eq $best.CandidateZone)
+            Score = $best.Score
+            SharedBssid = $best.SharedBssid
+            BucketBssid = $best.BucketBssid
+            FingerprintBssid = $best.FingerprintBssid
+            OverlapBucket = $best.OverlapBucket
+            AvgAbsRssiError = $best.AvgAbsRssiError
+        }
+    } |
+    Sort-Object Bucket, Device
+
 $scanSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "scan-summary.csv")
 $bucketSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "bucket-summary.csv")
 $eventSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "event-summary.csv")
@@ -372,6 +456,9 @@ $windowDeviceSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $
 $comparison | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "device-comparison.csv")
 $contexts | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "device-context.csv")
 $movementDeltas | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "movement-deltas.csv")
+$fingerprints | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "zone-fingerprints.csv")
+$zoneEvaluation | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "zone-evaluation.csv")
+$zonePredictions | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "zone-predictions.csv")
 
 $report = New-Object System.Collections.Generic.List[string]
 $report.Add("# Field Log Analysis")
@@ -420,6 +507,23 @@ $report.Add("| --- | --- | --- | --- | --- | ---: | ---: | ---: | --- |")
 foreach ($row in ($movementDeltas | Where-Object Candidate -eq $true | Select-Object -First 30)) {
     $ssid = ($row.Ssid -replace '\|', '/')
     $report.Add("| $($row.Device) | $($row.Bssid) | $ssid | $($row.FromWindow) | $($row.ToWindow) | $($row.FromAvgRssi) | $($row.ToAvgRssi) | $($row.DeltaRssi) | $($row.FromCount)/$($row.ToCount) |")
+}
+$report.Add("")
+$report.Add("## Zone Fingerprint Evaluation")
+$report.Add("")
+if ($zonePredictions.Count -eq 0) {
+    $report.Add("No zone predictions generated.")
+} else {
+    $correct = ($zonePredictions | Where-Object Correct -eq $true).Count
+    $total = $zonePredictions.Count
+    $accuracy = [math]::Round(($correct * 100.0) / $total, 1)
+    $report.Add("Best-zone bucket accuracy against named windows: $correct/$total ($accuracy%).")
+    $report.Add("")
+    $report.Add("| Bucket | Device | Actual | Predicted | Correct | Shared | Error | Score |")
+    $report.Add("| --- | --- | --- | --- | --- | ---: | ---: | ---: |")
+    foreach ($row in $zonePredictions) {
+        $report.Add("| $($row.Bucket) | $($row.Device) | $($row.ActualWindow) | $($row.PredictedZone) | $($row.Correct) | $($row.SharedBssid) | $($row.AvgAbsRssiError) | $($row.Score) |")
+    }
 }
 $report.Add("")
 $report.Add("## Strongest BSSID Per Window")

@@ -58,6 +58,20 @@ confirmed context rows for Samsung SM-S908B and OnePlus NE2215.
 - The 2026-05-19 10:45 run was regenerated as
   `artifacts/field-analysis-run-20260519-1045-named`.
 
+## Phase 4: Offline Zone Fingerprint Evaluator
+
+**Status:** completed
+
+**Goal:** Test whether named zones can be inferred from Wi-Fi fingerprints in
+field logs.
+
+**Scope:**
+
+- Analyzer exports `zone-fingerprints.csv`, `zone-evaluation.csv`, and
+  `zone-predictions.csv`.
+- Analyzer scores 30-second buckets against per-device/per-zone fingerprints.
+- The 2026-05-19 10:45 run achieved 29/32 correct bucket predictions.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

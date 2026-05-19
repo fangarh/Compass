@@ -53,6 +53,18 @@ artifacts/field-analysis/movement-deltas.csv
 `movement-deltas.csv` показывает BSSID, у которых RSSI заметно изменился между
 окнами теста.
 
+Выходные файлы offline zone evaluator:
+
+```text
+artifacts/field-analysis/zone-fingerprints.csv
+artifacts/field-analysis/zone-evaluation.csv
+artifacts/field-analysis/zone-predictions.csv
+```
+
+`zone-fingerprints.csv` хранит Wi-Fi fingerprint по device/window/BSSID.
+`zone-predictions.csv` сравнивает 30-секундные buckets с fingerprint-ами этого
+же устройства и выбирает наиболее похожую зону.
+
 Именованные окна можно передавать прямо в analyzer:
 
 ```powershell
@@ -225,3 +237,18 @@ e089985a: OnePlus NE2215, battery 72, charging=true, powerSave=false
 Во всех окнах были свежие receiver results, отклоненных scan request не было.
 Самые сильные movement candidates на Samsung показали изменение RSSI по общим
 офисным BSSID примерно на 25-28 dB.
+
+Offline zone evaluator:
+
+```text
+artifacts/field-analysis-run-20260519-1045-zone-eval/
+```
+
+Результат:
+
+```text
+30-second bucket predictions: 29/32 correct (90.6%)
+```
+
+Три ошибки пришлись на buckets рядом с границами перемещения. Для ручных
+переходов и 30-секундных buckets это ожидаемо.

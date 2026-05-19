@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 3: Named Analysis Windows completed.
+Phase 4: Offline Zone Fingerprint Evaluator completed.
 
 ## Last Verified Baseline
 
@@ -23,8 +23,9 @@ Phase 3: Named Analysis Windows completed.
 
 ## Next Action
 
-Use named analyzer windows for future field runs. Latest named output:
-`artifacts/field-analysis-run-20260519-1045-named`.
+Use offline zone fingerprint evaluation before adding runtime detection logic.
+Latest evaluator output:
+`artifacts/field-analysis-run-20260519-1045-zone-eval`.
 
 ## Verification
 
@@ -58,3 +59,10 @@ Use named analyzer windows for future field runs. Latest named output:
   `cabinet_return`, and `near_30cm` windows.
 - Named report output:
   `artifacts/field-analysis-run-20260519-1045-named/summary.md`.
+
+2026-05-19 Phase 4:
+
+- Analyzer now exports zone fingerprints and bucket-level zone predictions.
+- The 10:45 controlled run produced 29/32 correct bucket predictions (90.6%).
+- Errors were concentrated on movement boundary buckets, which is expected for
+  30-second buckets around manual transition times.
