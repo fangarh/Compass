@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 29: IFF Radio Service Control completed.
+Phase 30: IFF BLE Screen-Off Smoke completed with two-phone blocker.
 
 ## Last Verified Baseline
 
@@ -23,10 +23,9 @@ Phase 29: IFF Radio Service Control completed.
 
 ## Next Action
 
-Next useful slice: run a two-phone BLE foreground-service field test. Verify
-whether phone A continues advertising and phone B continues scanning through
-screen-off and app-background transitions, using the new in-app `RADIO ON/OFF`
-control to manage battery and reset conditions.
+Next useful slice: manually unlock Samsung, open IFF on both phones, set
+Samsung to `THIS DEVICE: Петя` and OnePlus to `THIS DEVICE: Вы`, then run the
+two-phone BLE foreground screen-off/background RX test.
 
 ## Verification
 
@@ -678,4 +677,31 @@ control to manage battery and reset conditions.
   toggles, service start/stop events, and a field check with
   `fieldRadioEnabled=true`.
 - App was force-stopped after verification to avoid leaving BLE foreground
+  radio running.
+
+2026-05-20 Phase 30:
+
+- Started the two-phone foreground BLE field-test path.
+- Git worktree was clean except untracked `test.png`.
+- ADB devices:
+  - Samsung `R3CT20C8A8N`;
+  - OnePlus `e089985a`;
+  - emulator.
+- Installed current debug APK on Samsung and OnePlus.
+- OnePlus opened `Main -> IFF` and showed:
+  - `RADIO CONTROL: ON`;
+  - `RADIO SERVICE: iff radio service on local=local-you foreground connectedDevice`;
+  - `BLE POLICY: FOREGROUND_SERVICE_CONNECTED_DEVICE / fresh<=15s stale<=60s then UNKNOWN`.
+- OnePlus was sent through `Home` and `SLEEP`.
+- After screen-off, `dumpsys activity services net.afterday.compas` still
+  showed:
+  - `IffForegroundRadioService`;
+  - `isForeground=true`;
+  - notification channel `compass_iff_radio`;
+  - foreground type `0x00000010`.
+- Samsung was visible over ADB but remained on lock/AOD/keyguard UI after ADB
+  wake/swipe attempts, so IFF could not be opened there without manual unlock.
+- Result: single-phone screen-off foreground-service survival is verified on
+  OnePlus. Two-phone BLE RX through screen-off/background is not claimed yet.
+- Apps were force-stopped after the smoke test to avoid leaving BLE foreground
   radio running.

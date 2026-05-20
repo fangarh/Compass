@@ -787,3 +787,42 @@ screen off scanner
 background one/both apps
 record fresh -> stale -> unknown
 ```
+
+## Реализованный срез Phase 30
+
+Проведен первый smoke-test screen-off для foreground BLE service:
+
+```text
+OnePlus RADIO ON -> Home -> Sleep -> service still foreground
+```
+
+Что проверено:
+
+- APK установлен на Samsung и OnePlus;
+- OnePlus открыл `Main -> IFF`;
+- OnePlus показал `RADIO CONTROL: ON`;
+- OnePlus показал foreground radio service в UI;
+- после `Home` и `SLEEP` проверен `dumpsys activity services`;
+- `IffForegroundRadioService` остался `isForeground=true`;
+- foreground type: `0x00000010`;
+- notification channel: `compass_iff_radio`.
+
+Что не заявляем:
+
+- двухтелефонный BLE RX не доказан;
+- Samsung был виден по ADB, но остался на lock/AOD/keyguard;
+- без ручного unlock IFF на Samsung открыть не удалось.
+
+Вывод: app-side foreground service переживает screen-off на OnePlus. Следующий
+полевой тест должен быть уже с двумя разблокированными телефонами.
+
+## Следующий срез
+
+Когда Samsung разблокирован:
+
+```text
+Samsung THIS DEVICE: Петя + RADIO ON
+OnePlus THIS DEVICE: Вы + RADIO ON
+screen-off/background on each side
+record whether BLE witness stays fresh or expires correctly
+```

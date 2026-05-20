@@ -701,6 +701,33 @@ check with `fieldRadioEnabled=true`.
 **Result:** field operators can now disable/re-enable IFF BLE radio from the
 IFF screen without force-stopping the app.
 
+## Phase 30: IFF BLE Screen-Off Smoke
+
+**Status:** completed with two-phone blocker
+
+**Goal:** Verify the first screen-off prerequisite for foreground BLE without
+claiming two-phone RX.
+
+**Scope:**
+
+- Install the current APK on Samsung and OnePlus.
+- Confirm OnePlus IFF radio is `RADIO ON`.
+- Send OnePlus through `Home` and `SLEEP`.
+- Check foreground service survival with `dumpsys`.
+- Attempt to prepare Samsung and record blocker if locked.
+
+**Verification:** APK installed on Samsung `R3CT20C8A8N` and OnePlus
+`e089985a`. OnePlus showed `RADIO CONTROL: ON` and foreground connected-device
+radio service in IFF. After `Home` and `SLEEP`, `dumpsys activity services
+net.afterday.compas` still showed `IffForegroundRadioService isForeground=true`
+with notification channel `compass_iff_radio` and foreground type `0x00000010`.
+Samsung remained on lock/AOD/keyguard after ADB wake/swipe attempts, so IFF
+could not be opened there without manual unlock.
+
+**Result:** the foreground BLE service survives OnePlus screen-off. Cross-phone
+BLE RX through screen-off/background remains pending until Samsung is unlocked
+and controllable.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.
