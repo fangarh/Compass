@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 30: IFF BLE Screen-Off Smoke completed with two-phone blocker.
+Phase 31: IFF BLE Two-Phone Screen-Off completed.
 
 ## Last Verified Baseline
 
@@ -23,9 +23,10 @@ Phase 30: IFF BLE Screen-Off Smoke completed with two-phone blocker.
 
 ## Next Action
 
-Next useful slice: manually unlock Samsung, open IFF on both phones, set
-Samsung to `THIS DEVICE: Петя` and OnePlus to `THIS DEVICE: Вы`, then run the
-two-phone BLE foreground screen-off/background RX test.
+Next useful slice: add a longer BLE background/expiry field run that records
+fresh -> stale -> UNKNOWN transitions with one or both phones screen-off, then
+decide whether the MVP needs wake/retry controls or just explicit operator
+radio status.
 
 ## Verification
 
@@ -705,3 +706,36 @@ two-phone BLE foreground screen-off/background RX test.
   OnePlus. Two-phone BLE RX through screen-off/background is not claimed yet.
 - Apps were force-stopped after the smoke test to avoid leaving BLE foreground
   radio running.
+
+2026-05-20 Phase 31:
+
+- Continued the two-phone foreground BLE field test after both phones were
+  manually unlocked.
+- ADB devices:
+  - Samsung `R3CT20C8A8N`;
+  - OnePlus `e089985a`;
+  - emulator.
+- Git worktree was clean except untracked `test.png`.
+- Both phones initially used `THIS DEVICE: Вы`, so BLE RX was correctly ignored
+  as self.
+- Samsung was changed to `THIS DEVICE: Петя`; OnePlus remained
+  `THIS DEVICE: Вы`.
+- Screen-on BLE RX was verified in both directions:
+  - Samsung saw `local-you` from OnePlus with `rx local-you -39dBm`;
+  - OnePlus saw `petya` from Samsung with `rx petya -46dBm`.
+- `field_check` was recorded on both phones:
+  - Samsung log `field-radio-20260520-155212.log` recorded
+    `playerId=local-you localDevicePlayerId=petya witness=RADIO_FRESH
+    rssi=-43 ssid="BLE_IFF_YOU"`;
+  - OnePlus log `field-radio-20260520-155213.log` recorded
+    `playerId=petya localDevicePlayerId=local-you witness=RADIO_FRESH
+    rssi=-49 ssid="BLE_IFF_PETYA"`.
+- Both screens were turned off with ADB `input keyevent 26`.
+- About 30 seconds later, diagnostics still showed foreground BLE RX:
+  - Samsung logged `ble_field_radio_rx playerId=local-you
+    localPlayerId=petya` with RSSI around `-33..-41 dBm`;
+  - OnePlus logged `ble_field_radio_rx playerId=petya
+    localPlayerId=local-you` with RSSI around `-42..-43 dBm`.
+- Result: the no-infrastructure BLE IFF path works between two phones and
+  survives a short both-screens-off foreground-service pass. This is proximity
+  freshness, not crypto identity, GPS position, or direction.

@@ -728,6 +728,37 @@ could not be opened there without manual unlock.
 BLE RX through screen-off/background remains pending until Samsung is unlocked
 and controllable.
 
+## Phase 31: IFF BLE Two-Phone Screen-Off
+
+**Status:** completed
+
+**Goal:** Verify the no-infrastructure BLE IFF path on two physical phones with
+both screens off.
+
+**Scope:**
+
+- Use Samsung `R3CT20C8A8N` as `THIS DEVICE: Петя`.
+- Use OnePlus `e089985a` as `THIS DEVICE: Вы`.
+- Keep both phones on `RADIO ON`.
+- Verify BLE witness RX in both directions while screens are on.
+- Record `field_check` on both phones.
+- Turn both screens off and verify foreground BLE RX remains visible in
+  diagnostics about 30 seconds later.
+
+**Verification:** Samsung saw `BLE_IFF_YOU` from OnePlus with screen-on RSSI
+around `-39 dBm`; OnePlus saw `BLE_IFF_PETYA` from Samsung with screen-on RSSI
+around `-46 dBm`. Field checks recorded `RADIO_FRESH` on both phones:
+Samsung `field-radio-20260520-155212.log` recorded `playerId=local-you`
+from local device `petya`, and OnePlus `field-radio-20260520-155213.log`
+recorded `playerId=petya` from local device `local-you`. After both screens
+were turned off, diagnostics still logged `ble_field_radio_rx` on both devices
+about 30 seconds later.
+
+**Result:** two-phone BLE IFF RX is verified without a shared Wi-Fi network,
+including a short screen-off foreground-service pass. This remains fresh radio
+presence only: identity is still a roster claim without crypto, and position
+and direction remain `UNKNOWN`.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

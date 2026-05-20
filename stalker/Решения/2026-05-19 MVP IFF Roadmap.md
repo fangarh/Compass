@@ -826,3 +826,52 @@ OnePlus THIS DEVICE: Вы + RADIO ON
 screen-off/background on each side
 record whether BLE witness stays fresh or expires correctly
 ```
+
+## Реализованный срез Phase 31
+
+Проверен двухтелефонный BLE IFF без общей Wi-Fi сети, включая короткий
+screen-off pass:
+
+```text
+Samsung THIS DEVICE: Петя -> BLE_IFF_PETYA
+OnePlus THIS DEVICE: Вы -> BLE_IFF_YOU
+both screens off -> foreground BLE RX still appears in diagnostics
+```
+
+Что проверено:
+
+- оба телефона видны по ADB;
+- Samsung назначен как `THIS DEVICE: Петя`;
+- OnePlus оставлен как `THIS DEVICE: Вы`;
+- при включенных экранах Samsung увидел `BLE_IFF_YOU`;
+- при включенных экранах OnePlus увидел `BLE_IFF_PETYA`;
+- `ЗАПИСАТЬ` на Samsung и OnePlus зафиксировал `RADIO_FRESH`;
+- после выключения обоих экранов diagnostics продолжили писать
+  `ble_field_radio_rx` примерно через 30 секунд.
+
+Фактические записи:
+
+- Samsung log `field-radio-20260520-155212.log`:
+  `playerId=local-you`, local device `petya`, `BLE_IFF_YOU`,
+  RSSI около `-43 dBm`;
+- OnePlus log `field-radio-20260520-155213.log`:
+  `playerId=petya`, local device `local-you`, `BLE_IFF_PETYA`,
+  RSSI около `-49 dBm`;
+- screen-off diagnostics:
+  Samsung продолжил видеть `local-you`, OnePlus продолжил видеть `petya`.
+
+Вывод: для MVP подтвержден no-infrastructure radio freshness path. Общая
+Wi-Fi сеть не нужна. Но это все еще только свежий radio claim: он не доказывает
+криптографическую identity, не дает точную position и не дает direction.
+
+## Следующий срез
+
+Длинный background/expiry прогон:
+
+```text
+fresh BLE -> screen-off/background -> stale <= 60s -> UNKNOWN
+```
+
+Нужно проверить не только короткое выживание foreground service, но и честный
+переход UI/logs из fresh в stale и затем в UNKNOWN, особенно если один телефон
+останавливает radio или уходит дальше.
