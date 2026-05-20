@@ -38,6 +38,7 @@ public class IffActivity extends Activity {
     private static final String PREFS_NAME = "iff";
     private static final String PREF_LOCAL_DEVICE_PLAYER_ID = "local_device_player_id";
     private static final String PREF_FIELD_RADIO_ENABLED = "field_radio_enabled";
+    private static final String PREF_TRUSTED_PLAYER_PREFIX = "trusted_player_";
 
     private final IffPlayer[] roster = new IffPlayer[] {
             new IffPlayer("local-you", "Вы", true),
@@ -57,6 +58,7 @@ public class IffActivity extends Activity {
     private Button teamTab;
     private Button mapTab;
     private Button approachButton;
+    private Button trustButton;
     private Button recordCheckButton;
     private Button radioServiceButton;
     private Button txWitnessButton;
@@ -126,6 +128,7 @@ public class IffActivity extends Activity {
         teamTab = (Button) findViewById(R.id.iff_team_tab);
         mapTab = (Button) findViewById(R.id.iff_map_tab);
         approachButton = (Button) findViewById(R.id.iff_approach);
+        trustButton = (Button) findViewById(R.id.iff_trust);
         recordCheckButton = (Button) findViewById(R.id.iff_record_check);
         radioServiceButton = (Button) findViewById(R.id.iff_radio_service);
         txWitnessButton = (Button) findViewById(R.id.iff_tx_witness);
@@ -148,6 +151,7 @@ public class IffActivity extends Activity {
         teamTab.setTypeface(mono, Typeface.BOLD);
         mapTab.setTypeface(mono, Typeface.BOLD);
         approachButton.setTypeface(mono, Typeface.BOLD);
+        trustButton.setTypeface(mono, Typeface.BOLD);
         recordCheckButton.setTypeface(mono, Typeface.BOLD);
         radioServiceButton.setTypeface(mono, Typeface.BOLD);
         txWitnessButton.setTypeface(mono, Typeface.BOLD);
@@ -185,6 +189,12 @@ public class IffActivity extends Activity {
                 } else {
                     toggleApproach();
                 }
+            }
+        });
+        trustButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                toggleSelectedTrust();
             }
         });
         recordCheckButton.setOnClickListener(new View.OnClickListener() {
@@ -238,11 +248,13 @@ public class IffActivity extends Activity {
     }
 
     private void render() {
-        if (activeTab == TAB_CONTACT && !isLocalDevice(roster[selectedPlayerIndex])) {
+        IffPlayer selected = roster[selectedPlayerIndex];
+        if (activeTab == TAB_CONTACT && !isLocalDevice(selected)) {
             approachButton.setText("ЭТОТ ТЕЛ.");
         } else {
             approachButton.setText(approachActive ? "ОТМЕНИТЬ ПОДХОД" : "Я ПОДХОЖУ");
         }
+        renderTrustButton(selected);
         radioServiceButton.setText(fieldRadioEnabled ? "RADIO ON" : "RADIO OFF");
         radioServiceButton.setTextColor(fieldRadioEnabled ? 0xff7dff73 : 0xffffd16a);
         txWitnessButton.setText("TX STUB");
@@ -277,16 +289,17 @@ public class IffActivity extends Activity {
         boolean selectedIsLocalDevice = isLocalDevice(selected);
         boolean localApproachSelected = approachActive && selectedIsLocalDevice;
         title.setText(localApproachSelected ? "ВЫ ПОДХОДИТЕ" : selected.displayName);
-        subtitle.setText(selectedIsLocalDevice ? "этот телефон объявляет этого участника" : "локальный roster + radio witness");
+        subtitle.setText(selectedIsLocalDevice ? "этот телефон объявляет этого участника" : "локальный roster trust + radio witness");
         status.setText("OPERATOR: " + operatorVerdictLabel(confidence, quorum) + "\n"
                 + "CONFIDENCE\n" + confidence.compactStatus() + "\nWITNESSES: " + quorum.compact());
         body.setText("ИГРОК\n"
                 + "- имя: " + selected.displayName + "\n"
                 + "- id: " + selected.playerId + "\n"
                 + "- команда: локальная IFF группа\n"
+                + "- trust: " + trustLabel(selected) + "\n"
                 + "- ожидаемый beacon: " + IffRadioWitnessStore.expectedBeaconSsid(selected.playerId) + "\n\n"
                 + "OPERATOR VIEW\n"
-                + operatorDetails(confidence, quorum) + "\n\n"
+                + operatorDetails(selected, confidence, quorum) + "\n\n"
                 + "СЛОИ УВЕРЕННОСТИ\n"
                 + confidenceDetails(confidence) + "\n\n"
                 + "СВИДЕТЕЛИ\n"
@@ -307,17 +320,18 @@ public class IffActivity extends Activity {
         subtitle.setText("локальный roster + field radio identity");
         status.setText((approachActive ? "ВЫ        ПОДХОДИТЕ   локально\n" : "")
                 + "THIS DEVICE: " + localDevicePlayer().displayName + "\n"
-                + "OPERATOR: " + teamOperatorSummaryLine() + "\n"
+                + "OPERATOR: " + teamOperatorSummaryLine()
+                + " / TRUSTED " + trustedRosterCount() + "/" + (roster.length - 1) + "\n"
                 + "WITNESS: current " + currentWitnessEvidenceCount()
                 + " / stale " + staleWitnessEvidenceCount()
                 + " / radio " + freshWitnessCount() + "/" + strongProximityCount() + "\n"
-                + "FIELD RADIO: " + IffBleFieldRadio.compactStatus() + "\n"
-                + "RADIO CONTROL: " + (fieldRadioEnabled ? "ON" : "OFF") + "\n"
-                + "RADIO SERVICE: " + IffForegroundRadioService.compactStatus() + "\n"
-                + "BLE POLICY: " + IffBleFieldRadio.lifecycleStatus() + "\n"
-                + "REMOTE REPORTS: " + remoteReportCount() + " / DIRECTION: UNKNOWN");
+                + "FIELD RADIO: " + (fieldRadioEnabled ? "ON" : "OFF")
+                + " / " + IffBleFieldRadio.compactStatus() + "\n"
+                + "REMOTE REPORTS: " + remoteReportCount()
+                + " / DIRECTION: UNKNOWN");
         body.setText("Выберите участника, чтобы открыть карточку контакта.\n"
                 + "Долгое нажатие назначает, кем является этот телефон.\n"
+                + "TRUST помечает участника локально доверенным, но не доказывает proximity.\n"
                 + "Operator summary отделяет current witness от stale evidence.\n"
                 + "Проценты - текущая уверенность слоя, а не финальное доказательство.\n"
                 + "Field radio не должен требовать общей Wi-Fi сети.\n"
@@ -325,6 +339,7 @@ public class IffActivity extends Activity {
                 + "Radio service: " + IffForegroundRadioService.compactStatus() + "\n"
                 + "BLE lifecycle: " + IffBleFieldRadio.lifecycleStatus() + "\n"
                 + "BLE skeleton: " + IffBleFieldRadio.compactStatus() + "\n"
+                + "Trusted roster entries: " + trustedRosterCount() + "/" + (roster.length - 1) + "\n"
                 + "Remote witness contract: " + IffRemoteWitnessReport.CONTRACT_VERSION + "\n"
                 + "Signature status пока placeholder: " + IffRemoteWitnessReport.SIGNATURE_PENDING + "\n"
                 + "UDP debug: " + IffUdpWitnessTransport.compactStatus() + "\n"
@@ -366,6 +381,8 @@ public class IffActivity extends Activity {
         WitnessSnapshot witness = IffRadioWitnessStore.getWitness(selected.playerId);
         Snapshot confidence = confidenceFor(selected, witness);
         IffWitnessQuorum.Snapshot quorum = witnessQuorumFor(selected, witness);
+        boolean trustedPlayer = isTrustedPlayer(selected);
+        String trustLabel = trustLabel(selected);
         String witnessState = witness == null
                 ? "none"
                 : witness.freshnessLabel() + " rssi=" + witness.rssi + " ageMs=" + witness.ageMs()
@@ -375,6 +392,8 @@ public class IffActivity extends Activity {
                 + " displayName=\"" + safe(selected.displayName) + "\""
                 + " localDevicePlayerId=" + localDevicePlayerId
                 + " selectedIsLocalDevice=" + isLocalDevice(selected)
+                + " trustedPlayer=" + trustedPlayer
+                + " trustLabel=" + trustLabel
                 + " identityLabel=" + confidence.identity.label
                 + " identityScore=" + confidence.identity.score
                 + " proximityLabel=" + confidence.proximity.label
@@ -398,7 +417,32 @@ public class IffActivity extends Activity {
                 + " witness=" + witnessState
                 + " localApproach=" + approachActive);
         lastFieldCheckSummary = selected.displayName + ": identity " + confidence.identity.score
-                + "% / proximity " + confidence.proximity.score + "% / witness " + (witness == null ? "none" : witness.freshnessLabel());
+                + "% / proximity " + confidence.proximity.score + "% / trust " + trustLabel
+                + " / witness " + (witness == null ? "none" : witness.freshnessLabel());
+        activeTab = TAB_CONTACT;
+        render();
+    }
+
+    private void toggleSelectedTrust() {
+        IffPlayer selected = roster[selectedPlayerIndex];
+        if (isLocalDevice(selected)) {
+            lastFieldCheckSummary = selected.displayName + ": trust is LOCAL_SELF";
+            activeTab = TAB_CONTACT;
+            render();
+            return;
+        }
+        boolean trusted = !hasLocalTrust(selected);
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .putBoolean(trustPreferenceKey(selected), trusted)
+                .apply();
+        lastFieldCheckSummary = selected.displayName + ": trust " + trustLabel(selected);
+        FieldDiagnosticLog.event("IFF_DIAG", "event=iff_trust_toggle"
+                + " playerId=" + selected.playerId
+                + " displayName=\"" + safe(selected.displayName) + "\""
+                + " trustedPlayer=" + isTrustedPlayer(selected)
+                + " trustLabel=" + trustLabel(selected)
+                + " localDevicePlayerId=" + localDevicePlayerId);
         activeTab = TAB_CONTACT;
         render();
     }
@@ -539,6 +583,52 @@ public class IffActivity extends Activity {
         return player != null && player.playerId.equals(localDevicePlayerId);
     }
 
+    private boolean isTrustedPlayer(IffPlayer player) {
+        return isLocalDevice(player) || hasLocalTrust(player);
+    }
+
+    private boolean hasLocalTrust(IffPlayer player) {
+        if (player == null || isLocalDevice(player)) {
+            return false;
+        }
+        return getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .getBoolean(trustPreferenceKey(player), false);
+    }
+
+    private String trustPreferenceKey(IffPlayer player) {
+        return PREF_TRUSTED_PLAYER_PREFIX + player.playerId;
+    }
+
+    private String trustLabel(IffPlayer player) {
+        if (isLocalDevice(player)) {
+            return "LOCAL_SELF";
+        }
+        return hasLocalTrust(player) ? "LOCAL_TRUSTED" : "UNTRUSTED";
+    }
+
+    private String trustRosterBadge(IffPlayer player) {
+        if (isLocalDevice(player)) {
+            return "SELF";
+        }
+        return hasLocalTrust(player) ? "TRUST" : "UNTRUST";
+    }
+
+    private void renderTrustButton(IffPlayer selected) {
+        if (isLocalDevice(selected)) {
+            trustButton.setText("SELF");
+            trustButton.setEnabled(false);
+            trustButton.setTextColor(0xffb8c49a);
+        } else if (hasLocalTrust(selected)) {
+            trustButton.setText("UNTRUST");
+            trustButton.setEnabled(true);
+            trustButton.setTextColor(0xff7dff73);
+        } else {
+            trustButton.setText("TRUST");
+            trustButton.setEnabled(true);
+            trustButton.setTextColor(0xffffd16a);
+        }
+    }
+
     private IffPlayer localDevicePlayer() {
         int index = localDevicePlayerIndex();
         return roster[index < 0 ? LOCAL_PLAYER_INDEX : index];
@@ -575,6 +665,7 @@ public class IffActivity extends Activity {
         Snapshot confidence = confidenceFor(player, witness);
         IffWitnessQuorum.Snapshot quorum = witnessQuorumFor(player, witness);
         button.setText(player.displayName + (isLocalDevice(player) ? "  [THIS DEVICE]" : "")
+                + (!isLocalDevice(player) && hasLocalTrust(player) ? "  [TRUSTED]" : "")
                 + "\n" + operatorRosterLine(player, confidence, quorum, witness));
         button.setTextSize(12);
         button.setTransformationMethod(null);
@@ -611,7 +702,7 @@ public class IffActivity extends Activity {
     }
 
     private Snapshot confidenceFor(IffPlayer player, WitnessSnapshot witness) {
-        return IffConfidence.evaluate(player.playerId, isLocalDevice(player), approachActive, witness);
+        return IffConfidence.evaluate(player.playerId, isLocalDevice(player), approachActive, isTrustedPlayer(player), witness);
     }
 
     private IffWitnessQuorum.Snapshot witnessQuorumFor(IffPlayer player, WitnessSnapshot witness) {
@@ -673,8 +764,9 @@ public class IffActivity extends Activity {
                 + "- direction и точная position пока неизвестны";
     }
 
-    private String operatorDetails(Snapshot confidence, IffWitnessQuorum.Snapshot quorum) {
+    private String operatorDetails(IffPlayer selected, Snapshot confidence, IffWitnessQuorum.Snapshot quorum) {
         return "- verdict: " + operatorVerdictLabel(confidence, quorum) + "\n"
+                + "- trust: " + trustLabel(selected) + "\n"
                 + "- current witnesses: " + quorum.freshSources + "/" + quorum.possibleSources + "\n"
                 + "- stale evidence: " + quorum.staleSources + "\n"
                 + "- remote fresh/stale/total: " + quorum.remoteFreshSources + "/"
@@ -704,7 +796,8 @@ public class IffActivity extends Activity {
     private String operatorRosterLine(IffPlayer player, Snapshot confidence, IffWitnessQuorum.Snapshot quorum,
                                       WitnessSnapshot witness) {
         return operatorVerdictLabel(confidence, quorum) + " / id " + confidence.identity.score
-                + "% / prox " + confidence.proximity.score + "% / " + rosterRadioLabel(player, witness);
+                + "% / prox " + confidence.proximity.score + "% / " + trustRosterBadge(player)
+                + " / " + rosterRadioLabel(player, witness);
     }
 
     private String witnessDetails(WitnessSnapshot witness) {
@@ -807,6 +900,16 @@ public class IffActivity extends Activity {
             IffPlayer player = roster[i];
             WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
             if (witnessQuorumFor(player, witness).hasMultiWitness()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private int trustedRosterCount() {
+        int count = 0;
+        for (int i = 0; i < roster.length; i++) {
+            if (hasLocalTrust(roster[i])) {
                 count++;
             }
         }

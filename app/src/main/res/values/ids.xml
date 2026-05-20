@@ -84,6 +84,7 @@
     <id name="iff_subtitle" />
     <id name="iff_team_tab" />
     <id name="iff_title" />
+    <id name="iff_trust" />
     <id name="iff_tx_witness" />
     <id name="iffbutton" />
     <id name="icon" />

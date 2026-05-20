@@ -6,23 +6,31 @@ public final class IffConfidence {
     private IffConfidence() {
     }
 
-    public static Snapshot evaluate(String playerId, boolean localPlayer, boolean localApproachActive, WitnessSnapshot witness) {
-        Confidence identity = identity(localPlayer, localApproachActive, witness);
+    public static Snapshot evaluate(String playerId, boolean localPlayer, boolean localApproachActive,
+                                    boolean trustedPlayer, WitnessSnapshot witness) {
+        Confidence identity = identity(localPlayer, localApproachActive, trustedPlayer, witness);
         Confidence proximity = proximity(localPlayer, localApproachActive, witness);
         Confidence position = new Confidence("UNKNOWN", 0, "GPS слой еще не подключен");
         Confidence direction = new Confidence("UNKNOWN", 0, "radio RSSI не дает азимут");
         return new Snapshot(playerId, identity, proximity, position, direction);
     }
 
-    private static Confidence identity(boolean localPlayer, boolean localApproachActive, WitnessSnapshot witness) {
+    private static Confidence identity(boolean localPlayer, boolean localApproachActive,
+                                       boolean trustedPlayer, WitnessSnapshot witness) {
         if (localPlayer && localApproachActive) {
             return new Confidence("LOCAL_SELF_APPROACH", 80, "локальный игрок сам заявил подход");
         }
         if (localPlayer) {
             return new Confidence("LOCAL_SELF", 70, "локальная запись этого устройства");
         }
+        if (trustedPlayer && witness != null && witness.isFresh()) {
+            return new Confidence("LOCAL_TRUSTED_RADIO_CLAIM", 75, "локально доверенный roster + свежий radio claim; crypto нет");
+        }
         if (witness != null && witness.isFresh()) {
             return new Confidence("ROSTER_PLUS_RADIO_CLAIM", 60, "roster совпал со свежим beacon SSID; crypto нет");
+        }
+        if (trustedPlayer) {
+            return new Confidence("LOCAL_TRUSTED_ROSTER", 55, "участник доверен локально, но fresh radio proof нет");
         }
         return new Confidence("ROSTER_ONLY", 40, "участник известен только из локального roster");
     }

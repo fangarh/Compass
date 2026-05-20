@@ -977,3 +977,51 @@ known roster claim -> minimal trust token / pairing -> still UNKNOWN without pro
 
 Либо сначала отполировать боевой UI для stale/unknown, чтобы оператор быстрее
 видел: “был слышен недавно, но сейчас не доказан”.
+
+## Реализованный срез Phase 34
+
+Добавлен первый локальный trust-layer для roster:
+
+```text
+Петя в roster -> UNTRUSTED
+оператор жмет TRUST -> LOCAL_TRUSTED
+identity растет, proximity/position/direction не растут
+```
+
+Что изменилось:
+
+- в IFF action row появилась кнопка `TRUST` / `UNTRUST`;
+- локальный игрок показывает `SELF`;
+- `КОМАНДА` показывает `[TRUSTED]` у доверенных roster-участников;
+- `КОНТАКТ` показывает `trust: LOCAL_TRUSTED` или `UNTRUSTED`;
+- confidence model добавила:
+  - `LOCAL_TRUSTED_ROSTER 55%`;
+  - `LOCAL_TRUSTED_RADIO_CLAIM 75%`;
+- `field_check` пишет `trustedPlayer` и `trustLabel`;
+- analyzer экспортирует trust fields;
+- status на вкладке `КОМАНДА` уплотнен, чтобы в landscape реально выбирать
+  игроков, а не видеть только один ряд.
+
+Проверка на OnePlus `e089985a`:
+
+- debug APK собран и установлен;
+- UIAutomator прошел:
+  `Main -> IFF -> КОМАНДА -> Петя -> КОНТАКТ -> TRUST -> ЗАПИСАТЬ`;
+- log `field-radio-20260520-163259.log` записал:
+  `trustLabel=LOCAL_TRUSTED`, `trustedPlayer=true`,
+  `identityLabel=LOCAL_TRUSTED_ROSTER`, `proximityLabel=UNKNOWN`;
+- analyzer подтвердил эти поля в
+  `artifacts/field-analysis-phase34-trust-verify/iff-field-checks.csv`.
+
+Вывод: это еще не криптография и не pairing. Это локальное доверие оператора,
+которое повышает только identity confidence. Оно не доказывает близость, не
+дает GPS position и не дает direction.
+
+## Следующий срез
+
+Теперь есть два нормальных направления:
+
+```text
+1. pairing/token: сделать trust не ручной галочкой, а обменом ключом/кодом
+2. operator UI: быстрее показывать stale/unknown/current для боевого решения
+```

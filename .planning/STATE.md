@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 33: IFF BLE Expiry Transition Verification completed.
+Phase 34: IFF Local Trust Layer completed.
 
 ## Last Verified Baseline
 
@@ -23,9 +23,9 @@ Phase 33: IFF BLE Expiry Transition Verification completed.
 
 ## Next Action
 
-Next useful slice: decide the next MVP risk after radio freshness is proven:
-either operator-facing stale/unknown UI polish, a minimal pairing/trust token
-path, or production-safe foreground radio controls for field play.
+Next useful slice: turn the local trust layer into an actual pairing/token
+design, or first polish the operator view for fast stale/unknown decisions in
+field play.
 
 ## Verification
 
@@ -796,3 +796,37 @@ path, or production-safe foreground radio controls for field play.
 - Result: BLE IFF proximity freshness now has verified automatic expiry
   diagnostics. Expired BLE does not remain current proximity proof.
 - Both phones were force-stopped after verification.
+
+2026-05-20 Phase 34:
+
+- Added a persisted per-player local trust flag under IFF preferences.
+- Added a `TRUST` / `UNTRUST` action to the IFF bottom row.
+- Local device rows show `SELF`; remote roster rows show `UNTRUST` or
+  `[TRUSTED]`.
+- `IffConfidence` now distinguishes:
+  - `ROSTER_ONLY 40%`;
+  - `LOCAL_TRUSTED_ROSTER 55%`;
+  - `LOCAL_TRUSTED_RADIO_CLAIM 75%`.
+- Trust affects only identity. Proximity remains radio/local-proof driven, and
+  position/direction remain `UNKNOWN`.
+- `IFF_DIAG event=field_check` now logs:
+  - `trustedPlayer`;
+  - `trustLabel`.
+- `scripts/analyze-field-logs.ps1` exports trust fields to
+  `iff-field-checks.csv`, `iff-field-check-summary.csv`, and Markdown.
+- Team status was compacted after UIAutomator showed the previous status block
+  left too little roster space in landscape.
+- `scripts/test-analyze-field-logs.ps1` passed.
+- `:app:assembleDebug` completed successfully outside sandbox.
+- APK installed on OnePlus `e089985a`.
+- UIAutomator verified:
+  `Main -> IFF -> КОМАНДА -> Петя -> КОНТАКТ -> TRUST -> ЗАПИСАТЬ`.
+- Diagnostic log `field-radio-20260520-163259.log` recorded:
+  `event=iff_trust_toggle playerId=petya trustedPlayer=true
+  trustLabel=LOCAL_TRUSTED`.
+- The same log recorded field check:
+  `playerId=petya trustedPlayer=true trustLabel=LOCAL_TRUSTED
+  identityLabel=LOCAL_TRUSTED_ROSTER identityScore=55
+  proximityLabel=UNKNOWN proximityScore=0`.
+- Analyzer verification output:
+  `artifacts/field-analysis-phase34-trust-verify/iff-field-checks.csv`.

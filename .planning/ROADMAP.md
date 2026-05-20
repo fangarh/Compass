@@ -815,6 +815,41 @@ were force-stopped after verification.
 **Result:** the BLE IFF evidence path now has field-verified automatic expiry
 diagnostics. Expired BLE does not remain current proximity proof.
 
+## Phase 34: IFF Local Trust Layer
+
+**Status:** completed
+
+**Goal:** Add a minimal local trust state so the IFF UI separates an ordinary
+roster claim from a locally trusted teammate claim without pretending this is
+cryptographic identity.
+
+**Scope:**
+
+- Add a persisted per-player local trust flag.
+- Add `TRUST` / `UNTRUST` to the IFF action row.
+- Show trust state in `КОМАНДА` rows and `КОНТАКТ` details.
+- Let trust affect only the identity layer:
+  `LOCAL_TRUSTED_ROSTER` and `LOCAL_TRUSTED_RADIO_CLAIM`.
+- Keep proximity, position, and direction independent.
+- Add `trustedPlayer` and `trustLabel` to field-check diagnostics and analyzer
+  output.
+- Compact the team status block so roster selection remains usable in
+  landscape.
+
+**Verification:** analyzer smoke test passed. Debug APK built successfully
+outside sandbox and installed on OnePlus `e089985a`. UIAutomator verified
+`Main -> IFF -> КОМАНДА -> Петя -> КОНТАКТ -> TRUST -> ЗАПИСАТЬ`.
+`field-radio-20260520-163259.log` recorded
+`trustLabel=LOCAL_TRUSTED`, `trustedPlayer=true`,
+`identityLabel=LOCAL_TRUSTED_ROSTER`, and `proximityLabel=UNKNOWN`.
+Analyzer output
+`artifacts/field-analysis-phase34-trust-verify/iff-field-checks.csv` exported
+the same trust fields.
+
+**Result:** the MVP now has a first non-crypto local trust layer. Trust can
+increase identity confidence, but it does not prove radio proximity, GPS
+position, or direction.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.
