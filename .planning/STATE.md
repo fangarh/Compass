@@ -495,3 +495,33 @@ is charged; until then, keep transport test points local and log-driven.
   `artifacts/iff-field-analysis-20260520-1005`.
 - Result: UDP RX is proven at least in the OnePlus-to-Samsung direction, and
   unsigned transport remains evidence only; identity/proximity are not upgraded.
+
+2026-05-20 Phase 24:
+
+- Field conclusion: a common Wi-Fi network is not a valid field assumption for
+  players.
+- UDP remains a debug transport/protocol harness, not the field MVP transport.
+- Added per-device local IFF identity selection.
+- Local identity is persisted in `SharedPreferences`.
+- Team screen now shows `THIS DEVICE: <participant>`.
+- Roster rows mark the local device identity as `[THIS DEVICE]`.
+- Contact screen for a non-local participant changes the left action button to
+  `ЭТОТ ТЕЛ.`; tapping it assigns that participant as this physical device.
+- `Я ПОДХОЖУ` remains scoped to the current local device identity.
+- `IFF_DIAG event=field_check` now logs:
+  - `localDevicePlayerId`;
+  - `selectedIsLocalDevice`.
+- Analyzer CSV/Markdown now exports local device identity fields.
+- Added `BLUETOOTH_ADVERTISE` to the manifest and Android 12+ startup
+  permission request, preparing the next BLE field radio slice.
+- Official Android docs were checked for BLE advertising/scanning permission
+  requirements.
+- `:app:assembleDebug` completed successfully.
+- `scripts/test-analyze-field-logs.ps1` passed.
+- APK installed on Samsung `R3CT20C8A8N` and OnePlus `e089985a`.
+- Samsung UI verified:
+  `Main -> IFF -> КОМАНДА -> Петя -> ЭТОТ ТЕЛ. -> КОМАНДА`.
+- Verification result:
+  - `THIS DEVICE: Петя`;
+  - roster row `Петя [THIS DEVICE]`;
+  - contact identity `LOCAL_SELF 70%`.

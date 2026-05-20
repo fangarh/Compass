@@ -524,6 +524,33 @@ freshness=REMOTE_FRESH signatureStatus=SIGNATURE_PENDING`. A recorded
 completed on `artifacts/iff-field-session-20260520-1005` and wrote
 `artifacts/iff-field-analysis-20260520-1005`.
 
+## Phase 24: IFF Field Identity Selector
+
+**Status:** completed
+
+**Goal:** Remove the hidden assumption that every installed phone is
+`local-you` before implementing no-infrastructure field radio.
+
+**Scope:**
+
+- Persist a per-device IFF identity from the roster.
+- Show `THIS DEVICE: ...` in the team summary.
+- Mark the roster row with `[THIS DEVICE]`.
+- On a non-local contact, change the left action button to `ЭТОТ ТЕЛ.` so the
+  operator can assign this phone to that participant.
+- Keep `Я ПОДХОЖУ` scoped to the current local device identity.
+- Log `localDevicePlayerId` and `selectedIsLocalDevice` in
+  `IFF_DIAG event=field_check`.
+- Export local identity fields from the analyzer.
+- Add `BLUETOOTH_ADVERTISE` permission and startup request as preparation for
+  BLE field radio.
+
+**Verification:** debug APK builds. Analyzer smoke test passes. APK installed
+on Samsung `R3CT20C8A8N` and OnePlus `e089985a`. Samsung UI verified
+`Main -> IFF -> КОМАНДА -> Петя -> ЭТОТ ТЕЛ. -> КОМАНДА`; the screen showed
+`THIS DEVICE: Петя`, roster showed `Петя [THIS DEVICE]`, and the contact
+identity changed to `LOCAL_SELF 70%`.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

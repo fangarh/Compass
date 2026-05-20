@@ -299,6 +299,8 @@ foreach ($log in $logs) {
                     Bucket = $bucket
                     PlayerId = Get-FieldValue $message "playerId"
                     DisplayName = Get-FieldValue $message "displayName"
+                    LocalDevicePlayerId = Get-FieldValue $message "localDevicePlayerId"
+                    SelectedIsLocalDevice = Get-FieldValue $message "selectedIsLocalDevice"
                     IdentityLabel = Get-FieldValue $message "identityLabel"
                     IdentityScore = Get-NumberOrNull (Get-FieldValue $message "identityScore")
                     ProximityLabel = Get-FieldValue $message "proximityLabel"
@@ -689,6 +691,8 @@ $iffFieldCheckTimeline = $iffFieldChecks |
             Bucket = $_.Bucket
             PlayerId = $_.PlayerId
             DisplayName = $_.DisplayName
+            LocalDevicePlayerId = $_.LocalDevicePlayerId
+            SelectedIsLocalDevice = $_.SelectedIsLocalDevice
             IdentityLabel = $_.IdentityLabel
             IdentityScore = $_.IdentityScore
             ProximityLabel = $_.ProximityLabel
@@ -1114,8 +1118,8 @@ $report.Add("")
 if ($iffFieldCheckTimeline.Count -eq 0) {
     $report.Add("No `IFF_DIAG event=field_check` lines found. Tap the IFF record button during field checks to capture identity/proximity snapshots.")
 } else {
-    $report.Add("| Time | Window | Device | Player | Operator | Identity | Proximity | Quorum | Remote | Transport | Witness | RSSI | Age ms | Position | Direction |")
-    $report.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |")
+    $report.Add("| Time | Window | Device | Player | This Device | Operator | Identity | Proximity | Quorum | Remote | Transport | Witness | RSSI | Age ms | Position | Direction |")
+    $report.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |")
     foreach ($row in $iffFieldCheckTimeline) {
         $player = if ([string]::IsNullOrWhiteSpace($row.DisplayName)) { $row.PlayerId } else { "$($row.DisplayName) ($($row.PlayerId))" }
         $rssi = if ($null -eq $row.WitnessRssi) { "" } else { $row.WitnessRssi }
@@ -1123,7 +1127,8 @@ if ($iffFieldCheckTimeline.Count -eq 0) {
         $quorum = if ([string]::IsNullOrWhiteSpace($row.WitnessQuorum)) { "" } else { "$($row.WitnessQuorum) $($row.WitnessFreshSources)/$($row.WitnessPossibleSources)" }
         $remoteStale = if ($null -eq $row.RemoteStaleSources) { 0 } else { $row.RemoteStaleSources }
         $remote = if ([string]::IsNullOrWhiteSpace($row.RemoteWitnessContract)) { "" } else { "$($row.RemoteReportCount) reports / $($row.RemoteFreshSources) fresh / $remoteStale stale" }
-        $report.Add("| $($row.Time) | $($row.Window) | $($row.Device) | $player | $($row.OperatorVerdict) | $($row.IdentityLabel) $($row.IdentityScore) | $($row.ProximityLabel) $($row.ProximityScore) | $quorum | $remote | $($row.TransportStatus) | $($row.WitnessFreshness) | $rssi | $age | $($row.PositionLabel) $($row.PositionScore) | $($row.DirectionLabel) $($row.DirectionScore) |")
+        $localDevice = if ([string]::IsNullOrWhiteSpace($row.LocalDevicePlayerId)) { "" } else { "$($row.LocalDevicePlayerId) / selected=$($row.SelectedIsLocalDevice)" }
+        $report.Add("| $($row.Time) | $($row.Window) | $($row.Device) | $player | $localDevice | $($row.OperatorVerdict) | $($row.IdentityLabel) $($row.IdentityScore) | $($row.ProximityLabel) $($row.ProximityScore) | $quorum | $remote | $($row.TransportStatus) | $($row.WitnessFreshness) | $rssi | $age | $($row.PositionLabel) $($row.PositionScore) | $($row.DirectionLabel) $($row.DirectionScore) |")
     }
 
     $report.Add("")

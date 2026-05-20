@@ -1,6 +1,7 @@
 package net.afterday.compas;
 
 import android.app.Activity;
+import android.content.SharedPreferences;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
@@ -30,6 +31,8 @@ public class IffActivity extends Activity {
     private static final int LOCAL_PLAYER_INDEX = 0;
     private static final long APPROACH_DURATION_MS = 120000L;
     private static final long RADIO_REFRESH_MS = 2000L;
+    private static final String PREFS_NAME = "iff";
+    private static final String PREF_LOCAL_DEVICE_PLAYER_ID = "local_device_player_id";
 
     private final IffPlayer[] roster = new IffPlayer[] {
             new IffPlayer("local-you", "Вы", true),
@@ -41,6 +44,7 @@ public class IffActivity extends Activity {
     private final Handler handler = new Handler();
     private int activeTab = TAB_TEAM;
     private int selectedPlayerIndex = LOCAL_PLAYER_INDEX;
+    private String localDevicePlayerId = "local-you";
     private boolean approachActive;
     private long approachUntilMs;
 
@@ -80,6 +84,7 @@ public class IffActivity extends Activity {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         setContentView(R.layout.iff_activity);
+        loadLocalDeviceIdentity();
         bindViews();
         setTypeface();
         setListeners();
@@ -163,7 +168,11 @@ public class IffActivity extends Activity {
         approachButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                toggleApproach();
+                if (activeTab == TAB_CONTACT && !isLocalDevice(roster[selectedPlayerIndex])) {
+                    setLocalDevicePlayer(selectedPlayerIndex);
+                } else {
+                    toggleApproach();
+                }
             }
         });
         recordCheckButton.setOnClickListener(new View.OnClickListener() {
@@ -196,7 +205,7 @@ public class IffActivity extends Activity {
         approachActive = !approachActive;
         if (approachActive) {
             approachUntilMs = System.currentTimeMillis() + APPROACH_DURATION_MS;
-            selectedPlayerIndex = LOCAL_PLAYER_INDEX;
+            selectedPlayerIndex = localDevicePlayerIndex();
             activeTab = TAB_CONTACT;
             scheduleApproachExpire();
         } else {
@@ -211,7 +220,11 @@ public class IffActivity extends Activity {
     }
 
     private void render() {
-        approachButton.setText(approachActive ? "ОТМЕНИТЬ ПОДХОД" : "Я ПОДХОЖУ");
+        if (activeTab == TAB_CONTACT && !isLocalDevice(roster[selectedPlayerIndex])) {
+            approachButton.setText("ЭТОТ ТЕЛ.");
+        } else {
+            approachButton.setText(approachActive ? "ОТМЕНИТЬ ПОДХОД" : "Я ПОДХОЖУ");
+        }
         txWitnessButton.setText("TX STUB");
         simWitnessButton.setText("SIM FRESH");
         simStaleWitnessButton.setText("SIM STALE");
@@ -241,9 +254,10 @@ public class IffActivity extends Activity {
         WitnessSnapshot witness = IffRadioWitnessStore.getWitness(selected.playerId);
         Snapshot confidence = confidenceFor(selected, witness);
         IffWitnessQuorum.Snapshot quorum = witnessQuorumFor(selected, witness);
-        boolean localApproachSelected = approachActive && selected.local;
+        boolean selectedIsLocalDevice = isLocalDevice(selected);
+        boolean localApproachSelected = approachActive && selectedIsLocalDevice;
         title.setText(localApproachSelected ? "ВЫ ПОДХОДИТЕ" : selected.displayName);
-        subtitle.setText(selected.local ? "локальный игрок" : "локальный roster + radio witness");
+        subtitle.setText(selectedIsLocalDevice ? "этот телефон объявляет этого участника" : "локальный roster + radio witness");
         status.setText("OPERATOR: " + operatorVerdictLabel(confidence, quorum) + "\n"
                 + "CONFIDENCE\n" + confidence.compactStatus() + "\nWITNESSES: " + quorum.compact());
         body.setText("ИГРОК\n"
@@ -268,8 +282,9 @@ public class IffActivity extends Activity {
     private void renderTeam() {
         resetBody();
         title.setText("КОМАНДА");
-        subtitle.setText("локальный roster + Wi-Fi beacon witness");
+        subtitle.setText("локальный roster + field radio identity");
         status.setText((approachActive ? "ВЫ        ПОДХОДИТЕ   локально\n" : "")
+                + "THIS DEVICE: " + localDevicePlayer().displayName + "\n"
                 + "OPERATOR: " + teamOperatorSummaryLine() + "\n"
                 + "CURRENT WITNESS: " + currentWitnessEvidenceCount() + "\n"
                 + "STALE EVIDENCE: " + staleWitnessEvidenceCount() + "\n"
@@ -278,15 +293,19 @@ public class IffActivity extends Activity {
                 + "TRANSPORT: " + IffUdpWitnessTransport.compactStatus() + "\n"
                 + "DIRECTION: UNKNOWN");
         body.setText("Выберите участника, чтобы открыть карточку контакта.\n"
+                + "Долгое нажатие назначает, кем является этот телефон.\n"
                 + "Operator summary отделяет current witness от stale evidence.\n"
                 + "Проценты - текущая уверенность слоя, а не финальное доказательство.\n"
+                + "Field radio не должен требовать общей Wi-Fi сети.\n"
                 + "Remote witness contract: " + IffRemoteWitnessReport.CONTRACT_VERSION + "\n"
                 + "Signature status пока placeholder: " + IffRemoteWitnessReport.SIGNATURE_PENDING + "\n"
                 + "Transport stub: UDP broadcast, unsigned, debug only.\n"
                 + "Последняя проверка: " + lastFieldCheckSummary);
+        bodyContainer.removeAllViews();
         for (int i = 0; i < roster.length; i++) {
             bodyContainer.addView(createRosterButton(i));
         }
+        bodyContainer.addView(body);
     }
 
     private void renderMap() {
@@ -311,6 +330,8 @@ public class IffActivity extends Activity {
         FieldDiagnosticLog.event("IFF_DIAG", "event=field_check"
                 + " playerId=" + selected.playerId
                 + " displayName=\"" + safe(selected.displayName) + "\""
+                + " localDevicePlayerId=" + localDevicePlayerId
+                + " selectedIsLocalDevice=" + isLocalDevice(selected)
                 + " identityLabel=" + confidence.identity.label
                 + " identityScore=" + confidence.identity.score
                 + " proximityLabel=" + confidence.proximity.label
@@ -406,6 +427,56 @@ public class IffActivity extends Activity {
         bodyContainer.addView(body);
     }
 
+    private void loadLocalDeviceIdentity() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        String saved = prefs.getString(PREF_LOCAL_DEVICE_PLAYER_ID, "local-you");
+        localDevicePlayerId = playerIndexForId(saved) >= 0 ? saved : "local-you";
+    }
+
+    private void setLocalDevicePlayer(int playerIndex) {
+        IffPlayer player = roster[playerIndex];
+        localDevicePlayerId = player.playerId;
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .putString(PREF_LOCAL_DEVICE_PLAYER_ID, localDevicePlayerId)
+                .apply();
+        selectedPlayerIndex = playerIndex;
+        activeTab = TAB_CONTACT;
+        approachActive = false;
+        handler.removeCallbacks(expireApproach);
+        lastFieldCheckSummary = player.displayName + ": this device identity selected";
+        FieldDiagnosticLog.event("IFF_DIAG", "event=device_identity_selected"
+                + " localDevicePlayerId=" + player.playerId
+                + " displayName=\"" + safe(player.displayName) + "\"");
+        render();
+    }
+
+    private boolean isLocalDevice(IffPlayer player) {
+        return player != null && player.playerId.equals(localDevicePlayerId);
+    }
+
+    private IffPlayer localDevicePlayer() {
+        int index = localDevicePlayerIndex();
+        return roster[index < 0 ? LOCAL_PLAYER_INDEX : index];
+    }
+
+    private int localDevicePlayerIndex() {
+        int index = playerIndexForId(localDevicePlayerId);
+        return index < 0 ? LOCAL_PLAYER_INDEX : index;
+    }
+
+    private int playerIndexForId(String playerId) {
+        if (playerId == null) {
+            return -1;
+        }
+        for (int i = 0; i < roster.length; i++) {
+            if (playerId.equals(roster[i].playerId)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     private Button createRosterButton(final int playerIndex) {
         IffPlayer player = roster[playerIndex];
         Button button = new Button(this);
@@ -419,7 +490,8 @@ public class IffActivity extends Activity {
         WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
         Snapshot confidence = confidenceFor(player, witness);
         IffWitnessQuorum.Snapshot quorum = witnessQuorumFor(player, witness);
-        button.setText(player.displayName + "\n" + operatorRosterLine(player, confidence, quorum, witness));
+        button.setText(player.displayName + (isLocalDevice(player) ? "  [THIS DEVICE]" : "")
+                + "\n" + operatorRosterLine(player, confidence, quorum, witness));
         button.setTextSize(12);
         button.setTransformationMethod(null);
         button.setOnClickListener(new View.OnClickListener() {
@@ -430,11 +502,18 @@ public class IffActivity extends Activity {
                 render();
             }
         });
+        button.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                setLocalDevicePlayer(playerIndex);
+                return true;
+            }
+        });
         return button;
     }
 
     private String rosterRadioLabel(IffPlayer player, WitnessSnapshot witness) {
-        if (player.local && approachActive) {
+        if (isLocalDevice(player) && approachActive) {
             return "LOCAL_ONLY";
         }
         if (witness == null) {
@@ -447,7 +526,7 @@ public class IffActivity extends Activity {
     }
 
     private Snapshot confidenceFor(IffPlayer player, WitnessSnapshot witness) {
-        return IffConfidence.evaluate(player.playerId, player.local, approachActive, witness);
+        return IffConfidence.evaluate(player.playerId, isLocalDevice(player), approachActive, witness);
     }
 
     private IffWitnessQuorum.Snapshot witnessQuorumFor(IffPlayer player, WitnessSnapshot witness) {

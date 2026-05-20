@@ -444,6 +444,7 @@ public class MainActivity extends AppCompatActivity {
         if (Build.VERSION.SDK_INT >= 31) {
             addMissingPermission(permissions, Manifest.permission.BLUETOOTH_SCAN);
             addMissingPermission(permissions, Manifest.permission.BLUETOOTH_CONNECT);
+            addMissingPermission(permissions, Manifest.permission.BLUETOOTH_ADVERTISE);
         }
         if (Build.VERSION.SDK_INT >= 29) {
             addMissingPermission(permissions, Manifest.permission.ACTIVITY_RECOGNITION);
