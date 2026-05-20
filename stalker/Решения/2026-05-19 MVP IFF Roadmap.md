@@ -1025,3 +1025,52 @@ identity растет, proximity/position/direction не растут
 1. pairing/token: сделать trust не ручной галочкой, а обменом ключом/кодом
 2. operator UI: быстрее показывать stale/unknown/current для боевого решения
 ```
+
+## Реализованный срез Phase 35
+
+Добавлен боевой operator view поверх существующих IFF-слоев:
+
+```text
+CURRENT_* -> есть текущий radio witness
+STALE -> был witness, но это уже не current proof
+UNKNOWN -> рядом сейчас никто не доказан
+```
+
+Что изменилось:
+
+- `КОНТАКТ` первым делом показывает `COMBAT: state / action`;
+- добавлен блок `БОЕВОЙ ВИД`;
+- `КОМАНДА` показывает счетчики `current / stale / unknown`;
+- roster-строки начинаются с combat state;
+- current/stale строки визуально выделяются цветом;
+- `field_check` пишет `combatState` и `combatAction`;
+- analyzer экспортирует эти поля.
+
+Проверка на OnePlus `e089985a`:
+
+- debug APK собран и установлен;
+- `Main -> IFF -> КОМАНДА -> Петя -> КОНТАКТ` показал:
+  `COMBAT: UNKNOWN / NO_CURRENT_CONTACT`;
+- debug `SIM STALE` показал:
+  `COMBAT: STALE / DO_NOT_TREAT_AS_NEAR`;
+- log `field-radio-20260520-170038.log` записал:
+  `combatState=STALE`, `combatAction=DO_NOT_TREAT_AS_NEAR`,
+  `operatorVerdict=STALE_EVIDENCE_ONLY`, `proximityLabel=UNKNOWN`;
+- analyzer подтвердил эти поля в
+  `artifacts/field-analysis-phase35-combat-verify/iff-field-checks.csv`.
+
+Вывод: для полевого игрока stale теперь не выглядит как “может рядом”.
+Состояние видно быстро, и действие прямо говорит: не считать текущим ближним
+контактом. Это все еще не crypto, не GPS position и не direction.
+
+## Следующий срез
+
+Логичный следующий шаг:
+
+```text
+two-phone combat UI run:
+real BLE current -> transmitter stop -> stale -> unknown
+```
+
+То есть проверить новый боевой слой не только через `SIM STALE`, а на реальном
+Samsung/OnePlus BLE lifecycle.

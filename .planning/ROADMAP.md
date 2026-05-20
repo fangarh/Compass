@@ -850,6 +850,39 @@ the same trust fields.
 increase identity confidence, but it does not prove radio proximity, GPS
 position, or direction.
 
+## Phase 35: IFF Combat Operator View
+
+**Status:** completed
+
+**Goal:** Make the IFF screen faster to read during field play by surfacing a
+separate combat state and recommended action before detailed confidence layers.
+
+**Scope:**
+
+- Add derived combat states:
+  `CURRENT_MULTI`, `CURRENT_SINGLE`, `STALE`, `UNKNOWN`, and `LOCAL_DECLARED`.
+- Add derived combat actions:
+  `TRACK_CURRENT_CONTACT`, `WATCH_CURRENT_CONTACT`,
+  `DO_NOT_TREAT_AS_NEAR`, `NO_CURRENT_CONTACT`, and `LOCAL_STATUS_ONLY`.
+- Show combat state/action at the top of `КОНТАКТ`.
+- Add a `БОЕВОЙ ВИД` block to contact details.
+- Show combat counts on `КОМАНДА`.
+- Prefix roster rows with combat state and color current/stale rows.
+- Log and analyze `combatState` and `combatAction`.
+
+**Verification:** analyzer smoke test passed. Debug APK built successfully
+outside sandbox and installed on OnePlus `e089985a`. UIAutomator verified
+`Main -> IFF -> КОМАНДА -> Петя -> КОНТАКТ`. Without witness, `Петя` showed
+`COMBAT: UNKNOWN / NO_CURRENT_CONTACT`. After debug `SIM STALE`, the contact
+screen showed `COMBAT: STALE / DO_NOT_TREAT_AS_NEAR`; diagnostic log
+`field-radio-20260520-170038.log` recorded the same `combatState` and
+`combatAction`, with `proximityLabel=UNKNOWN`. Analyzer output
+`artifacts/field-analysis-phase35-combat-verify/iff-field-checks.csv` exported
+the combat fields.
+
+**Result:** stale evidence is now visible as stale in the combat UI, while the
+recommended action explicitly prevents treating it as current near contact.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

@@ -286,11 +286,13 @@ public class IffActivity extends Activity {
         WitnessSnapshot witness = IffRadioWitnessStore.getWitness(selected.playerId);
         Snapshot confidence = confidenceFor(selected, witness);
         IffWitnessQuorum.Snapshot quorum = witnessQuorumFor(selected, witness);
+        CombatSnapshot combat = combatFor(selected, confidence, quorum);
         boolean selectedIsLocalDevice = isLocalDevice(selected);
         boolean localApproachSelected = approachActive && selectedIsLocalDevice;
         title.setText(localApproachSelected ? "ВЫ ПОДХОДИТЕ" : selected.displayName);
         subtitle.setText(selectedIsLocalDevice ? "этот телефон объявляет этого участника" : "локальный roster trust + radio witness");
-        status.setText("OPERATOR: " + operatorVerdictLabel(confidence, quorum) + "\n"
+        status.setText("COMBAT: " + combat.state + " / " + combat.action + "\n"
+                + "OPERATOR: " + operatorVerdictLabel(confidence, quorum) + "\n"
                 + "CONFIDENCE\n" + confidence.compactStatus() + "\nWITNESSES: " + quorum.compact());
         body.setText("ИГРОК\n"
                 + "- имя: " + selected.displayName + "\n"
@@ -298,8 +300,10 @@ public class IffActivity extends Activity {
                 + "- команда: локальная IFF группа\n"
                 + "- trust: " + trustLabel(selected) + "\n"
                 + "- ожидаемый beacon: " + IffRadioWitnessStore.expectedBeaconSsid(selected.playerId) + "\n\n"
+                + "БОЕВОЙ ВИД\n"
+                + combatDetails(combat) + "\n\n"
                 + "OPERATOR VIEW\n"
-                + operatorDetails(selected, confidence, quorum) + "\n\n"
+                + operatorDetails(selected, confidence, quorum, combat) + "\n\n"
                 + "СЛОИ УВЕРЕННОСТИ\n"
                 + confidenceDetails(confidence) + "\n\n"
                 + "СВИДЕТЕЛИ\n"
@@ -322,6 +326,9 @@ public class IffActivity extends Activity {
                 + "THIS DEVICE: " + localDevicePlayer().displayName + "\n"
                 + "OPERATOR: " + teamOperatorSummaryLine()
                 + " / TRUSTED " + trustedRosterCount() + "/" + (roster.length - 1) + "\n"
+                + "COMBAT: current " + combatStateCount("CURRENT")
+                + " / stale " + combatStateCount("STALE")
+                + " / unknown " + combatStateCount("UNKNOWN") + "\n"
                 + "WITNESS: current " + currentWitnessEvidenceCount()
                 + " / stale " + staleWitnessEvidenceCount()
                 + " / radio " + freshWitnessCount() + "/" + strongProximityCount() + "\n"
@@ -332,6 +339,7 @@ public class IffActivity extends Activity {
         body.setText("Выберите участника, чтобы открыть карточку контакта.\n"
                 + "Долгое нажатие назначает, кем является этот телефон.\n"
                 + "TRUST помечает участника локально доверенным, но не доказывает proximity.\n"
+                + "Боевой статус показывает current/stale/unknown отдельно от identity.\n"
                 + "Operator summary отделяет current witness от stale evidence.\n"
                 + "Проценты - текущая уверенность слоя, а не финальное доказательство.\n"
                 + "Field radio не должен требовать общей Wi-Fi сети.\n"
@@ -381,6 +389,7 @@ public class IffActivity extends Activity {
         WitnessSnapshot witness = IffRadioWitnessStore.getWitness(selected.playerId);
         Snapshot confidence = confidenceFor(selected, witness);
         IffWitnessQuorum.Snapshot quorum = witnessQuorumFor(selected, witness);
+        CombatSnapshot combat = combatFor(selected, confidence, quorum);
         boolean trustedPlayer = isTrustedPlayer(selected);
         String trustLabel = trustLabel(selected);
         String witnessState = witness == null
@@ -394,6 +403,8 @@ public class IffActivity extends Activity {
                 + " selectedIsLocalDevice=" + isLocalDevice(selected)
                 + " trustedPlayer=" + trustedPlayer
                 + " trustLabel=" + trustLabel
+                + " combatState=" + combat.state
+                + " combatAction=" + combat.action
                 + " identityLabel=" + confidence.identity.label
                 + " identityScore=" + confidence.identity.score
                 + " proximityLabel=" + confidence.proximity.label
@@ -418,6 +429,7 @@ public class IffActivity extends Activity {
                 + " localApproach=" + approachActive);
         lastFieldCheckSummary = selected.displayName + ": identity " + confidence.identity.score
                 + "% / proximity " + confidence.proximity.score + "% / trust " + trustLabel
+                + " / combat " + combat.state
                 + " / witness " + (witness == null ? "none" : witness.freshnessLabel());
         activeTab = TAB_CONTACT;
         render();
@@ -660,13 +672,14 @@ public class IffActivity extends Activity {
         params.setMargins(0, dp(4), 0, 0);
         button.setLayoutParams(params);
         button.setBackgroundResource(R.drawable.popup_button);
-        button.setTextColor(playerIndex == selectedPlayerIndex ? 0xffffd16a : 0xffffffff);
         WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
         Snapshot confidence = confidenceFor(player, witness);
         IffWitnessQuorum.Snapshot quorum = witnessQuorumFor(player, witness);
+        CombatSnapshot combat = combatFor(player, confidence, quorum);
+        button.setTextColor(playerIndex == selectedPlayerIndex ? 0xffffd16a : combatTextColor(combat));
         button.setText(player.displayName + (isLocalDevice(player) ? "  [THIS DEVICE]" : "")
                 + (!isLocalDevice(player) && hasLocalTrust(player) ? "  [TRUSTED]" : "")
-                + "\n" + operatorRosterLine(player, confidence, quorum, witness));
+                + "\n" + operatorRosterLine(player, confidence, quorum, witness, combat));
         button.setTextSize(12);
         button.setTransformationMethod(null);
         button.setOnClickListener(new View.OnClickListener() {
@@ -708,6 +721,33 @@ public class IffActivity extends Activity {
     private IffWitnessQuorum.Snapshot witnessQuorumFor(IffPlayer player, WitnessSnapshot witness) {
         int possibleSources = roster.length - 1;
         return IffWitnessQuorum.evaluate(player.playerId, witness, IffRemoteWitnessStore.getReportsFor(player.playerId), possibleSources);
+    }
+
+    private CombatSnapshot combatFor(IffPlayer selected, Snapshot confidence, IffWitnessQuorum.Snapshot quorum) {
+        if (isLocalDevice(selected) && approachActive) {
+            return new CombatSnapshot("LOCAL_DECLARED", "LOCAL_STATUS_ONLY",
+                    "локальная кнопка сообщает намерение игрока, но не radio proof");
+        }
+        if (quorum.hasMultiWitness()) {
+            return new CombatSnapshot("CURRENT_MULTI", "TRACK_CURRENT_CONTACT",
+                    "несколько fresh witness источников; crypto identity все еще отдельно");
+        }
+        if (quorum.freshSources > 0) {
+            return new CombatSnapshot("CURRENT_SINGLE", "WATCH_CURRENT_CONTACT",
+                    "есть fresh radio witness, но только один источник");
+        }
+        if (quorum.staleSources > 0 || "STALE_RADIO".equals(confidence.proximity.label)) {
+            return new CombatSnapshot("STALE", "DO_NOT_TREAT_AS_NEAR",
+                    "есть только старое radio evidence; это не current proximity proof");
+        }
+        return new CombatSnapshot("UNKNOWN", "NO_CURRENT_CONTACT",
+                "нет текущего radio witness; участник не считается обнаруженным рядом");
+    }
+
+    private String combatDetails(CombatSnapshot combat) {
+        return "- state: " + combat.state + "\n"
+                + "- action: " + combat.action + "\n"
+                + "- reason: " + combat.reason;
     }
 
     private String confidenceDetails(Snapshot confidence) {
@@ -764,8 +804,10 @@ public class IffActivity extends Activity {
                 + "- direction и точная position пока неизвестны";
     }
 
-    private String operatorDetails(IffPlayer selected, Snapshot confidence, IffWitnessQuorum.Snapshot quorum) {
+    private String operatorDetails(IffPlayer selected, Snapshot confidence, IffWitnessQuorum.Snapshot quorum,
+                                   CombatSnapshot combat) {
         return "- verdict: " + operatorVerdictLabel(confidence, quorum) + "\n"
+                + "- combat: " + combat.state + " / " + combat.action + "\n"
                 + "- trust: " + trustLabel(selected) + "\n"
                 + "- current witnesses: " + quorum.freshSources + "/" + quorum.possibleSources + "\n"
                 + "- stale evidence: " + quorum.staleSources + "\n"
@@ -794,10 +836,20 @@ public class IffActivity extends Activity {
     }
 
     private String operatorRosterLine(IffPlayer player, Snapshot confidence, IffWitnessQuorum.Snapshot quorum,
-                                      WitnessSnapshot witness) {
-        return operatorVerdictLabel(confidence, quorum) + " / id " + confidence.identity.score
+                                      WitnessSnapshot witness, CombatSnapshot combat) {
+        return combat.state + " / " + operatorVerdictLabel(confidence, quorum) + " / id " + confidence.identity.score
                 + "% / prox " + confidence.proximity.score + "% / " + trustRosterBadge(player)
                 + " / " + rosterRadioLabel(player, witness);
+    }
+
+    private int combatTextColor(CombatSnapshot combat) {
+        if (combat.state.startsWith("CURRENT")) {
+            return 0xff7dff73;
+        }
+        if ("STALE".equals(combat.state) || "LOCAL_DECLARED".equals(combat.state)) {
+            return 0xffffd16a;
+        }
+        return 0xffffffff;
     }
 
     private String witnessDetails(WitnessSnapshot witness) {
@@ -928,6 +980,23 @@ public class IffActivity extends Activity {
         return count;
     }
 
+    private int combatStateCount(String statePrefix) {
+        int count = 0;
+        for (int i = 0; i < roster.length; i++) {
+            IffPlayer player = roster[i];
+            if (isLocalDevice(player)) {
+                continue;
+            }
+            WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
+            Snapshot confidence = confidenceFor(player, witness);
+            IffWitnessQuorum.Snapshot quorum = witnessQuorumFor(player, witness);
+            if (combatFor(player, confidence, quorum).state.startsWith(statePrefix)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     private int staleWitnessEvidenceCount() {
         int count = 0;
         for (int i = 0; i < roster.length; i++) {
@@ -1041,6 +1110,18 @@ public class IffActivity extends Activity {
             this.playerId = playerId;
             this.displayName = displayName;
             this.local = local;
+        }
+    }
+
+    private static final class CombatSnapshot {
+        final String state;
+        final String action;
+        final String reason;
+
+        CombatSnapshot(String state, String action, String reason) {
+            this.state = state;
+            this.action = action;
+            this.reason = reason;
         }
     }
 }

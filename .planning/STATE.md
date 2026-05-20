@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 34: IFF Local Trust Layer completed.
+Phase 35: IFF Combat Operator View completed.
 
 ## Last Verified Baseline
 
@@ -23,9 +23,9 @@ Phase 34: IFF Local Trust Layer completed.
 
 ## Next Action
 
-Next useful slice: turn the local trust layer into an actual pairing/token
-design, or first polish the operator view for fast stale/unknown decisions in
-field play.
+Next useful slice: either turn local trust into an actual pairing/token design,
+or run a two-phone combat UI check with real BLE current/stale/unknown instead
+of debug simulated stale witnesses.
 
 ## Verification
 
@@ -830,3 +830,37 @@ field play.
   proximityLabel=UNKNOWN proximityScore=0`.
 - Analyzer verification output:
   `artifacts/field-analysis-phase34-trust-verify/iff-field-checks.csv`.
+
+2026-05-20 Phase 35:
+
+- Added derived combat state/action on top of existing IFF evidence:
+  - `CURRENT_MULTI / TRACK_CURRENT_CONTACT`;
+  - `CURRENT_SINGLE / WATCH_CURRENT_CONTACT`;
+  - `STALE / DO_NOT_TREAT_AS_NEAR`;
+  - `UNKNOWN / NO_CURRENT_CONTACT`;
+  - `LOCAL_DECLARED / LOCAL_STATUS_ONLY`.
+- `КОНТАКТ` now starts with `COMBAT: ...`.
+- Contact details now include a `БОЕВОЙ ВИД` block with state, action, and
+  reason.
+- `КОМАНДА` now shows combat counts:
+  `current / stale / unknown`.
+- Roster rows are prefixed with combat state and current/stale rows get
+  stronger color.
+- `IFF_DIAG event=field_check` now logs `combatState` and `combatAction`.
+- `scripts/analyze-field-logs.ps1` exports combat fields in CSV and Markdown.
+- `scripts/test-analyze-field-logs.ps1` passed.
+- `:app:assembleDebug` completed successfully outside sandbox.
+- APK installed on OnePlus `e089985a`.
+- UIAutomator verified:
+  `Main -> IFF -> КОМАНДА -> Петя -> КОНТАКТ`.
+- Without witness, `Петя` showed:
+  `COMBAT: UNKNOWN / NO_CURRENT_CONTACT`.
+- After debug `SIM STALE`, `Петя` showed:
+  `COMBAT: STALE / DO_NOT_TREAT_AS_NEAR`.
+- Diagnostic log `field-radio-20260520-170038.log` recorded:
+  `combatState=STALE combatAction=DO_NOT_TREAT_AS_NEAR
+  operatorVerdict=STALE_EVIDENCE_ONLY proximityLabel=UNKNOWN`.
+- Analyzer verification output:
+  `artifacts/field-analysis-phase35-combat-verify/iff-field-checks.csv`.
+- App was force-stopped after verification to avoid leaving BLE foreground
+  radio running.
