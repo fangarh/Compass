@@ -603,3 +603,44 @@ foreground lifecycle -> freshness expiry -> UI no stale false-positive
 
 Нужно решить, как IFF radio живет, когда экран погашен/приложение свернуто, и
 как оператор видит переход fresh -> stale -> unknown именно для BLE witness.
+
+## Реализованный срез Phase 26
+
+Добавлен честный mock тактической карты:
+
+```text
+roster slots -> radio freshness colors -> no GPS / no bearing
+```
+
+Что изменилось:
+
+- вкладка `КАРТА` получила custom canvas `IffTacticalMapView`;
+- карта рисует grid, local device, roster slots и состояние radio witness;
+- выбранный contact и свежий BLE witness визуально выделяются;
+- внутри карты явно написано `NO GPS POSITION / NO BEARING`;
+- статус карты явно держит `POSITION/DIRECTION: UNKNOWN 0%`;
+- слоты карты являются порядком roster, а не направлением на игрока.
+
+Проверка:
+
+- debug APK собран;
+- APK установлен на Samsung `R3CT20C8A8N` и OnePlus `e089985a`;
+- `Main -> IFF -> КАРТА` проверен на обоих телефонах;
+- OnePlus screenshot подтвердил, что canvas рисуется и не выдает GPS/азимут за
+  известные данные.
+
+Важно: это не настоящая карта и не навигационный слой. Это только место, куда
+позже можно будет положить GPS error circle, witness geometry и direction,
+когда эти слои будут доказаны отдельно.
+
+## Следующий срез
+
+BLE path остается главным полевым направлением:
+
+```text
+visible-screen skeleton -> foreground lifecycle -> fresh/stale/unknown policy
+```
+
+Карта пока может оставаться mock. Следующий риск для MVP - не дизайн карты, а
+то, как BLE witness живет в полевых условиях при гашении экрана, сворачивании
+приложения и истечении freshness window.

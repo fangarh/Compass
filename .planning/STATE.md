@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 25: IFF BLE Field Radio Skeleton completed.
+Phase 26: IFF Tactical Map Mock completed.
 
 ## Last Verified Baseline
 
@@ -24,8 +24,9 @@ Phase 25: IFF BLE Field Radio Skeleton completed.
 ## Next Action
 
 Next useful slice: turn the visible-screen BLE skeleton into a field-ready
-radio path with lifecycle policy, expiry behavior, and clearer separation from
-legacy Wi-Fi witness evidence.
+radio path with lifecycle policy, expiry behavior, and clearer fresh/stale UI
+for BLE witnesses. The tactical map can remain a mock until position and
+direction have their own evidence layers.
 
 ## Verification
 
@@ -555,3 +556,27 @@ legacy Wi-Fi witness evidence.
 - Result: BLE now proves fresh nearby radio contact without common Wi-Fi, but
   identity remains a roster claim without crypto and direction remains
   `UNKNOWN`.
+
+2026-05-20 Phase 26:
+
+- Added `IffTacticalMapView` as a custom canvas for the IFF `КАРТА` tab.
+- The map renders:
+  - a tactical grid and rings;
+  - `IFF TACTICAL MAP MOCK`;
+  - `NO GPS POSITION / NO BEARING`;
+  - the local device roster identity;
+  - fixed roster-order slots for team members;
+  - current/stale/unknown radio evidence colors.
+- The map status was kept compact and explicit:
+  `POSITION/DIRECTION: UNKNOWN 0%`.
+- Slot placement is documented in UI as roster order, not direction.
+- `:app:assembleDebug` completed successfully.
+- APK installed on Samsung `R3CT20C8A8N` and OnePlus `e089985a`.
+- UIAutomator verified `Main -> IFF -> КАРТА` on both phones.
+- Both phones showed `КАРТА`, `mock карта: freshness без азимута`,
+  `POSITION/DIRECTION: UNKNOWN 0%`, and a custom map canvas view.
+- OnePlus screenshot confirmed the canvas rendered grid, roster points, BLE
+  freshness color, and no GPS/bearing claims.
+- Result: IFF now has a map-shaped tactical surface for future witness/position
+  work, but it remains a truthful mock and does not claim exact position or
+  direction.

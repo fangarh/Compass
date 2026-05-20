@@ -588,6 +588,33 @@ on Samsung `R3CT20C8A8N` and OnePlus `e089985a`. Both phones opened
 common Wi-Fi network. It remains a roster claim, not cryptographic identity,
 and it still does not provide exact position or direction.
 
+## Phase 26: IFF Tactical Map Mock
+
+**Status:** completed
+
+**Goal:** Add a map-shaped tactical surface for IFF witness visualization while
+remaining honest that there is no GPS placement or bearing yet.
+
+**Scope:**
+
+- Add a custom `IffTacticalMapView` to the `КАРТА` tab.
+- Render fixed roster slots, local device identity, selected contact, and
+  current/stale/unknown radio state colors.
+- Show explicit `NO GPS POSITION / NO BEARING` labeling inside the map.
+- Keep `POSITION/DIRECTION: UNKNOWN 0%` in the map status.
+- Treat slots as roster order only, not direction.
+
+**Verification:** debug APK builds. APK installed on Samsung `R3CT20C8A8N` and
+OnePlus `e089985a`. UIAutomator verified `Main -> IFF -> КАРТА` on both
+phones, with `POSITION/DIRECTION: UNKNOWN 0%` and a custom canvas view present.
+OnePlus screenshot confirmed the mock map renders grid, roster points, BLE
+freshness color, and `NO GPS POSITION / NO BEARING` without claiming exact
+position or azimuth.
+
+**Result:** the MVP now has a tactical map placeholder that can later receive
+real position/witness geometry, but today it only visualizes roster/radio
+freshness and keeps position/direction unknown.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

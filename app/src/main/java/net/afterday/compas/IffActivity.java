@@ -13,6 +13,7 @@ import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import java.util.ArrayList;
 import java.util.List;
 import net.afterday.compas.iff.IffBleFieldRadio;
 import net.afterday.compas.iff.IffConfidence;
@@ -21,6 +22,7 @@ import net.afterday.compas.iff.IffRemoteWitnessReport;
 import net.afterday.compas.iff.IffRemoteWitnessStore;
 import net.afterday.compas.iff.IffRadioWitnessStore;
 import net.afterday.compas.iff.IffRadioWitnessStore.WitnessSnapshot;
+import net.afterday.compas.iff.IffTacticalMapView;
 import net.afterday.compas.iff.IffUdpWitnessTransport;
 import net.afterday.compas.iff.IffWitnessQuorum;
 import net.afterday.compas.logging.FieldDiagnosticLog;
@@ -315,11 +317,21 @@ public class IffActivity extends Activity {
     private void renderMap() {
         resetBody();
         title.setText("КАРТА");
-        subtitle.setText("позиции и свидетели");
-        status.setText("POSITION: UNKNOWN 0%\nLOCAL RADIO: " + freshWitnessCount() + " fresh\n"
-                + "REMOTE REPORTS: " + remoteReportCount() + "\n"
+        subtitle.setText("mock карта: freshness без азимута");
+        status.setText("POSITION/DIRECTION: UNKNOWN 0%\n"
+                + "RADIO: local " + freshWitnessCount() + " fresh / remote " + remoteReportCount() + "\n"
                 + "FIELD RADIO: " + IffBleFieldRadio.compactStatus() + "\n"
-                + "UDP DEBUG: " + IffUdpWitnessTransport.compactStatus() + "\nDIRECTION: UNKNOWN 0%");
+                + "UDP DEBUG: " + IffUdpWitnessTransport.compactStatus());
+        bodyContainer.removeAllViews();
+        IffTacticalMapView mapView = new IffTacticalMapView(this);
+        LinearLayout.LayoutParams mapParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(220));
+        mapParams.setMargins(0, 0, 0, dp(8));
+        mapView.setLayoutParams(mapParams);
+        mapView.setState(localDevicePlayer().displayName, mapPoints());
+        bodyContainer.addView(mapView);
+        bodyContainer.addView(body);
         body.setText(mapWitnessList());
     }
 
@@ -771,7 +783,7 @@ public class IffActivity extends Activity {
 
     private String mapWitnessList() {
         StringBuilder builder = new StringBuilder();
-        builder.append("КАРТА ПОКА НЕ РИСУЕТ АЗИМУТ\n\n");
+        builder.append("КАРТА MOCK: СЛОТЫ НЕ ЯВЛЯЮТСЯ НАПРАВЛЕНИЕМ\n\n");
         for (int i = 0; i < roster.length; i++) {
             IffPlayer player = roster[i];
             WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
@@ -785,6 +797,38 @@ public class IffActivity extends Activity {
         builder.append("\nGPS и направление будут отдельными слоями уверенности.\n")
                 .append("BLE field radio не требует общей Wi-Fi сети; TX STUB остается debug UDP.");
         return builder.toString();
+    }
+
+    private List<IffTacticalMapView.MapPoint> mapPoints() {
+        List<IffTacticalMapView.MapPoint> points = new ArrayList<>();
+        for (int i = 0; i < roster.length; i++) {
+            IffPlayer player = roster[i];
+            WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
+            IffWitnessQuorum.Snapshot quorum = witnessQuorumFor(player, witness);
+            boolean current = quorum.freshSources > 0;
+            boolean stale = !current && quorum.staleSources > 0;
+            points.add(new IffTacticalMapView.MapPoint(
+                    player.displayName + (isLocalDevice(player) ? " [THIS]" : ""),
+                    mapRadioLabel(witness, quorum),
+                    isLocalDevice(player),
+                    i == selectedPlayerIndex,
+                    current,
+                    stale));
+        }
+        return points;
+    }
+
+    private String mapRadioLabel(WitnessSnapshot witness, IffWitnessQuorum.Snapshot quorum) {
+        if (witness != null) {
+            return witness.freshnessLabel() + " " + witness.rssi + "dBm " + formatAge(witness.ageMs());
+        }
+        if (quorum.remoteFreshSources > 0) {
+            return "REMOTE_FRESH x" + quorum.remoteFreshSources;
+        }
+        if (quorum.staleSources > 0) {
+            return "STALE_EVIDENCE";
+        }
+        return "UNKNOWN";
     }
 
     private String formatAge(long ageMs) {
