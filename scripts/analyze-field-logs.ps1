@@ -317,6 +317,7 @@ foreach ($log in $logs) {
                     RemoteReportCount = Get-NumberOrNull (Get-FieldValue $message "remoteReportCount")
                     RemoteFreshSources = Get-NumberOrNull (Get-FieldValue $message "remoteFreshSources")
                     RemoteStaleSources = Get-NumberOrNull (Get-FieldValue $message "remoteStaleSources")
+                    FieldRadioStatus = Get-FieldValue $message "fieldRadioStatus"
                     TransportStatus = Get-FieldValue $message "transportStatus"
                     WitnessFreshness = Get-FieldValue $message "witness"
                     WitnessRssi = Get-NumberOrNull (Get-FieldValue $message "rssi")
@@ -709,6 +710,7 @@ $iffFieldCheckTimeline = $iffFieldChecks |
             RemoteReportCount = $_.RemoteReportCount
             RemoteFreshSources = $_.RemoteFreshSources
             RemoteStaleSources = $_.RemoteStaleSources
+            FieldRadioStatus = $_.FieldRadioStatus
             TransportStatus = $_.TransportStatus
             WitnessFreshness = $_.WitnessFreshness
             WitnessRssi = $_.WitnessRssi
@@ -1118,8 +1120,8 @@ $report.Add("")
 if ($iffFieldCheckTimeline.Count -eq 0) {
     $report.Add("No `IFF_DIAG event=field_check` lines found. Tap the IFF record button during field checks to capture identity/proximity snapshots.")
 } else {
-    $report.Add("| Time | Window | Device | Player | This Device | Operator | Identity | Proximity | Quorum | Remote | Transport | Witness | RSSI | Age ms | Position | Direction |")
-    $report.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |")
+    $report.Add("| Time | Window | Device | Player | This Device | Operator | Identity | Proximity | Quorum | Remote | Field Radio | UDP Debug | Witness | RSSI | Age ms | Position | Direction |")
+    $report.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |")
     foreach ($row in $iffFieldCheckTimeline) {
         $player = if ([string]::IsNullOrWhiteSpace($row.DisplayName)) { $row.PlayerId } else { "$($row.DisplayName) ($($row.PlayerId))" }
         $rssi = if ($null -eq $row.WitnessRssi) { "" } else { $row.WitnessRssi }
@@ -1128,7 +1130,7 @@ if ($iffFieldCheckTimeline.Count -eq 0) {
         $remoteStale = if ($null -eq $row.RemoteStaleSources) { 0 } else { $row.RemoteStaleSources }
         $remote = if ([string]::IsNullOrWhiteSpace($row.RemoteWitnessContract)) { "" } else { "$($row.RemoteReportCount) reports / $($row.RemoteFreshSources) fresh / $remoteStale stale" }
         $localDevice = if ([string]::IsNullOrWhiteSpace($row.LocalDevicePlayerId)) { "" } else { "$($row.LocalDevicePlayerId) / selected=$($row.SelectedIsLocalDevice)" }
-        $report.Add("| $($row.Time) | $($row.Window) | $($row.Device) | $player | $localDevice | $($row.OperatorVerdict) | $($row.IdentityLabel) $($row.IdentityScore) | $($row.ProximityLabel) $($row.ProximityScore) | $quorum | $remote | $($row.TransportStatus) | $($row.WitnessFreshness) | $rssi | $age | $($row.PositionLabel) $($row.PositionScore) | $($row.DirectionLabel) $($row.DirectionScore) |")
+        $report.Add("| $($row.Time) | $($row.Window) | $($row.Device) | $player | $localDevice | $($row.OperatorVerdict) | $($row.IdentityLabel) $($row.IdentityScore) | $($row.ProximityLabel) $($row.ProximityScore) | $quorum | $remote | $($row.FieldRadioStatus) | $($row.TransportStatus) | $($row.WitnessFreshness) | $rssi | $age | $($row.PositionLabel) $($row.PositionScore) | $($row.DirectionLabel) $($row.DirectionScore) |")
     }
 
     $report.Add("")

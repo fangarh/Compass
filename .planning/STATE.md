@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 21: IFF Operator Witness Summary completed.
+Phase 25: IFF BLE Field Radio Skeleton completed.
 
 ## Last Verified Baseline
 
@@ -23,9 +23,9 @@ Phase 21: IFF Operator Witness Summary completed.
 
 ## Next Action
 
-Next useful slice: define the first real remote witness transport stub while
-keeping reports unsigned and identity unchanged. Use the second phone when it
-is charged; until then, keep transport test points local and log-driven.
+Next useful slice: turn the visible-screen BLE skeleton into a field-ready
+radio path with lifecycle policy, expiry behavior, and clearer separation from
+legacy Wi-Fi witness evidence.
 
 ## Verification
 
@@ -525,3 +525,33 @@ is charged; until then, keep transport test points local and log-driven.
   - `THIS DEVICE: Петя`;
   - roster row `Петя [THIS DEVICE]`;
   - contact identity `LOCAL_SELF 70%`.
+
+2026-05-20 Phase 25:
+
+- Field conclusion: players cannot be assumed to share one Wi-Fi network in
+  the field.
+- Added `IffBleFieldRadio` as the first no-infrastructure radio skeleton.
+- BLE advertises the current per-device roster identity from `THIS DEVICE`.
+- BLE scan accepts known Compass IFF payloads and updates
+  `IffRadioWitnessStore` with `BLE_IFF_*` witness snapshots.
+- Contact/team/map UI now shows `FIELD RADIO: ble adv=... scan=... rx=...`.
+- `IFF_DIAG event=field_check` now records `fieldRadioStatus`.
+- Analyzer exports `FieldRadioStatus` into IFF field-check CSV/Markdown rows.
+- Team roster rows were compacted so the roster remains usable on landscape
+  phone screens after adding field-radio status.
+- `:app:assembleDebug` completed successfully.
+- `scripts/test-analyze-field-logs.ps1` passed.
+- APK installed on Samsung `R3CT20C8A8N` and OnePlus `e089985a`.
+- Samsung persisted `THIS DEVICE: Петя`; OnePlus used `THIS DEVICE: Вы`.
+- BLE verification:
+  - Samsung logged `ble_field_radio_rx playerId=local-you localPlayerId=petya`;
+  - OnePlus logged `ble_field_radio_rx playerId=petya localPlayerId=local-you`;
+  - Samsung `field_check` recorded witness `BLE_IFF_YOU`, RSSI `-38`,
+    age `573 ms`;
+  - OnePlus `field_check` recorded witness `BLE_IFF_PETYA`, RSSI `-43`,
+    age `5 ms`.
+- Analyzer completed on `artifacts/iff-field-session-20260520-1114-ble` and
+  wrote `artifacts/iff-field-analysis-20260520-1114-ble`.
+- Result: BLE now proves fresh nearby radio contact without common Wi-Fi, but
+  identity remains a roster claim without crypto and direction remains
+  `UNKNOWN`.

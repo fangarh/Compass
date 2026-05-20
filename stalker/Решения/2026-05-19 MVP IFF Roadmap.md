@@ -559,3 +559,47 @@ THIS DEVICE: Петя -> BLE advertise Петя -> второй телефон s
 
 Ограничение остается честным: BLE beacon доказывает свежий radio contact, но
 не доказывает криптографическую личность и не дает точный азимут.
+
+## Реализованный срез Phase 25
+
+Добавлен BLE field radio skeleton без общей Wi-Fi сети:
+
+```text
+THIS DEVICE: Петя -> BLE advertise Петя
+THIS DEVICE: Вы -> BLE scan -> BLE_IFF_PETYA witness
+```
+
+Что изменилось:
+
+- IFF-экран запускает BLE advertise и scan, пока он открыт;
+- payload содержит только compact roster claim, не криптографический токен;
+- выбранная per-device identity используется как local BLE claim;
+- принятый BLE claim превращается в radio witness `BLE_IFF_*`;
+- UI показывает отдельный `FIELD RADIO` status;
+- diagnostic log пишет `ble_field_radio_*`, `ble_radio_witness` и
+  `fieldRadioStatus` в `field_check`;
+- analyzer выводит `FieldRadioStatus` в IFF field-check table.
+
+Проверка на двух телефонах:
+
+- Samsung: `THIS DEVICE: Петя`;
+- OnePlus: `THIS DEVICE: Вы`;
+- Samsung принял BLE claim `local-you`;
+- OnePlus принял BLE claim `petya`;
+- OnePlus field-check: `BLE_IFF_PETYA`, RSSI `-43 dBm`, age `5 ms`;
+- Samsung field-check: `BLE_IFF_YOU`, RSSI `-38 dBm`, age `573 ms`.
+
+Вывод: для MVP больше не требуется общая Wi-Fi сеть между игроками. BLE дает
+свежесть и грубую близость. Он все еще не доказывает криптографическую
+identity, не дает точную позицию и не дает direction.
+
+## Следующий срез
+
+Сделать BLE path полевым, а не только visible-screen skeleton:
+
+```text
+foreground lifecycle -> freshness expiry -> UI no stale false-positive
+```
+
+Нужно решить, как IFF radio живет, когда экран погашен/приложение свернуто, и
+как оператор видит переход fresh -> stale -> unknown именно для BLE witness.

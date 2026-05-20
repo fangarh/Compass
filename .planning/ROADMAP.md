@@ -551,7 +551,45 @@ on Samsung `R3CT20C8A8N` and OnePlus `e089985a`. Samsung UI verified
 `THIS DEVICE: Петя`, roster showed `Петя [THIS DEVICE]`, and the contact
 identity changed to `LOCAL_SELF 70%`.
 
+## Phase 25: IFF BLE Field Radio Skeleton
+
+**Status:** completed
+
+**Goal:** Add the first no-infrastructure IFF radio path so nearby phones can
+advertise and scan roster identity claims without a shared Wi-Fi network.
+
+**Scope:**
+
+- Add `IffBleFieldRadio` for BLE advertise/scan while the IFF screen is visible.
+- Advertise the current per-device `THIS DEVICE` roster identity.
+- Decode known Compass IFF BLE payloads from other phones.
+- Convert received BLE advertisements into local radio witness snapshots.
+- Show `FIELD RADIO` status in contact, team, and map views.
+- Log BLE start/RX/witness events and include `fieldRadioStatus` in
+  `IFF_DIAG event=field_check`.
+- Export `FieldRadioStatus` from the analyzer.
+- Keep the team roster usable on dense landscape phone screens.
+
+**Verification:** debug APK builds. Analyzer smoke test passes. APK installed
+on Samsung `R3CT20C8A8N` and OnePlus `e089985a`. Both phones opened
+`Main -> IFF`. Samsung used `THIS DEVICE: Петя`; OnePlus used
+`THIS DEVICE: Вы`. BLE ran in both directions:
+
+- Samsung logged `ble_field_radio_rx playerId=local-you localPlayerId=petya`.
+- OnePlus logged `ble_field_radio_rx playerId=petya localPlayerId=local-you`.
+- OnePlus contact for `Петя` showed witness `BLE_IFF_PETYA`, RSSI `-43 dBm`,
+  age `5 ms`.
+- Samsung contact for `Вы` recorded witness `BLE_IFF_YOU`, RSSI `-38 dBm`,
+  age `573 ms`.
+- Analyzer completed on `artifacts/iff-field-session-20260520-1114-ble` and
+  wrote `artifacts/iff-field-analysis-20260520-1114-ble`.
+
+**Result:** BLE now proves fresh nearby radio presence without relying on a
+common Wi-Fi network. It remains a roster claim, not cryptographic identity,
+and it still does not provide exact position or direction.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.
-- Keep BLE as a deferred architecture option, not a near-term implementation.
+- Add a foreground/background strategy for field BLE operation after the visible
+  IFF-screen skeleton is stable.

@@ -10,7 +10,7 @@ public final class IffConfidence {
         Confidence identity = identity(localPlayer, localApproachActive, witness);
         Confidence proximity = proximity(localPlayer, localApproachActive, witness);
         Confidence position = new Confidence("UNKNOWN", 0, "GPS слой еще не подключен");
-        Confidence direction = new Confidence("UNKNOWN", 0, "Wi-Fi RSSI не дает азимут");
+        Confidence direction = new Confidence("UNKNOWN", 0, "radio RSSI не дает азимут");
         return new Snapshot(playerId, identity, proximity, position, direction);
     }
 

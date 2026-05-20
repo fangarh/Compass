@@ -56,6 +56,31 @@ public final class IffRadioWitnessStore {
         }
     }
 
+    public static void updateFromBleAdvert(String playerId, String sourceAddress, int rssi) {
+        if (playerIndexCode(playerId) < 0) {
+            return;
+        }
+        long now = SystemClock.elapsedRealtime();
+        WitnessSnapshot next = new WitnessSnapshot(
+                playerId,
+                expectedBleBeaconName(playerId),
+                "ble:" + safe(sourceAddress),
+                rssi,
+                0,
+                now,
+                now,
+                true);
+        boolean changed = putIfNewer(next);
+        if (changed) {
+            FieldDiagnosticLog.event("IFF_DIAG", "event=ble_radio_witness"
+                    + " playerId=" + playerId
+                    + " beacon=\"" + expectedBleBeaconName(playerId) + "\""
+                    + " address=" + safe(sourceAddress)
+                    + " rssi=" + rssi
+                    + " ageMs=0");
+        }
+    }
+
     public static WitnessSnapshot getWitness(String playerId) {
         synchronized (LOCK) {
             return WITNESSES.get(playerId);
@@ -76,6 +101,42 @@ public final class IffRadioWitnessStore {
             return SSID_PREFIX + "ZHENYA";
         }
         return SSID_PREFIX + playerId.toUpperCase(Locale.US);
+    }
+
+    public static String expectedBleBeaconName(String playerId) {
+        return "BLE_IFF_" + playerToken(playerId);
+    }
+
+    public static int playerIndexCode(String playerId) {
+        if ("local-you".equals(playerId)) {
+            return 1;
+        }
+        if ("petya".equals(playerId)) {
+            return 2;
+        }
+        if ("vasya".equals(playerId)) {
+            return 3;
+        }
+        if ("zhenya".equals(playerId)) {
+            return 4;
+        }
+        return -1;
+    }
+
+    public static String playerIdFromCode(int code) {
+        if (code == 1) {
+            return "local-you";
+        }
+        if (code == 2) {
+            return "petya";
+        }
+        if (code == 3) {
+            return "vasya";
+        }
+        if (code == 4) {
+            return "zhenya";
+        }
+        return null;
     }
 
     private static boolean putIfNewer(WitnessSnapshot next) {
@@ -118,6 +179,22 @@ public final class IffRadioWitnessStore {
         }
         FieldDiagnosticLog.event("IFF_DIAG", "event=unknown_radio_beacon ssid=\"" + safe(ssid) + "\"");
         return null;
+    }
+
+    private static String playerToken(String playerId) {
+        if ("local-you".equals(playerId)) {
+            return "YOU";
+        }
+        if ("petya".equals(playerId)) {
+            return "PETYA";
+        }
+        if ("vasya".equals(playerId)) {
+            return "VASYA";
+        }
+        if ("zhenya".equals(playerId)) {
+            return "ZHENYA";
+        }
+        return safe(playerId).toUpperCase(Locale.US);
     }
 
     private static String safe(String value) {

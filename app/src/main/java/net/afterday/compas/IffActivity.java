@@ -14,6 +14,7 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import java.util.List;
+import net.afterday.compas.iff.IffBleFieldRadio;
 import net.afterday.compas.iff.IffConfidence;
 import net.afterday.compas.iff.IffConfidence.Snapshot;
 import net.afterday.compas.iff.IffRemoteWitnessReport;
@@ -95,6 +96,7 @@ public class IffActivity extends Activity {
     protected void onResume() {
         super.onResume();
         IffUdpWitnessTransport.ensureStarted();
+        IffBleFieldRadio.start(this, localDevicePlayerId);
         render();
         if (approachActive) {
             scheduleApproachExpire();
@@ -107,6 +109,7 @@ public class IffActivity extends Activity {
     protected void onPause() {
         handler.removeCallbacks(expireApproach);
         handler.removeCallbacks(refreshRadioState);
+        IffBleFieldRadio.stop();
         IffUdpWitnessTransport.stop();
         super.onPause();
     }
@@ -286,19 +289,20 @@ public class IffActivity extends Activity {
         status.setText((approachActive ? "ВЫ        ПОДХОДИТЕ   локально\n" : "")
                 + "THIS DEVICE: " + localDevicePlayer().displayName + "\n"
                 + "OPERATOR: " + teamOperatorSummaryLine() + "\n"
-                + "CURRENT WITNESS: " + currentWitnessEvidenceCount() + "\n"
-                + "STALE EVIDENCE: " + staleWitnessEvidenceCount() + "\n"
-                + "RADIO FRESH / STRONG: " + freshWitnessCount() + " / " + strongProximityCount() + "\n"
-                + "REMOTE REPORTS: " + remoteReportCount() + "\n"
-                + "TRANSPORT: " + IffUdpWitnessTransport.compactStatus() + "\n"
-                + "DIRECTION: UNKNOWN");
+                + "WITNESS: current " + currentWitnessEvidenceCount()
+                + " / stale " + staleWitnessEvidenceCount()
+                + " / radio " + freshWitnessCount() + "/" + strongProximityCount() + "\n"
+                + "FIELD RADIO: " + IffBleFieldRadio.compactStatus() + "\n"
+                + "REMOTE REPORTS: " + remoteReportCount() + " / DIRECTION: UNKNOWN");
         body.setText("Выберите участника, чтобы открыть карточку контакта.\n"
                 + "Долгое нажатие назначает, кем является этот телефон.\n"
                 + "Operator summary отделяет current witness от stale evidence.\n"
                 + "Проценты - текущая уверенность слоя, а не финальное доказательство.\n"
                 + "Field radio не должен требовать общей Wi-Fi сети.\n"
+                + "BLE skeleton: " + IffBleFieldRadio.compactStatus() + "\n"
                 + "Remote witness contract: " + IffRemoteWitnessReport.CONTRACT_VERSION + "\n"
                 + "Signature status пока placeholder: " + IffRemoteWitnessReport.SIGNATURE_PENDING + "\n"
+                + "UDP debug: " + IffUdpWitnessTransport.compactStatus() + "\n"
                 + "Transport stub: UDP broadcast, unsigned, debug only.\n"
                 + "Последняя проверка: " + lastFieldCheckSummary);
         bodyContainer.removeAllViews();
@@ -314,7 +318,8 @@ public class IffActivity extends Activity {
         subtitle.setText("позиции и свидетели");
         status.setText("POSITION: UNKNOWN 0%\nLOCAL RADIO: " + freshWitnessCount() + " fresh\n"
                 + "REMOTE REPORTS: " + remoteReportCount() + "\n"
-                + "TRANSPORT: " + IffUdpWitnessTransport.compactStatus() + "\nDIRECTION: UNKNOWN 0%");
+                + "FIELD RADIO: " + IffBleFieldRadio.compactStatus() + "\n"
+                + "UDP DEBUG: " + IffUdpWitnessTransport.compactStatus() + "\nDIRECTION: UNKNOWN 0%");
         body.setText(mapWitnessList());
     }
 
@@ -348,6 +353,7 @@ public class IffActivity extends Activity {
                 + " remoteReportCount=" + quorum.remoteReportCount
                 + " remoteFreshSources=" + quorum.remoteFreshSources
                 + " remoteStaleSources=" + quorum.remoteStaleSources
+                + " fieldRadioStatus=\"" + safe(IffBleFieldRadio.compactStatus()) + "\""
                 + " transportStatus=\"" + safe(IffUdpWitnessTransport.compactStatus()) + "\""
                 + " witness=" + witnessState
                 + " localApproach=" + approachActive);
@@ -448,6 +454,7 @@ public class IffActivity extends Activity {
         FieldDiagnosticLog.event("IFF_DIAG", "event=device_identity_selected"
                 + " localDevicePlayerId=" + player.playerId
                 + " displayName=\"" + safe(player.displayName) + "\"");
+        IffBleFieldRadio.start(this, localDevicePlayerId);
         render();
     }
 
@@ -482,8 +489,8 @@ public class IffActivity extends Activity {
         Button button = new Button(this);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(64));
-        params.setMargins(0, dp(8), 0, 0);
+                dp(44));
+        params.setMargins(0, dp(4), 0, 0);
         button.setLayoutParams(params);
         button.setBackgroundResource(R.drawable.popup_button);
         button.setTextColor(playerIndex == selectedPlayerIndex ? 0xffffd16a : 0xffffffff);
@@ -594,6 +601,7 @@ public class IffActivity extends Activity {
                 + "- stale evidence: " + quorum.staleSources + "\n"
                 + "- remote fresh/stale/total: " + quorum.remoteFreshSources + "/"
                 + quorum.remoteStaleSources + "/" + quorum.remoteReportCount + "\n"
+                + "- field radio: " + IffBleFieldRadio.compactStatus() + "\n"
                 + "- transport: " + IffUdpWitnessTransport.compactStatus() + "\n"
                 + "- identity remains: " + confidence.identity.label + " " + confidence.identity.score + "%\n"
                 + "- position/direction: UNKNOWN unless their own layers prove otherwise";
@@ -624,7 +632,8 @@ public class IffActivity extends Activity {
     private String witnessDetails(WitnessSnapshot witness) {
         if (witness == null) {
             return "- нет свежего или старого beacon witness\n"
-                    + "- телефон ищет SSID формата " + IffRadioWitnessStore.SSID_PREFIX + "*";
+                    + "- Wi-Fi legacy ищет SSID формата " + IffRadioWitnessStore.SSID_PREFIX + "*\n"
+                    + "- BLE field radio: " + IffBleFieldRadio.compactStatus();
         }
         return "- ssid: " + witness.ssid + "\n"
                 + "- bssid: " + witness.bssid + "\n"
@@ -774,7 +783,7 @@ public class IffActivity extends Activity {
                     .append("\n");
         }
         builder.append("\nGPS и направление будут отдельными слоями уверенности.\n")
-                .append("TX STUB отправляет unsigned UDP report; SIM FRESH/STALE проверяют local-only fixture.");
+                .append("BLE field radio не требует общей Wi-Fi сети; TX STUB остается debug UDP.");
         return builder.toString();
     }
 
