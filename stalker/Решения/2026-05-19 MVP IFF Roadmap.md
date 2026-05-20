@@ -939,3 +939,41 @@ Samsung radio/app stop
 OnePlus diagnostics:
 RADIO_FRESH -> RADIO_STALE -> UNKNOWN
 ```
+
+## Реализованный срез Phase 33
+
+Повторный two-phone expiry прошел уже с автоматическими transition diagnostics:
+
+```text
+Samsung THIS DEVICE: Петя -> fresh BLE
+Samsung app force-stop -> transmitter disappears
+OnePlus screen off -> diagnostics continue
+RADIO_FRESH -> RADIO_STALE -> UNKNOWN
+```
+
+Фактическая цепочка в OnePlus log
+`field-radio-20260520-161828.log`:
+
+- `16:18:46.377`: `petya from=NONE to=RADIO_FRESH`, age `53 ms`,
+  RSSI `-55`, source `BLE_FIELD_RADIO`;
+- `16:19:32.682`: `petya from=RADIO_FRESH to=RADIO_STALE`, age `15540 ms`,
+  RSSI `-49`, reason `foreground_service_tick`;
+- `16:20:17.565`: `petya from=RADIO_STALE to=UNKNOWN`, age `60423 ms`,
+  RSSI `-49`, reason `iff_activity_refresh`.
+
+Вывод: BLE evidence path теперь полево подтвержден по freshness lifecycle.
+Свежий radio claim дает proximity freshness, stale остается видимой памятью, а
+после expiry proximity возвращается в `UNKNOWN`. Это не повышает crypto
+identity, position или direction.
+
+## Следующий срез
+
+После доказанного radio freshness lifecycle следующий MVP-риск уже не
+транспорт, а доверие и операторская эргономика:
+
+```text
+known roster claim -> minimal trust token / pairing -> still UNKNOWN without proof
+```
+
+Либо сначала отполировать боевой UI для stale/unknown, чтобы оператор быстрее
+видел: “был слышен недавно, но сейчас не доказан”.

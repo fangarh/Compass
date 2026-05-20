@@ -789,6 +789,32 @@ stale interval.
 `RADIO_FRESH -> RADIO_STALE -> UNKNOWN` from diagnostics without timing manual
 `ЗАПИСАТЬ` taps.
 
+## Phase 33: IFF BLE Expiry Transition Verification
+
+**Status:** completed
+
+**Goal:** Verify the automatic BLE witness transition diagnostics with two
+physical phones.
+
+**Scope:**
+
+- Use Samsung `R3CT20C8A8N` as `THIS DEVICE: Петя`.
+- Use OnePlus `e089985a` as `THIS DEVICE: Вы`.
+- Confirm fresh BLE witness in both directions while screens are on.
+- Stop Samsung to simulate the transmitter disappearing.
+- Put OnePlus screen off during the expiry window.
+- Verify OnePlus diagnostics record `RADIO_FRESH -> RADIO_STALE -> UNKNOWN`.
+
+**Verification:** OnePlus diagnostics
+`field-radio-20260520-161828.log` recorded automatic transition events for
+`petya`: `NONE -> RADIO_FRESH` at `16:18:46.377` with age `53 ms`,
+`RADIO_FRESH -> RADIO_STALE` at `16:19:32.682` with age `15540 ms`, and
+`RADIO_STALE -> UNKNOWN` at `16:20:17.565` with age `60423 ms`. Both phones
+were force-stopped after verification.
+
+**Result:** the BLE IFF evidence path now has field-verified automatic expiry
+diagnostics. Expired BLE does not remain current proximity proof.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

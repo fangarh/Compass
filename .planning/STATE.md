@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 32: IFF Witness Transition Logging completed.
+Phase 33: IFF BLE Expiry Transition Verification completed.
 
 ## Last Verified Baseline
 
@@ -23,9 +23,9 @@ Phase 32: IFF Witness Transition Logging completed.
 
 ## Next Action
 
-Next useful slice: unlock Samsung and rerun the two-phone screen-off expiry
-test. Use the new `witness_freshness_transition` diagnostics to verify
-`RADIO_FRESH -> RADIO_STALE -> UNKNOWN` without manual timing.
+Next useful slice: decide the next MVP risk after radio freshness is proven:
+either operator-facing stale/unknown UI polish, a minimal pairing/trust token
+path, or production-safe foreground radio controls for field play.
 
 ## Verification
 
@@ -769,3 +769,30 @@ test. Use the new `witness_freshness_transition` diagnostics to verify
 - APK installed successfully on Samsung `R3CT20C8A8N` and OnePlus `e089985a`.
 - OnePlus runtime smoke verified `Main -> IFF` opens and shows foreground
   radio service state after installation.
+
+2026-05-20 Phase 33:
+
+- Verified Phase 32 transition diagnostics on two physical phones.
+- ADB devices:
+  - Samsung `R3CT20C8A8N`;
+  - OnePlus `e089985a`;
+  - emulator.
+- Git worktree was clean except untracked `test.png`.
+- Both phones were unlocked and opened to `Main -> IFF`.
+- Screen-on baseline:
+  - Samsung `THIS DEVICE: Петя` saw `rx local-you -43dBm`;
+  - OnePlus `THIS DEVICE: Вы` saw `rx petya -48dBm`.
+- Samsung app was force-stopped to simulate transmitter disappearance.
+- OnePlus screen was turned off during the expiry window.
+- OnePlus diagnostics file:
+  `field-radio-20260520-161828.log`.
+- Automatic transition chain recorded:
+  - `16:18:46.377`: `playerId=petya from=NONE to=RADIO_FRESH ageMs=53
+    rssi=-55 source=BLE_FIELD_RADIO`;
+  - `16:19:32.682`: `playerId=petya from=RADIO_FRESH to=RADIO_STALE
+    ageMs=15540 rssi=-49 reason=foreground_service_tick`;
+  - `16:20:17.565`: `playerId=petya from=RADIO_STALE to=UNKNOWN ageMs=60423
+    rssi=-49 reason=iff_activity_refresh`.
+- Result: BLE IFF proximity freshness now has verified automatic expiry
+  diagnostics. Expired BLE does not remain current proximity proof.
+- Both phones were force-stopped after verification.
