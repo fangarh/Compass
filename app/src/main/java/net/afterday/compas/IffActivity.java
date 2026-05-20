@@ -37,6 +37,7 @@ public class IffActivity extends Activity {
     private static final long RADIO_REFRESH_MS = 2000L;
     private static final String PREFS_NAME = "iff";
     private static final String PREF_LOCAL_DEVICE_PLAYER_ID = "local_device_player_id";
+    private static final String PREF_FIELD_RADIO_ENABLED = "field_radio_enabled";
 
     private final IffPlayer[] roster = new IffPlayer[] {
             new IffPlayer("local-you", "Вы", true),
@@ -57,6 +58,7 @@ public class IffActivity extends Activity {
     private Button mapTab;
     private Button approachButton;
     private Button recordCheckButton;
+    private Button radioServiceButton;
     private Button txWitnessButton;
     private Button simWitnessButton;
     private Button simStaleWitnessButton;
@@ -66,6 +68,7 @@ public class IffActivity extends Activity {
     private TextView body;
     private LinearLayout bodyContainer;
     private String lastFieldCheckSummary = "нет записанных проверок";
+    private boolean fieldRadioEnabled = true;
 
     private final Runnable expireApproach = new Runnable() {
         @Override
@@ -89,6 +92,7 @@ public class IffActivity extends Activity {
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         setContentView(R.layout.iff_activity);
         loadLocalDeviceIdentity();
+        loadFieldRadioPreference();
         bindViews();
         setTypeface();
         setListeners();
@@ -99,7 +103,7 @@ public class IffActivity extends Activity {
     protected void onResume() {
         super.onResume();
         IffUdpWitnessTransport.ensureStarted();
-        IffForegroundRadioService.start(this, localDevicePlayerId);
+        ensureFieldRadioService();
         render();
         if (approachActive) {
             scheduleApproachExpire();
@@ -122,6 +126,7 @@ public class IffActivity extends Activity {
         mapTab = (Button) findViewById(R.id.iff_map_tab);
         approachButton = (Button) findViewById(R.id.iff_approach);
         recordCheckButton = (Button) findViewById(R.id.iff_record_check);
+        radioServiceButton = (Button) findViewById(R.id.iff_radio_service);
         txWitnessButton = (Button) findViewById(R.id.iff_tx_witness);
         simWitnessButton = (Button) findViewById(R.id.iff_sim_witness);
         simStaleWitnessButton = (Button) findViewById(R.id.iff_sim_stale_witness);
@@ -143,6 +148,7 @@ public class IffActivity extends Activity {
         mapTab.setTypeface(mono, Typeface.BOLD);
         approachButton.setTypeface(mono, Typeface.BOLD);
         recordCheckButton.setTypeface(mono, Typeface.BOLD);
+        radioServiceButton.setTypeface(mono, Typeface.BOLD);
         txWitnessButton.setTypeface(mono, Typeface.BOLD);
         simWitnessButton.setTypeface(mono, Typeface.BOLD);
         simStaleWitnessButton.setTypeface(mono, Typeface.BOLD);
@@ -184,6 +190,12 @@ public class IffActivity extends Activity {
             @Override
             public void onClick(View v) {
                 recordFieldCheck();
+            }
+        });
+        radioServiceButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                toggleFieldRadioService();
             }
         });
         txWitnessButton.setOnClickListener(new View.OnClickListener() {
@@ -230,6 +242,8 @@ public class IffActivity extends Activity {
         } else {
             approachButton.setText(approachActive ? "ОТМЕНИТЬ ПОДХОД" : "Я ПОДХОЖУ");
         }
+        radioServiceButton.setText(fieldRadioEnabled ? "RADIO ON" : "RADIO OFF");
+        radioServiceButton.setTextColor(fieldRadioEnabled ? 0xff7dff73 : 0xffffd16a);
         txWitnessButton.setText("TX STUB");
         simWitnessButton.setText("SIM FRESH");
         simStaleWitnessButton.setText("SIM STALE");
@@ -297,6 +311,7 @@ public class IffActivity extends Activity {
                 + " / stale " + staleWitnessEvidenceCount()
                 + " / radio " + freshWitnessCount() + "/" + strongProximityCount() + "\n"
                 + "FIELD RADIO: " + IffBleFieldRadio.compactStatus() + "\n"
+                + "RADIO CONTROL: " + (fieldRadioEnabled ? "ON" : "OFF") + "\n"
                 + "RADIO SERVICE: " + IffForegroundRadioService.compactStatus() + "\n"
                 + "BLE POLICY: " + IffBleFieldRadio.lifecycleStatus() + "\n"
                 + "REMOTE REPORTS: " + remoteReportCount() + " / DIRECTION: UNKNOWN");
@@ -305,6 +320,7 @@ public class IffActivity extends Activity {
                 + "Operator summary отделяет current witness от stale evidence.\n"
                 + "Проценты - текущая уверенность слоя, а не финальное доказательство.\n"
                 + "Field radio не должен требовать общей Wi-Fi сети.\n"
+                + "Radio control: " + (fieldRadioEnabled ? "ON" : "OFF") + "\n"
                 + "Radio service: " + IffForegroundRadioService.compactStatus() + "\n"
                 + "BLE lifecycle: " + IffBleFieldRadio.lifecycleStatus() + "\n"
                 + "BLE skeleton: " + IffBleFieldRadio.compactStatus() + "\n"
@@ -326,6 +342,7 @@ public class IffActivity extends Activity {
         subtitle.setText("mock карта: freshness без азимута");
         status.setText("POSITION/DIRECTION: UNKNOWN 0%\n"
                 + "RADIO: local " + freshWitnessCount() + " fresh / remote " + remoteReportCount() + "\n"
+                + "RADIO CONTROL: " + (fieldRadioEnabled ? "ON" : "OFF") + "\n"
                 + "FIELD RADIO: " + IffBleFieldRadio.compactStatus() + "\n"
                 + "RADIO SERVICE: " + IffForegroundRadioService.compactStatus() + "\n"
                 + "BLE POLICY: " + IffBleFieldRadio.lifecycleStatus() + "\n"
@@ -375,6 +392,7 @@ public class IffActivity extends Activity {
                 + " remoteStaleSources=" + quorum.remoteStaleSources
                 + " fieldRadioStatus=\"" + safe(IffBleFieldRadio.compactStatus()) + "\""
                 + " fieldRadioPolicy=\"" + safe(IffBleFieldRadio.lifecycleStatus()) + "\""
+                + " fieldRadioEnabled=" + fieldRadioEnabled
                 + " transportStatus=\"" + safe(IffUdpWitnessTransport.compactStatus()) + "\""
                 + " witness=" + witnessState
                 + " localApproach=" + approachActive);
@@ -475,8 +493,45 @@ public class IffActivity extends Activity {
         FieldDiagnosticLog.event("IFF_DIAG", "event=device_identity_selected"
                 + " localDevicePlayerId=" + player.playerId
                 + " displayName=\"" + safe(player.displayName) + "\"");
-        IffForegroundRadioService.start(this, localDevicePlayerId);
+        ensureFieldRadioService();
         render();
+    }
+
+    private void loadFieldRadioPreference() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        fieldRadioEnabled = prefs.getBoolean(PREF_FIELD_RADIO_ENABLED, true);
+    }
+
+    private void setFieldRadioEnabled(boolean enabled) {
+        fieldRadioEnabled = enabled;
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .putBoolean(PREF_FIELD_RADIO_ENABLED, fieldRadioEnabled)
+                .apply();
+    }
+
+    private void toggleFieldRadioService() {
+        setFieldRadioEnabled(!fieldRadioEnabled);
+        if (fieldRadioEnabled) {
+            IffForegroundRadioService.start(this, localDevicePlayerId);
+        } else {
+            IffForegroundRadioService.stop(this);
+            IffBleFieldRadio.stop("operator_disabled");
+        }
+        FieldDiagnosticLog.event("IFF_DIAG", "event=iff_radio_operator_toggle"
+                + " enabled=" + fieldRadioEnabled
+                + " localDevicePlayerId=" + localDevicePlayerId
+                + " service=\"" + safe(IffForegroundRadioService.compactStatus()) + "\""
+                + " policy=\"" + safe(IffBleFieldRadio.lifecycleStatus()) + "\"");
+        render();
+    }
+
+    private void ensureFieldRadioService() {
+        if (fieldRadioEnabled) {
+            IffForegroundRadioService.start(this, localDevicePlayerId);
+        } else {
+            IffForegroundRadioService.stop(this);
+        }
     }
 
     private boolean isLocalDevice(IffPlayer player) {
@@ -671,6 +726,7 @@ public class IffActivity extends Activity {
 
     private String fieldRadioPolicyDetails() {
         return "- lifecycle: " + IffBleFieldRadio.lifecycleStatus() + "\n"
+                + "- operator control: " + (fieldRadioEnabled ? "ON" : "OFF") + "\n"
                 + "- service: " + IffForegroundRadioService.compactStatus() + "\n"
                 + "- foreground service keeps BLE radio outside visible IFF activity\n"
                 + "- notification stop action stops BLE scan/advertise and logs service stop\n"

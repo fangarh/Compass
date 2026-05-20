@@ -319,6 +319,7 @@ foreach ($log in $logs) {
                     RemoteStaleSources = Get-NumberOrNull (Get-FieldValue $message "remoteStaleSources")
                     FieldRadioStatus = Get-FieldValue $message "fieldRadioStatus"
                     FieldRadioPolicy = Get-FieldValue $message "fieldRadioPolicy"
+                    FieldRadioEnabled = Get-FieldValue $message "fieldRadioEnabled"
                     TransportStatus = Get-FieldValue $message "transportStatus"
                     WitnessFreshness = Get-FieldValue $message "witness"
                     WitnessRssi = Get-NumberOrNull (Get-FieldValue $message "rssi")
@@ -713,6 +714,7 @@ $iffFieldCheckTimeline = $iffFieldChecks |
             RemoteStaleSources = $_.RemoteStaleSources
             FieldRadioStatus = $_.FieldRadioStatus
             FieldRadioPolicy = $_.FieldRadioPolicy
+            FieldRadioEnabled = $_.FieldRadioEnabled
             TransportStatus = $_.TransportStatus
             WitnessFreshness = $_.WitnessFreshness
             WitnessRssi = $_.WitnessRssi
@@ -1132,7 +1134,8 @@ if ($iffFieldCheckTimeline.Count -eq 0) {
         $remoteStale = if ($null -eq $row.RemoteStaleSources) { 0 } else { $row.RemoteStaleSources }
         $remote = if ([string]::IsNullOrWhiteSpace($row.RemoteWitnessContract)) { "" } else { "$($row.RemoteReportCount) reports / $($row.RemoteFreshSources) fresh / $remoteStale stale" }
         $localDevice = if ([string]::IsNullOrWhiteSpace($row.LocalDevicePlayerId)) { "" } else { "$($row.LocalDevicePlayerId) / selected=$($row.SelectedIsLocalDevice)" }
-        $report.Add("| $($row.Time) | $($row.Window) | $($row.Device) | $player | $localDevice | $($row.OperatorVerdict) | $($row.IdentityLabel) $($row.IdentityScore) | $($row.ProximityLabel) $($row.ProximityScore) | $quorum | $remote | $($row.FieldRadioStatus) | $($row.FieldRadioPolicy) | $($row.TransportStatus) | $($row.WitnessFreshness) | $rssi | $age | $($row.PositionLabel) $($row.PositionScore) | $($row.DirectionLabel) $($row.DirectionScore) |")
+        $fieldRadio = if ([string]::IsNullOrWhiteSpace($row.FieldRadioEnabled)) { $row.FieldRadioStatus } else { "$($row.FieldRadioEnabled) / $($row.FieldRadioStatus)" }
+        $report.Add("| $($row.Time) | $($row.Window) | $($row.Device) | $player | $localDevice | $($row.OperatorVerdict) | $($row.IdentityLabel) $($row.IdentityScore) | $($row.ProximityLabel) $($row.ProximityScore) | $quorum | $remote | $fieldRadio | $($row.FieldRadioPolicy) | $($row.TransportStatus) | $($row.WitnessFreshness) | $rssi | $age | $($row.PositionLabel) $($row.PositionScore) | $($row.DirectionLabel) $($row.DirectionScore) |")
     }
 
     $report.Add("")

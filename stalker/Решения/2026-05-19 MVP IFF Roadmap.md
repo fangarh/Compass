@@ -741,3 +741,49 @@ field_check records fresh/stale/unknown transitions
 - screen off on scanner;
 - app background on one/both phones;
 - fresh witness не становится stale false-positive.
+
+## Реализованный срез Phase 29
+
+Добавлено управление IFF radio service из самого IFF-экрана:
+
+```text
+RADIO ON -> foreground BLE active
+RADIO OFF -> foreground service stopped, BLE stopped
+```
+
+Что изменилось:
+
+- в нижнем action row появилась кнопка `RADIO ON/OFF`;
+- состояние сохраняется в `SharedPreferences`;
+- при `RADIO OFF` IFF-экран больше не поднимает foreground BLE service;
+- при `RADIO ON` service стартует снова с текущим `THIS DEVICE`;
+- UI показывает `RADIO CONTROL: ON/OFF`;
+- diagnostic log пишет `iff_radio_operator_toggle`;
+- `field_check` пишет `fieldRadioEnabled`;
+- analyzer выводит `FieldRadioEnabled`.
+
+Проверка на OnePlus:
+
+- debug APK собран и установлен;
+- `Main -> IFF` показал `RADIO ON`;
+- нажатие `RADIO ON` переключило UI в `RADIO OFF`;
+- после выключения `IffForegroundRadioService` исчез из `dumpsys`;
+- повторное нажатие подняло service как `isForeground=true`;
+- foreground type остался `0x00000010`;
+- field-check записал `fieldRadioEnabled=true`.
+
+Важно: теперь в полевом тесте можно быстро сбрасывать BLE radio без force-stop.
+Это особенно нужно перед двухтелефонным screen-off/background прогоном, чтобы
+контролировать стартовые условия и не расходовать батарею зря.
+
+## Следующий срез
+
+Двухтелефонный BLE foreground field test, когда второй телефон нужен:
+
+```text
+both phones RADIO ON
+screen off advertiser
+screen off scanner
+background one/both apps
+record fresh -> stale -> unknown
+```

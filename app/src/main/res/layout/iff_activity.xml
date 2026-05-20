@@ -100,7 +100,7 @@
         android:layout_height="44dp"
         android:layout_marginTop="8dp"
         android:orientation="horizontal"
-        android:weightSum="5">
+        android:weightSum="6">
 
         <Button
             android:id="@id/iff_approach"
@@ -122,6 +122,18 @@
             android:layout_weight="1"
             android:background="@drawable/popup_button"
             android:text="ЗАПИСАТЬ"
+            android:textColor="#ffffff"
+            android:textSize="9sp" />
+
+        <Button
+            android:id="@id/iff_radio_service"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginLeft="4dp"
+            android:layout_marginRight="4dp"
+            android:layout_weight="1"
+            android:background="@drawable/popup_button"
+            android:text="RADIO ON"
             android:textColor="#ffffff"
             android:textSize="9sp" />
 

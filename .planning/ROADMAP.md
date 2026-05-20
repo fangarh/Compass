@@ -673,6 +673,34 @@ foreground-service `fieldRadioPolicy`.
 **Result:** the BLE path now has a foreground-service lifecycle skeleton. Full
 field proof still needs a two-phone screen-off/background BLE test.
 
+## Phase 29: IFF Radio Service Control
+
+**Status:** completed
+
+**Goal:** Add explicit in-app operator control for starting and stopping the
+IFF BLE foreground radio.
+
+**Scope:**
+
+- Add a `RADIO ON/OFF` action button to the IFF screen.
+- Persist the radio enabled preference.
+- Start the foreground BLE service on resume only when radio is enabled.
+- Stop the service and BLE scan/advertise when the operator disables radio.
+- Show `RADIO CONTROL: ON/OFF` in IFF status.
+- Log `iff_radio_operator_toggle`.
+- Add `fieldRadioEnabled` to field-check diagnostics and analyzer output.
+
+**Verification:** analyzer smoke test passed. Debug APK built successfully and
+installed on OnePlus `e089985a`. UIAutomator verified `Main -> IFF` and the new
+`RADIO ON` button. Tapping it changed the UI to `RADIO OFF`, stopped BLE
+scan/advertise, and removed `IffForegroundRadioService` from `dumpsys`. Tapping
+again restarted the foreground service as `isForeground=true` with foreground
+type `0x00000010`. The diagnostic log recorded operator toggles and a field
+check with `fieldRadioEnabled=true`.
+
+**Result:** field operators can now disable/re-enable IFF BLE radio from the
+IFF screen without force-stopping the app.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

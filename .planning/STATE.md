@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 28: IFF BLE Foreground Service completed.
+Phase 29: IFF Radio Service Control completed.
 
 ## Last Verified Baseline
 
@@ -25,8 +25,8 @@ Phase 28: IFF BLE Foreground Service completed.
 
 Next useful slice: run a two-phone BLE foreground-service field test. Verify
 whether phone A continues advertising and phone B continues scanning through
-screen-off and app-background transitions, then log fresh/stale/unknown
-behavior.
+screen-off and app-background transitions, using the new in-app `RADIO ON/OFF`
+control to manage battery and reset conditions.
 
 ## Verification
 
@@ -646,3 +646,36 @@ behavior.
   not needed for the service lifecycle skeleton.
 - App was force-stopped after verification to avoid leaving BLE foreground
   radio running on the user's phone.
+
+2026-05-20 Phase 29:
+
+- Added explicit IFF radio operator control in the bottom action row:
+  `RADIO ON/OFF`.
+- Added persisted preference `field_radio_enabled`.
+- `IffActivity.onResume` starts the IFF foreground radio service only when the
+  preference is enabled.
+- Tapping `RADIO OFF`:
+  - persists the disabled state;
+  - asks `IffForegroundRadioService` to stop;
+  - stops `IffBleFieldRadio`;
+  - logs `iff_radio_operator_toggle enabled=false`.
+- Tapping `RADIO ON`:
+  - persists the enabled state;
+  - starts the foreground service for the current `THIS DEVICE`;
+  - logs `iff_radio_operator_toggle enabled=true`.
+- Team/map status now shows `RADIO CONTROL: ON/OFF`.
+- `IFF_DIAG event=field_check` now logs `fieldRadioEnabled`.
+- Analyzer exports `FieldRadioEnabled` and includes it in the Markdown field
+  radio column.
+- `scripts/test-analyze-field-logs.ps1` passed.
+- `:app:assembleDebug` completed successfully.
+- APK installed on OnePlus `e089985a`.
+- UIAutomator verified `Main -> IFF`, `RADIO ON`, and `RADIO OFF`.
+- `RADIO OFF` removed `IffForegroundRadioService` from `dumpsys`.
+- `RADIO ON` restarted `IffForegroundRadioService` as foreground type
+  `0x00000010`.
+- Diagnostic log `field-radio-20260520-152933.log` recorded radio operator
+  toggles, service start/stop events, and a field check with
+  `fieldRadioEnabled=true`.
+- App was force-stopped after verification to avoid leaving BLE foreground
+  radio running.
