@@ -883,6 +883,42 @@ the combat fields.
 **Result:** stale evidence is now visible as stale in the combat UI, while the
 recommended action explicitly prevents treating it as current near contact.
 
+## Phase 36: IFF Real BLE Combat Verification
+
+**Status:** completed
+
+**Goal:** Verify the combat operator view against real two-phone BLE lifecycle
+instead of debug simulated stale witnesses.
+
+**Scope:**
+
+- Install the current APK on Samsung `R3CT20C8A8N` and OnePlus `e089985a`.
+- Use Samsung as `THIS DEVICE: Петя`.
+- Use OnePlus as `THIS DEVICE: Вы`.
+- Confirm real BLE current evidence in both directions.
+- Select `Петя` on OnePlus and record current combat state.
+- Stop Samsung to simulate transmitter disappearance.
+- Verify OnePlus moves through `STALE` and then `UNKNOWN`.
+- Pull the OnePlus field log and run analyzer.
+
+**Verification:** completed on 2026-05-20. OnePlus selected `Петя` and recorded
+`combatState=CURRENT_SINGLE`, `combatAction=WATCH_CURRENT_CONTACT`,
+`identityLabel=LOCAL_TRUSTED_RADIO_CLAIM`, `proximityLabel=RADIO_NEAR`, and
+`witness=RADIO_FRESH` at `17:23:41.364`. After Samsung was force-stopped,
+OnePlus diagnostics recorded `RADIO_FRESH -> RADIO_STALE` at `17:24:02.524`,
+then field check `combatState=STALE`,
+`combatAction=DO_NOT_TREAT_AS_NEAR`, `proximityLabel=STALE_RADIO` at
+`17:24:32.630`. Diagnostics then recorded `RADIO_STALE -> UNKNOWN` at
+`17:24:48.936`, and field check `combatState=UNKNOWN`,
+`combatAction=NO_CURRENT_CONTACT`, `proximityLabel=UNKNOWN` at `17:25:27.482`.
+Analyzer output
+`artifacts/field-analysis-phase36-real-combat-verify/iff-field-checks.csv`
+confirmed the same states.
+
+**Result:** the combat UI is now field-verified on real BLE:
+`CURRENT_SINGLE -> STALE -> UNKNOWN`, with stale explicitly marked as not a
+current near-contact.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

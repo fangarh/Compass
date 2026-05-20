@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 35: IFF Combat Operator View completed.
+Phase 36: IFF Real BLE Combat Verification completed.
 
 ## Last Verified Baseline
 
@@ -23,9 +23,9 @@ Phase 35: IFF Combat Operator View completed.
 
 ## Next Action
 
-Next useful slice: either turn local trust into an actual pairing/token design,
-or run a two-phone combat UI check with real BLE current/stale/unknown instead
-of debug simulated stale witnesses.
+Next useful slice: turn local trust into an actual pairing/token design, or
+reduce the IFF combat screen to a denser field-ready layout now that the real
+BLE combat lifecycle is verified.
 
 ## Verification
 
@@ -864,3 +864,55 @@ of debug simulated stale witnesses.
   `artifacts/field-analysis-phase35-combat-verify/iff-field-checks.csv`.
 - App was force-stopped after verification to avoid leaving BLE foreground
   radio running.
+
+2026-05-20 Phase 36:
+
+- Ran a verification-only real BLE combat UI test with two physical phones.
+- Git worktree was clean except untracked `test.png`.
+- ADB devices:
+  - Samsung `R3CT20C8A8N`;
+  - OnePlus `e089985a`;
+  - emulator.
+- APK installed on Samsung and OnePlus.
+- Samsung initially showed AOD/lock, but ADB wake/swipe returned it to the app.
+- Samsung opened IFF as `THIS DEVICE: Петя`.
+- OnePlus opened IFF as `THIS DEVICE: Вы`.
+- Both phones showed current BLE evidence:
+  - Samsung saw `local-you` around `-40 dBm`;
+  - OnePlus saw `petya` around `-49 dBm`.
+- On OnePlus, selected `Петя` and recorded current:
+  - `17:23:41.364`;
+  - `combatState=CURRENT_SINGLE`;
+  - `combatAction=WATCH_CURRENT_CONTACT`;
+  - `identityLabel=LOCAL_TRUSTED_RADIO_CLAIM`;
+  - `proximityLabel=RADIO_NEAR`;
+  - `witness=RADIO_FRESH`;
+  - `ageMs=79`.
+- Samsung app was force-stopped to simulate transmitter disappearance.
+- OnePlus automatic transition:
+  - `17:24:02.524`: `RADIO_FRESH -> RADIO_STALE`, `ageMs=15123`;
+  - `17:24:48.936`: `RADIO_STALE -> UNKNOWN`, `ageMs=61534`.
+- On OnePlus, recorded stale:
+  - `17:24:32.630`;
+  - `combatState=STALE`;
+  - `combatAction=DO_NOT_TREAT_AS_NEAR`;
+  - `identityLabel=LOCAL_TRUSTED_ROSTER`;
+  - `proximityLabel=STALE_RADIO`;
+  - `witness=RADIO_STALE`;
+  - `ageMs=45229`.
+- On OnePlus, recorded unknown:
+  - `17:25:27.482`;
+  - `combatState=UNKNOWN`;
+  - `combatAction=NO_CURRENT_CONTACT`;
+  - `identityLabel=LOCAL_TRUSTED_ROSTER`;
+  - `proximityLabel=UNKNOWN`;
+  - `witness=UNKNOWN`;
+  - `ageMs=100081`.
+- Pulled log:
+  `artifacts/field-logs/e089985a/field-radio-20260520-172157.log`.
+- Analyzer output:
+  `artifacts/field-analysis-phase36-real-combat-verify/iff-field-checks.csv`.
+- Result: real BLE combat lifecycle verified:
+  `CURRENT_SINGLE -> STALE -> UNKNOWN`.
+- OnePlus app was force-stopped after verification; Samsung had already been
+  force-stopped as the test transmitter.

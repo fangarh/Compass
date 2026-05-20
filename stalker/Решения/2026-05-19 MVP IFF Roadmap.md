@@ -1074,3 +1074,58 @@ real BLE current -> transmitter stop -> stale -> unknown
 
 То есть проверить новый боевой слой не только через `SIM STALE`, а на реальном
 Samsung/OnePlus BLE lifecycle.
+
+## Реализованный срез Phase 36
+
+Проверен боевой слой уже на реальном двухтелефонном BLE, без `SIM STALE`:
+
+```text
+Samsung THIS DEVICE: Петя
+OnePlus THIS DEVICE: Вы
+real BLE current -> Samsung force-stop -> stale -> unknown
+```
+
+Фактическая цепочка на OnePlus:
+
+- `17:23:41.364`:
+  `combatState=CURRENT_SINGLE`,
+  `combatAction=WATCH_CURRENT_CONTACT`,
+  `identityLabel=LOCAL_TRUSTED_RADIO_CLAIM`,
+  `proximityLabel=RADIO_NEAR`,
+  `witness=RADIO_FRESH`, age `79 ms`;
+- `17:24:02.524`:
+  automatic transition `RADIO_FRESH -> RADIO_STALE`, age `15123 ms`;
+- `17:24:32.630`:
+  `combatState=STALE`,
+  `combatAction=DO_NOT_TREAT_AS_NEAR`,
+  `identityLabel=LOCAL_TRUSTED_ROSTER`,
+  `proximityLabel=STALE_RADIO`,
+  `witness=RADIO_STALE`, age `45229 ms`;
+- `17:24:48.936`:
+  automatic transition `RADIO_STALE -> UNKNOWN`, age `61534 ms`;
+- `17:25:27.482`:
+  `combatState=UNKNOWN`,
+  `combatAction=NO_CURRENT_CONTACT`,
+  `identityLabel=LOCAL_TRUSTED_ROSTER`,
+  `proximityLabel=UNKNOWN`,
+  `witness=UNKNOWN`, age `100081 ms`.
+
+Артефакты:
+
+- OnePlus log:
+  `artifacts/field-logs/e089985a/field-radio-20260520-172157.log`;
+- analyzer:
+  `artifacts/field-analysis-phase36-real-combat-verify/iff-field-checks.csv`.
+
+Вывод: боевой UI теперь подтвержден не только симуляцией, а реальным BLE
+lifecycle. `STALE` больше не выглядит как current contact, а `UNKNOWN` честно
+возвращается после expiry.
+
+## Следующий срез
+
+Теперь можно выбирать:
+
+```text
+1. pairing/token: заменить ручной TRUST на проверяемую пару
+2. field UI density: сделать экран еще быстрее для игры
+```
