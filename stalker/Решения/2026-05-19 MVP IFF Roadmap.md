@@ -644,3 +644,49 @@ visible-screen skeleton -> foreground lifecycle -> fresh/stale/unknown policy
 Карта пока может оставаться mock. Следующий риск для MVP - не дизайн карты, а
 то, как BLE witness живет в полевых условиях при гашении экрана, сворачивании
 приложения и истечении freshness window.
+
+## Реализованный срез Phase 27
+
+Сделана явной policy для BLE freshness и lifecycle:
+
+```text
+visible screen BLE -> fresh <= 15s -> stale <= 60s -> UNKNOWN
+```
+
+Что изменилось:
+
+- общий текст policy: `fresh<=15s stale<=60s then UNKNOWN`;
+- witness теперь показывает источник `BLE_FIELD_RADIO` или `WIFI_SCAN_BEACON`;
+- контакт показывает `FIELD RADIO POLICY`;
+- контакт показывает следующий переход witness: сколько еще fresh/stale;
+- команда и карта показывают
+  `BLE POLICY: VISIBLE_SCREEN_ONLY / fresh<=15s stale<=60s then UNKNOWN`;
+- BLE stop пишет `ble_field_radio_stop` с reason и policy;
+- `field_check` пишет `fieldRadioPolicy`;
+- analyzer выводит `FieldRadioPolicy`.
+
+Проверка:
+
+- Android docs проверены по BLE permissions и foreground service type
+  `connectedDevice`;
+- analyzer smoke test прошел;
+- debug APK собран;
+- APK установлен на OnePlus `e089985a`;
+- `Main -> IFF` проверен через UIAutomator;
+- `ЗАПИСАТЬ` добавил в log:
+  `fieldRadioPolicy="VISIBLE_SCREEN_ONLY / fresh<=15s stale<=60s then UNKNOWN"`.
+
+Важно: Phase 27 не делает настоящий background BLE. Она фиксирует честную
+границу текущего skeleton: работает, пока IFF-экран видим; после pause BLE
+останавливается, а старый witness проходит через stale в UNKNOWN.
+
+## Следующий срез
+
+Реальный foreground BLE lifecycle:
+
+```text
+IFF radio foreground service -> screen off -> app background -> BLE still measured
+```
+
+Для Android 14 это надо делать через foreground service type `connectedDevice`,
+с явным notification/lifecycle UI и полевым тестом screen-off/background.

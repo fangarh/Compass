@@ -111,7 +111,7 @@ public class IffActivity extends Activity {
     protected void onPause() {
         handler.removeCallbacks(expireApproach);
         handler.removeCallbacks(refreshRadioState);
-        IffBleFieldRadio.stop();
+        IffBleFieldRadio.stop("activity_pause");
         IffUdpWitnessTransport.stop();
         super.onPause();
     }
@@ -276,6 +276,8 @@ public class IffActivity extends Activity {
                 + confidenceDetails(confidence) + "\n\n"
                 + "СВИДЕТЕЛИ\n"
                 + witnessDetails(witness) + "\n\n"
+                + "FIELD RADIO POLICY\n"
+                + fieldRadioPolicyDetails() + "\n\n"
                 + "WITNESS QUORUM\n"
                 + witnessQuorumDetails(selected, quorum) + "\n\n"
                 + "РЕШЕНИЕ\n"
@@ -295,12 +297,14 @@ public class IffActivity extends Activity {
                 + " / stale " + staleWitnessEvidenceCount()
                 + " / radio " + freshWitnessCount() + "/" + strongProximityCount() + "\n"
                 + "FIELD RADIO: " + IffBleFieldRadio.compactStatus() + "\n"
+                + "BLE POLICY: " + IffBleFieldRadio.lifecycleStatus() + "\n"
                 + "REMOTE REPORTS: " + remoteReportCount() + " / DIRECTION: UNKNOWN");
         body.setText("Выберите участника, чтобы открыть карточку контакта.\n"
                 + "Долгое нажатие назначает, кем является этот телефон.\n"
                 + "Operator summary отделяет current witness от stale evidence.\n"
                 + "Проценты - текущая уверенность слоя, а не финальное доказательство.\n"
                 + "Field radio не должен требовать общей Wi-Fi сети.\n"
+                + "BLE lifecycle: " + IffBleFieldRadio.lifecycleStatus() + "\n"
                 + "BLE skeleton: " + IffBleFieldRadio.compactStatus() + "\n"
                 + "Remote witness contract: " + IffRemoteWitnessReport.CONTRACT_VERSION + "\n"
                 + "Signature status пока placeholder: " + IffRemoteWitnessReport.SIGNATURE_PENDING + "\n"
@@ -321,6 +325,7 @@ public class IffActivity extends Activity {
         status.setText("POSITION/DIRECTION: UNKNOWN 0%\n"
                 + "RADIO: local " + freshWitnessCount() + " fresh / remote " + remoteReportCount() + "\n"
                 + "FIELD RADIO: " + IffBleFieldRadio.compactStatus() + "\n"
+                + "BLE POLICY: " + IffBleFieldRadio.lifecycleStatus() + "\n"
                 + "UDP DEBUG: " + IffUdpWitnessTransport.compactStatus());
         bodyContainer.removeAllViews();
         IffTacticalMapView mapView = new IffTacticalMapView(this);
@@ -366,6 +371,7 @@ public class IffActivity extends Activity {
                 + " remoteFreshSources=" + quorum.remoteFreshSources
                 + " remoteStaleSources=" + quorum.remoteStaleSources
                 + " fieldRadioStatus=\"" + safe(IffBleFieldRadio.compactStatus()) + "\""
+                + " fieldRadioPolicy=\"" + safe(IffBleFieldRadio.lifecycleStatus()) + "\""
                 + " transportStatus=\"" + safe(IffUdpWitnessTransport.compactStatus()) + "\""
                 + " witness=" + witnessState
                 + " localApproach=" + approachActive);
@@ -539,9 +545,10 @@ public class IffActivity extends Activity {
             return "UNKNOWN";
         }
         if (!witness.isFresh()) {
-            return "STALE " + formatAge(witness.ageMs());
+            return witness.freshnessLabel() + " " + formatAge(witness.ageMs());
         }
-        return witness.proximityLabel() + " " + witness.rssi + "dBm";
+        return witness.proximityLabel() + " " + witness.rssi + "dBm "
+                + (witness.isBleWitness() ? "BLE" : "WIFI");
     }
 
     private Snapshot confidenceFor(IffPlayer player, WitnessSnapshot witness) {
@@ -645,14 +652,26 @@ public class IffActivity extends Activity {
         if (witness == null) {
             return "- нет свежего или старого beacon witness\n"
                     + "- Wi-Fi legacy ищет SSID формата " + IffRadioWitnessStore.SSID_PREFIX + "*\n"
-                    + "- BLE field radio: " + IffBleFieldRadio.compactStatus();
+                    + "- BLE field radio: " + IffBleFieldRadio.compactStatus() + "\n"
+                    + "- freshness policy: " + IffRadioWitnessStore.freshnessPolicyLabel();
         }
         return "- ssid: " + witness.ssid + "\n"
                 + "- bssid: " + witness.bssid + "\n"
+                + "- source: " + witness.sourceType() + "\n"
                 + "- freshness: " + witness.freshnessLabel() + "\n"
+                + "- policy: " + IffRadioWitnessStore.freshnessPolicyLabel() + "\n"
+                + "- next transition: " + witness.nextTransitionLabel() + "\n"
                 + "- age: " + formatAge(witness.ageMs()) + "\n"
                 + "- rssi: " + witness.rssi + " dBm\n"
                 + "- frequency: " + witness.frequency + " MHz";
+    }
+
+    private String fieldRadioPolicyDetails() {
+        return "- lifecycle: " + IffBleFieldRadio.lifecycleStatus() + "\n"
+                + "- current implementation runs while IFF screen is visible\n"
+                + "- app pause stops BLE scan/advertise and logs ble_field_radio_stop\n"
+                + "- stale BLE/Wi-Fi witness remains visible but is not current proof\n"
+                + "- expired witness returns proximity to UNKNOWN";
     }
 
     private String witnessQuorumDetails(IffPlayer selected, IffWitnessQuorum.Snapshot quorum) {
@@ -795,7 +814,9 @@ public class IffActivity extends Activity {
                     .append("\n");
         }
         builder.append("\nGPS и направление будут отдельными слоями уверенности.\n")
-                .append("BLE field radio не требует общей Wi-Fi сети; TX STUB остается debug UDP.");
+                .append("BLE field radio не требует общей Wi-Fi сети; TX STUB остается debug UDP.\n")
+                .append("Freshness policy: ").append(IffRadioWitnessStore.freshnessPolicyLabel()).append("\n")
+                .append("BLE lifecycle: ").append(IffBleFieldRadio.lifecycleStatus());
         return builder.toString();
     }
 
@@ -820,7 +841,8 @@ public class IffActivity extends Activity {
 
     private String mapRadioLabel(WitnessSnapshot witness, IffWitnessQuorum.Snapshot quorum) {
         if (witness != null) {
-            return witness.freshnessLabel() + " " + witness.rssi + "dBm " + formatAge(witness.ageMs());
+            return witness.sourceType() + " " + witness.freshnessLabel() + " "
+                    + witness.rssi + "dBm " + formatAge(witness.ageMs());
         }
         if (quorum.remoteFreshSources > 0) {
             return "REMOTE_FRESH x" + quorum.remoteFreshSources;

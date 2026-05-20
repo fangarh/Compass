@@ -615,6 +615,34 @@ position or azimuth.
 real position/witness geometry, but today it only visualizes roster/radio
 freshness and keeps position/direction unknown.
 
+## Phase 27: IFF BLE Expiry Policy
+
+**Status:** completed
+
+**Goal:** Make BLE field-radio freshness and lifecycle limits explicit so stale
+radio evidence cannot look like current proof.
+
+**Scope:**
+
+- Add a shared radio freshness policy label:
+  `fresh<=15s stale<=60s then UNKNOWN`.
+- Show BLE lifecycle policy in contact, team, and map views.
+- Mark witness source as `BLE_FIELD_RADIO` or `WIFI_SCAN_BEACON`.
+- Show next witness transition timing in contact details.
+- Log BLE stop reason and `fieldRadioPolicy`.
+- Export `FieldRadioPolicy` through the field-log analyzer.
+
+**Verification:** Android BLE/foreground-service docs were checked. Analyzer
+smoke test passed. Debug APK built successfully outside sandbox and installed on
+OnePlus `e089985a`. UIAutomator verified `Main -> IFF`; team UI showed
+`BLE POLICY: VISIBLE_SCREEN_ONLY / fresh<=15s stale<=60s then UNKNOWN`, contact
+UI showed `FIELD RADIO POLICY`, and `ЗАПИСАТЬ` logged
+`fieldRadioPolicy="VISIBLE_SCREEN_ONLY / fresh<=15s stale<=60s then UNKNOWN"`.
+
+**Result:** BLE remains visible-screen-only for now, but the UI and logs now
+state the fresh/stale/unknown policy directly. The next slice can implement a
+real foreground service lifecycle without changing the evidence model.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

@@ -107,6 +107,10 @@ public final class IffRadioWitnessStore {
         return "BLE_IFF_" + playerToken(playerId);
     }
 
+    public static String freshnessPolicyLabel() {
+        return "fresh<=" + (FRESH_MS / 1000L) + "s stale<=" + (STALE_MS / 1000L) + "s then UNKNOWN";
+    }
+
     public static int playerIndexCode(String playerId) {
         if ("local-you".equals(playerId)) {
             return 1;
@@ -231,6 +235,14 @@ public final class IffRadioWitnessStore {
             return ageMs() <= FRESH_MS;
         }
 
+        public boolean isBleWitness() {
+            return safe(this.ssid).startsWith("BLE_IFF_") || safe(this.bssid).startsWith("ble:");
+        }
+
+        public String sourceType() {
+            return isBleWitness() ? "BLE_FIELD_RADIO" : "WIFI_SCAN_BEACON";
+        }
+
         public String freshnessLabel() {
             long age = ageMs();
             if (age <= FRESH_MS) {
@@ -240,6 +252,17 @@ public final class IffRadioWitnessStore {
                 return "RADIO_STALE";
             }
             return "UNKNOWN";
+        }
+
+        public String nextTransitionLabel() {
+            long age = ageMs();
+            if (age <= FRESH_MS) {
+                return "fresh for " + formatDuration(FRESH_MS - age);
+            }
+            if (age <= STALE_MS) {
+                return "stale for " + formatDuration(STALE_MS - age);
+            }
+            return "expired";
         }
 
         public String proximityLabel() {
@@ -253,6 +276,14 @@ public final class IffRadioWitnessStore {
                 return "RADIO_WEAK_HINT";
             }
             return "RADIO_EDGE_HINT";
+        }
+
+        private String formatDuration(long durationMs) {
+            long safeDuration = Math.max(0L, durationMs);
+            if (safeDuration < 1000L) {
+                return safeDuration + "ms";
+            }
+            return (safeDuration / 1000L) + "s";
         }
     }
 }

@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 26: IFF Tactical Map Mock completed.
+Phase 27: IFF BLE Expiry Policy completed.
 
 ## Last Verified Baseline
 
@@ -23,10 +23,9 @@ Phase 26: IFF Tactical Map Mock completed.
 
 ## Next Action
 
-Next useful slice: turn the visible-screen BLE skeleton into a field-ready
-radio path with lifecycle policy, expiry behavior, and clearer fresh/stale UI
-for BLE witnesses. The tactical map can remain a mock until position and
-direction have their own evidence layers.
+Next useful slice: implement an actual IFF BLE foreground service path using
+Android `connectedDevice` foreground service requirements, then verify whether
+BLE advertise/scan survives screen-off and app-background field conditions.
 
 ## Verification
 
@@ -580,3 +579,33 @@ direction have their own evidence layers.
 - Result: IFF now has a map-shaped tactical surface for future witness/position
   work, but it remains a truthful mock and does not claim exact position or
   direction.
+
+2026-05-20 Phase 27:
+
+- Checked official Android documentation for BLE scan/advertise permissions and
+  Android 14 foreground service type requirements.
+- Decision: do not claim background BLE yet; keep Phase 27 as explicit
+  visible-screen expiry policy before implementing a service.
+- Added shared radio policy:
+  `fresh<=15s stale<=60s then UNKNOWN`.
+- `WitnessSnapshot` now exposes witness source type:
+  `BLE_FIELD_RADIO` or `WIFI_SCAN_BEACON`.
+- Contact UI now shows:
+  - witness source type;
+  - freshness policy;
+  - next transition timing;
+  - `FIELD RADIO POLICY` with visible-screen lifecycle.
+- Team/map UI now show:
+  `BLE POLICY: VISIBLE_SCREEN_ONLY / fresh<=15s stale<=60s then UNKNOWN`.
+- BLE stop now logs `ble_field_radio_stop` with reason and policy.
+- `IFF_DIAG event=field_check` now logs `fieldRadioPolicy`.
+- Analyzer now exports `FieldRadioPolicy` and includes it in Markdown reports.
+- `scripts/test-analyze-field-logs.ps1` passed.
+- `:app:assembleDebug` completed successfully outside sandbox.
+- APK installed on OnePlus `e089985a`.
+- UIAutomator verified `Main -> IFF` and contact details for `Петя`.
+- A recorded field check in
+  `field-radio-20260520-150238.log` included:
+  `fieldRadioPolicy="VISIBLE_SCREEN_ONLY / fresh<=15s stale<=60s then UNKNOWN"`.
+- Samsung `R3CT20C8A8N` was not visible over ADB during this verification;
+  this is not blocking for the UI/policy slice.

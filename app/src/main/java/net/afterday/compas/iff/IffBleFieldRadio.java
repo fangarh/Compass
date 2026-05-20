@@ -40,6 +40,7 @@ public final class IffBleFieldRadio {
     private static int rejectedCount;
     private static String localPlayerId = "";
     private static String lastStatus = "idle";
+    private static String lifecycleStatus = "VISIBLE_SCREEN_ONLY";
 
     private IffBleFieldRadio() {
     }
@@ -54,16 +55,21 @@ public final class IffBleFieldRadio {
                 return;
             }
         }
-        stop();
+        stop("restart");
         synchronized (LOCK) {
             running = true;
             localPlayerId = safe(nextLocalPlayerId);
+            lifecycleStatus = "VISIBLE_SCREEN_ONLY";
             lastStatus = "starting " + localPlayerId;
         }
         startLocked(context.getApplicationContext(), localPlayerId);
     }
 
     public static void stop() {
+        stop("manual");
+    }
+
+    public static void stop(String reason) {
         synchronized (LOCK) {
             running = false;
         }
@@ -86,10 +92,13 @@ public final class IffBleFieldRadio {
             scanCallback = null;
             advertising = false;
             scanning = false;
-            if ("idle".equals(lastStatus) || lastStatus.startsWith("starting")) {
-                lastStatus = "stopped";
-            }
+            lifecycleStatus = "VISIBLE_SCREEN_ONLY";
+            lastStatus = "stopped " + safe(reason);
         }
+        FieldDiagnosticLog.event("IFF_DIAG", "event=ble_field_radio_stop"
+                + " reason=" + safe(reason)
+                + " lifecycle=" + lifecycleStatus
+                + " policy=\"" + clean(IffRadioWitnessStore.freshnessPolicyLabel()) + "\"");
     }
 
     public static String compactStatus() {
@@ -100,6 +109,12 @@ public final class IffBleFieldRadio {
                     + " rejected=" + rejectedCount
                     + " local=" + localPlayerId
                     + " " + lastStatus;
+        }
+    }
+
+    public static String lifecycleStatus() {
+        synchronized (LOCK) {
+            return lifecycleStatus + " / " + IffRadioWitnessStore.freshnessPolicyLabel();
         }
     }
 
@@ -255,6 +270,9 @@ public final class IffBleFieldRadio {
                 lastStatus = "scanning " + playerId;
             }
             FieldDiagnosticLog.event("IFF_DIAG", "event=ble_field_radio_scan started=true localPlayerId=" + playerId);
+            FieldDiagnosticLog.event("IFF_DIAG", "event=ble_field_radio_policy"
+                    + " lifecycle=" + lifecycleStatus
+                    + " policy=\"" + clean(IffRadioWitnessStore.freshnessPolicyLabel()) + "\"");
         } catch (Exception e) {
             synchronized (LOCK) {
                 scanning = false;
