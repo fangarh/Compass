@@ -80,6 +80,7 @@ public class IffActivity extends Activity {
     private final Runnable refreshRadioState = new Runnable() {
         @Override
         public void run() {
+            IffRadioWitnessStore.logFreshnessTransitions("iff_activity_refresh");
             render();
             handler.postDelayed(this, RADIO_REFRESH_MS);
         }

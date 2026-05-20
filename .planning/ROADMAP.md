@@ -759,6 +759,36 @@ including a short screen-off foreground-service pass. This remains fresh radio
 presence only: identity is still a roster claim without crypto, and position
 and direction remain `UNKNOWN`.
 
+## Phase 32: IFF Witness Transition Logging
+
+**Status:** completed
+
+**Goal:** Make BLE expiry tests reliable by logging witness freshness
+transitions automatically instead of depending on a manual tap during the short
+stale window.
+
+**Scope:**
+
+- Track per-player witness freshness transitions:
+  `NONE`, `RADIO_FRESH`, `RADIO_STALE`, and `UNKNOWN`.
+- Log `IFF_DIAG event=witness_freshness_transition` with player id, previous
+  state, next state, reason, source type, age, RSSI, SSID/BSSID, and policy.
+- Run the transition logger from the IFF foreground radio service.
+- Run the transition logger from the visible IFF screen refresh loop.
+- Keep the evidence model and thresholds unchanged.
+
+**Verification:** analyzer smoke test passed. Debug APK built successfully and
+installed on Samsung `R3CT20C8A8N` and OnePlus `e089985a`. OnePlus runtime
+smoke verified `Main -> IFF` opens after installation and shows foreground
+radio service state. A pre-change manual expiry run recorded fresh evidence for
+`Петя` at `16:06:06` and `UNKNOWN` at `16:09:28` with age `151041 ms`, proving
+expired BLE does not remain current evidence, but the manual run missed the
+stale interval.
+
+**Result:** the next two-phone screen-off run can verify
+`RADIO_FRESH -> RADIO_STALE -> UNKNOWN` from diagnostics without timing manual
+`ЗАПИСАТЬ` taps.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

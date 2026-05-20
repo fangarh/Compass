@@ -9,6 +9,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
 import android.support.annotation.Nullable;
 import android.support.v4.app.NotificationCompat;
@@ -27,6 +28,15 @@ public final class IffForegroundRadioService extends Service {
     private static boolean running;
     private static String localPlayerId = "";
     private static String lastStatus = "service idle";
+
+    private final Handler handler = new Handler();
+    private final Runnable witnessTransitionLogger = new Runnable() {
+        @Override
+        public void run() {
+            IffRadioWitnessStore.logFreshnessTransitions("foreground_service_tick");
+            handler.postDelayed(this, 2000L);
+        }
+    };
 
     public static void start(Context context, String localPlayerId) {
         if (context == null) {
@@ -97,9 +107,12 @@ public final class IffForegroundRadioService extends Service {
                 + " localPlayerId=" + localPlayerId
                 + " policy=\"" + clean(IffRadioWitnessStore.freshnessPolicyLabel()) + "\"");
         IffBleFieldRadio.startFromForegroundService(this, localPlayerId);
+        handler.removeCallbacks(witnessTransitionLogger);
+        handler.post(witnessTransitionLogger);
     }
 
     private void stopRadio(String reason) {
+        handler.removeCallbacks(witnessTransitionLogger);
         IffBleFieldRadio.stop(reason);
         synchronized (LOCK) {
             running = false;

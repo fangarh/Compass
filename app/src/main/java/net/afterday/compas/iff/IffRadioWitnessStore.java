@@ -15,6 +15,7 @@ public final class IffRadioWitnessStore {
 
     private static final Object LOCK = new Object();
     private static final Map<String, WitnessSnapshot> WITNESSES = new HashMap<>();
+    private static final Map<String, String> LAST_FRESHNESS_LABELS = new HashMap<>();
 
     private IffRadioWitnessStore() {
     }
@@ -84,6 +85,38 @@ public final class IffRadioWitnessStore {
     public static WitnessSnapshot getWitness(String playerId) {
         synchronized (LOCK) {
             return WITNESSES.get(playerId);
+        }
+    }
+
+    public static void logFreshnessTransitions(String reason) {
+        Map<String, WitnessSnapshot> snapshots;
+        synchronized (LOCK) {
+            snapshots = new HashMap<>(WITNESSES);
+        }
+        for (WitnessSnapshot snapshot : snapshots.values()) {
+            if (snapshot == null) {
+                continue;
+            }
+            String nextLabel = snapshot.freshnessLabel();
+            String previousLabel;
+            synchronized (LOCK) {
+                previousLabel = LAST_FRESHNESS_LABELS.get(snapshot.playerId);
+                if (nextLabel.equals(previousLabel)) {
+                    continue;
+                }
+                LAST_FRESHNESS_LABELS.put(snapshot.playerId, nextLabel);
+            }
+            FieldDiagnosticLog.event("IFF_DIAG", "event=witness_freshness_transition"
+                    + " playerId=" + safe(snapshot.playerId)
+                    + " from=" + safe(previousLabel == null ? "NONE" : previousLabel)
+                    + " to=" + safe(nextLabel)
+                    + " reason=" + safe(reason)
+                    + " source=" + snapshot.sourceType()
+                    + " ageMs=" + snapshot.ageMs()
+                    + " rssi=" + snapshot.rssi
+                    + " ssid=\"" + safe(snapshot.ssid) + "\""
+                    + " bssid=" + safe(snapshot.bssid)
+                    + " policy=\"" + safe(freshnessPolicyLabel()) + "\"");
         }
     }
 

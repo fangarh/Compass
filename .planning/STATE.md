@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 31: IFF BLE Two-Phone Screen-Off completed.
+Phase 32: IFF Witness Transition Logging completed.
 
 ## Last Verified Baseline
 
@@ -23,10 +23,9 @@ Phase 31: IFF BLE Two-Phone Screen-Off completed.
 
 ## Next Action
 
-Next useful slice: add a longer BLE background/expiry field run that records
-fresh -> stale -> UNKNOWN transitions with one or both phones screen-off, then
-decide whether the MVP needs wake/retry controls or just explicit operator
-radio status.
+Next useful slice: unlock Samsung and rerun the two-phone screen-off expiry
+test. Use the new `witness_freshness_transition` diagnostics to verify
+`RADIO_FRESH -> RADIO_STALE -> UNKNOWN` without manual timing.
 
 ## Verification
 
@@ -739,3 +738,34 @@ radio status.
 - Result: the no-infrastructure BLE IFF path works between two phones and
   survives a short both-screens-off foreground-service pass. This is proximity
   freshness, not crypto identity, GPS position, or direction.
+
+2026-05-20 Phase 32:
+
+- Attempted a longer expiry run after Phase 31.
+- Baseline fresh field check was recorded on OnePlus:
+  `field-radio-20260520-160443.log` at `16:06:06`,
+  `playerId=petya witness=RADIO_FRESH rssi=-54 ageMs=92`.
+- Samsung was force-stopped to simulate the transmitter disappearing.
+- OnePlus later recorded `playerId=petya witness=UNKNOWN rssi=-53
+  ageMs=151041` at `16:09:28`.
+- Result: expired BLE witness correctly returned to `UNKNOWN`, but the manual
+  run missed the `RADIO_STALE` window because Samsung was locked/AOD and could
+  not be relaunched over ADB for a controlled repeat.
+- Added automatic transition logging:
+  `IFF_DIAG event=witness_freshness_transition`.
+- Transition events include:
+  - player id;
+  - previous freshness state;
+  - next freshness state;
+  - reason (`foreground_service_tick` or `iff_activity_refresh`);
+  - source type;
+  - age, RSSI, SSID/BSSID;
+  - freshness policy.
+- The transition logger runs from both:
+  - `IffForegroundRadioService`;
+  - visible `IffActivity` refresh.
+- `scripts/test-analyze-field-logs.ps1` passed.
+- `:app:assembleDebug` completed successfully outside sandbox.
+- APK installed successfully on Samsung `R3CT20C8A8N` and OnePlus `e089985a`.
+- OnePlus runtime smoke verified `Main -> IFF` opens and shows foreground
+  radio service state after installation.

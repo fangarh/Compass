@@ -875,3 +875,67 @@ fresh BLE -> screen-off/background -> stale <= 60s -> UNKNOWN
 Нужно проверить не только короткое выживание foreground service, но и честный
 переход UI/logs из fresh в stale и затем в UNKNOWN, особенно если один телефон
 останавливает radio или уходит дальше.
+
+## Реализованный срез Phase 32
+
+Во время длинного expiry-прогона подтвердился важный факт, но проявилась
+проблема методики:
+
+```text
+fresh BLE recorded -> Samsung transmitter stopped -> old witness became UNKNOWN
+```
+
+Фактический лог OnePlus:
+
+- `16:06:06`: `field_check playerId=petya`, `witness=RADIO_FRESH`,
+  RSSI `-54`, age `92 ms`;
+- последний BLE RX от Samsung был около `16:06:57`;
+- `16:09:28`: `field_check playerId=petya`, `witness=UNKNOWN`,
+  RSSI `-53`, age `151041 ms`.
+
+Вывод: старый BLE не остается current evidence, и proximity возвращается в
+`UNKNOWN`. Но вручную поймать окно `RADIO_STALE` между 15 и 60 сек трудно:
+Samsung ушел в lock/AOD, и повторить контролируемый старт без ручного unlock не
+получилось.
+
+Поэтому добавлен диагностический transition logger:
+
+```text
+IFF_DIAG event=witness_freshness_transition
+from=RADIO_FRESH to=RADIO_STALE
+from=RADIO_STALE to=UNKNOWN
+```
+
+Что изменилось:
+
+- `IffRadioWitnessStore` теперь отслеживает последний freshness label по
+  каждому игроку;
+- `IffForegroundRadioService` пишет переходы каждые 2 секунды, пока IFF radio
+  работает;
+- видимый `IffActivity` тоже вызывает transition logger из refresh loop;
+- событие пишет player id, previous/next state, source type, age, RSSI,
+  SSID/BSSID и policy.
+
+Проверка:
+
+- analyzer smoke test прошел;
+- debug APK собран;
+- APK установлен на Samsung и OnePlus;
+- OnePlus открыл `Main -> IFF` после установки и показал foreground radio
+  service state.
+
+Важно: это не меняет confidence model. Это только делает полевые проверки
+лучше: следующий screen-off прогон сможет доказать
+`RADIO_FRESH -> RADIO_STALE -> UNKNOWN` по diagnostics без ручного попадания в
+нужные секунды.
+
+## Следующий срез
+
+Разблокировать Samsung и повторить two-phone expiry:
+
+```text
+Samsung Петя fresh BLE
+Samsung radio/app stop
+OnePlus diagnostics:
+RADIO_FRESH -> RADIO_STALE -> UNKNOWN
+```
