@@ -19,6 +19,7 @@ import net.afterday.compas.iff.IffRemoteWitnessReport;
 import net.afterday.compas.iff.IffRemoteWitnessStore;
 import net.afterday.compas.iff.IffRadioWitnessStore;
 import net.afterday.compas.iff.IffRadioWitnessStore.WitnessSnapshot;
+import net.afterday.compas.iff.IffUdpWitnessTransport;
 import net.afterday.compas.iff.IffWitnessQuorum;
 import net.afterday.compas.logging.FieldDiagnosticLog;
 
@@ -48,6 +49,7 @@ public class IffActivity extends Activity {
     private Button mapTab;
     private Button approachButton;
     private Button recordCheckButton;
+    private Button txWitnessButton;
     private Button simWitnessButton;
     private Button simStaleWitnessButton;
     private TextView title;
@@ -87,6 +89,7 @@ public class IffActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        IffUdpWitnessTransport.ensureStarted();
         render();
         if (approachActive) {
             scheduleApproachExpire();
@@ -99,6 +102,7 @@ public class IffActivity extends Activity {
     protected void onPause() {
         handler.removeCallbacks(expireApproach);
         handler.removeCallbacks(refreshRadioState);
+        IffUdpWitnessTransport.stop();
         super.onPause();
     }
 
@@ -108,6 +112,7 @@ public class IffActivity extends Activity {
         mapTab = (Button) findViewById(R.id.iff_map_tab);
         approachButton = (Button) findViewById(R.id.iff_approach);
         recordCheckButton = (Button) findViewById(R.id.iff_record_check);
+        txWitnessButton = (Button) findViewById(R.id.iff_tx_witness);
         simWitnessButton = (Button) findViewById(R.id.iff_sim_witness);
         simStaleWitnessButton = (Button) findViewById(R.id.iff_sim_stale_witness);
         title = (TextView) findViewById(R.id.iff_title);
@@ -128,6 +133,7 @@ public class IffActivity extends Activity {
         mapTab.setTypeface(mono, Typeface.BOLD);
         approachButton.setTypeface(mono, Typeface.BOLD);
         recordCheckButton.setTypeface(mono, Typeface.BOLD);
+        txWitnessButton.setTypeface(mono, Typeface.BOLD);
         simWitnessButton.setTypeface(mono, Typeface.BOLD);
         simStaleWitnessButton.setTypeface(mono, Typeface.BOLD);
     }
@@ -166,6 +172,12 @@ public class IffActivity extends Activity {
                 recordFieldCheck();
             }
         });
+        txWitnessButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                transmitWitnessStub();
+            }
+        });
         simWitnessButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -200,6 +212,7 @@ public class IffActivity extends Activity {
 
     private void render() {
         approachButton.setText(approachActive ? "ОТМЕНИТЬ ПОДХОД" : "Я ПОДХОЖУ");
+        txWitnessButton.setText("TX STUB");
         simWitnessButton.setText("SIM FRESH");
         simStaleWitnessButton.setText("SIM STALE");
         renderTabs();
@@ -262,12 +275,14 @@ public class IffActivity extends Activity {
                 + "STALE EVIDENCE: " + staleWitnessEvidenceCount() + "\n"
                 + "RADIO FRESH / STRONG: " + freshWitnessCount() + " / " + strongProximityCount() + "\n"
                 + "REMOTE REPORTS: " + remoteReportCount() + "\n"
+                + "TRANSPORT: " + IffUdpWitnessTransport.compactStatus() + "\n"
                 + "DIRECTION: UNKNOWN");
         body.setText("Выберите участника, чтобы открыть карточку контакта.\n"
                 + "Operator summary отделяет current witness от stale evidence.\n"
                 + "Проценты - текущая уверенность слоя, а не финальное доказательство.\n"
                 + "Remote witness contract: " + IffRemoteWitnessReport.CONTRACT_VERSION + "\n"
                 + "Signature status пока placeholder: " + IffRemoteWitnessReport.SIGNATURE_PENDING + "\n"
+                + "Transport stub: UDP broadcast, unsigned, debug only.\n"
                 + "Последняя проверка: " + lastFieldCheckSummary);
         for (int i = 0; i < roster.length; i++) {
             bodyContainer.addView(createRosterButton(i));
@@ -279,7 +294,8 @@ public class IffActivity extends Activity {
         title.setText("КАРТА");
         subtitle.setText("позиции и свидетели");
         status.setText("POSITION: UNKNOWN 0%\nLOCAL RADIO: " + freshWitnessCount() + " fresh\n"
-                + "REMOTE REPORTS: " + remoteReportCount() + "\nDIRECTION: UNKNOWN 0%");
+                + "REMOTE REPORTS: " + remoteReportCount() + "\n"
+                + "TRANSPORT: " + IffUdpWitnessTransport.compactStatus() + "\nDIRECTION: UNKNOWN 0%");
         body.setText(mapWitnessList());
     }
 
@@ -311,10 +327,31 @@ public class IffActivity extends Activity {
                 + " remoteReportCount=" + quorum.remoteReportCount
                 + " remoteFreshSources=" + quorum.remoteFreshSources
                 + " remoteStaleSources=" + quorum.remoteStaleSources
+                + " transportStatus=\"" + safe(IffUdpWitnessTransport.compactStatus()) + "\""
                 + " witness=" + witnessState
                 + " localApproach=" + approachActive);
         lastFieldCheckSummary = selected.displayName + ": identity " + confidence.identity.score
                 + "% / proximity " + confidence.proximity.score + "% / witness " + (witness == null ? "none" : witness.freshnessLabel());
+        activeTab = TAB_CONTACT;
+        render();
+    }
+
+    private void transmitWitnessStub() {
+        IffPlayer target = roster[selectedPlayerIndex];
+        WitnessSnapshot witness = IffRadioWitnessStore.getWitness(target.playerId);
+        boolean queued = IffUdpWitnessTransport.sendReport(
+                target.playerId,
+                IffRadioWitnessStore.expectedBeaconSsid(target.playerId),
+                witness);
+        FieldDiagnosticLog.event("IFF_DIAG", "event=remote_witness_transport_stub"
+                + " queued=" + queued
+                + " sourcePlayerId=" + IffUdpWitnessTransport.sourcePlayerId()
+                + " targetPlayerId=" + target.playerId
+                + " hasLocalWitness=" + (witness != null)
+                + " contract=" + IffRemoteWitnessReport.CONTRACT_VERSION
+                + " signatureStatus=" + IffRemoteWitnessReport.SIGNATURE_PENDING);
+        lastFieldCheckSummary = target.displayName + ": tx stub " + (queued ? "queued" : "failed")
+                + " / " + IffRemoteWitnessReport.SIGNATURE_PENDING;
         activeTab = TAB_CONTACT;
         render();
     }
@@ -478,6 +515,7 @@ public class IffActivity extends Activity {
                 + "- stale evidence: " + quorum.staleSources + "\n"
                 + "- remote fresh/stale/total: " + quorum.remoteFreshSources + "/"
                 + quorum.remoteStaleSources + "/" + quorum.remoteReportCount + "\n"
+                + "- transport: " + IffUdpWitnessTransport.compactStatus() + "\n"
                 + "- identity remains: " + confidence.identity.label + " " + confidence.identity.score + "%\n"
                 + "- position/direction: UNKNOWN unless their own layers prove otherwise";
     }
@@ -553,7 +591,7 @@ public class IffActivity extends Activity {
                         .append("\n");
             }
         }
-        builder.append("- transport: PENDING (network not implemented)\n")
+        builder.append("- transport: UDP_STUB unsigned debug only\n")
                 .append("- signature: ").append(IffRemoteWitnessReport.SIGNATURE_PENDING).append("\n")
                 .append("- identity is not upgraded by quorum without crypto");
         return builder.toString();
@@ -657,7 +695,7 @@ public class IffActivity extends Activity {
                     .append("\n");
         }
         builder.append("\nGPS и направление будут отдельными слоями уверенности.\n")
-                .append("Remote transport пока не подключен; SIM FRESH/STALE проверяют local-only fixture.");
+                .append("TX STUB отправляет unsigned UDP report; SIM FRESH/STALE проверяют local-only fixture.");
         return builder.toString();
     }
 

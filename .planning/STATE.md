@@ -438,6 +438,37 @@ is charged; until then, keep transport test points local and log-driven.
 - Diagnostic log `field-radio-20260520-091403.log` recorded:
   `operatorVerdict=STALE_EVIDENCE_ONLY witnessQuorum=STALE_REMOTE_WITNESS remoteReportCount=2 remoteFreshSources=0 remoteStaleSources=2`.
 - Analyzer check completed:
-  `artifacts/iff-field-session-20260520-0914` ->
+ `artifacts/iff-field-session-20260520-0914` ->
   `artifacts/iff-field-analysis-20260520-0914`, 1893 scan entries, CSV/Markdown
   row with `STALE_EVIDENCE_ONLY`.
+
+2026-05-20 Phase 22:
+
+- Added `IffUdpWitnessTransport` as the first debug UDP transport stub for
+  `iff-remote-witness-v1` remote witness reports.
+- Transport uses UDP broadcast port `45873` while the IFF screen is visible.
+- Added `TX STUB` to the IFF action row.
+- `TX STUB` queues an unsigned report with `SIGNATURE_PENDING` for the selected
+  contact.
+- When no local radio witness exists, the report uses an explicit
+  `stub_no_local_witness` mode and does not upgrade identity or proximity.
+- Received packets are parsed into `IffRemoteWitnessReport` and routed through
+  `IffRemoteWitnessStore`.
+- Self-source packets are ignored; this was observed during local broadcast
+  verification as `rx self ignored`.
+- Contact/team/map UI now shows compact transport state, for example
+  `udp:45873 tx=1 rx=0 rejected=0 rx self ignored`.
+- `IFF_DIAG event=field_check` now records `transportStatus`.
+- Analyzer CSV output now includes `TransportStatus`.
+- `:app:assembleDebug` completed successfully.
+- `scripts/test-analyze-field-logs.ps1` passed.
+- APK installed on Samsung `R3CT20C8A8N` and OnePlus `e089985a`.
+- UIAutomator/ADB verified `Main -> IFF` on both phones.
+- Both phones showed `TRANSPORT: udp:45873 ... listening`.
+- `TX STUB` on both phones updated contact transport state to
+  `tx=1 rx=0 rejected=0 rx self ignored` and kept
+  `SIGNATURE_PENDING` visible.
+- Cross-device RX is still a topology follow-up: Samsung had no `wlan0`
+  address during this test and only showed `rmnet*`; OnePlus was on Wi-Fi
+  `192.168.13.105/24`. Put both phones on the same Wi-Fi/hotspot before
+  claiming phone-to-phone UDP receive.

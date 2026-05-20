@@ -468,6 +468,35 @@ showed `OPERATOR: STALE_EVIDENCE_ONLY`. The diagnostic log
 Analyzer verification on `artifacts/iff-field-session-20260520-0914` produced
 CSV/Markdown rows with `STALE_EVIDENCE_ONLY`.
 
+## Phase 22: IFF UDP Transport Stub
+
+**Status:** completed with RX topology note
+
+**Goal:** Add the first real transport stub for remote IFF witness exchange
+without treating unsigned packets as proof of identity or proximity.
+
+**Scope:**
+
+- Add `IffUdpWitnessTransport` for debug UDP broadcast on port `45873`.
+- Add `TX STUB` to the IFF screen.
+- Send `iff-remote-witness-v1` reports with `SIGNATURE_PENDING`.
+- Listen while the IFF screen is visible and ingest accepted remote packets into
+  `IffRemoteWitnessStore`.
+- Show compact transport state in contact/team/map UI.
+- Log `transportStatus` in `IFF_DIAG event=field_check`.
+- Export `TransportStatus` from the field-log analyzer.
+- Keep crypto, GPS/Wi-Fi calibration, network discovery, Samsung-specific
+  logic, and direction inference out of this slice.
+
+**Verification:** debug APK builds. Analyzer smoke test passes. APK installed
+on Samsung `R3CT20C8A8N` and OnePlus `e089985a`. UIAutomator/ADB verified
+`Main -> IFF` on both phones, both screens showed
+`TRANSPORT: udp:45873 ... listening`, and `TX STUB` on each phone updated the
+contact transport state to `tx=1 rx=0 rejected=0 rx self ignored` with
+`SIGNATURE_PENDING`. Full cross-device RX was not claimed because Samsung had
+no `wlan0` address during the test; it was USB-visible but only on `rmnet*`,
+while OnePlus was on Wi-Fi `192.168.13.105/24`.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

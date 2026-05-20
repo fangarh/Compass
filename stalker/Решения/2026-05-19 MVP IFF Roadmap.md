@@ -419,3 +419,47 @@ current witness -> stale evidence -> no current evidence
 Первый real transport stub для remote witness exchange. Когда второй телефон
 зарядится, его можно использовать для проверки приема/передачи; до этого
 transport points стоит держать локальными и хорошо логируемыми.
+
+## Реализованный срез Phase 22
+
+Добавлен первый debug transport stub для remote witness exchange:
+
+```text
+TX STUB -> unsigned UDP broadcast -> iff-remote-witness-v1 / SIGNATURE_PENDING
+```
+
+Что изменилось:
+
+- добавлен `IffUdpWitnessTransport`;
+- IFF-экран слушает UDP port `45873`, пока открыт;
+- кнопка `TX STUB` отправляет report по выбранному контакту;
+- report остается unsigned: `SIGNATURE_PENDING`;
+- отсутствие локального radio witness явно маркируется как stub/no proof;
+- self-broadcast игнорируется и не превращается в доказательство;
+- UI показывает transport state отдельно от identity/proximity/position/direction;
+- analyzer получил поле `TransportStatus`.
+
+Проверка:
+
+- debug APK собран;
+- analyzer smoke test прошел;
+- APK установлен на Samsung `R3CT20C8A8N` и OnePlus `e089985a`;
+- `Main -> IFF` проверен на обоих телефонах;
+- оба экрана показали `TRANSPORT: udp:45873 ... listening`;
+- `TX STUB` на каждом телефоне дал `tx=1 rx=0 rejected=0 rx self ignored`.
+
+Важно: полноценный прием между телефонами пока не заявлен как доказанный.
+Samsung был виден по USB, но без `wlan0`; OnePlus был в Wi-Fi
+`192.168.13.105/24`. Для следующей проверки оба телефона надо посадить в одну
+Wi-Fi сеть или на один hotspot.
+
+## Следующий срез
+
+Проверить реальный phone-to-phone UDP receive в одной Wi-Fi сети:
+
+```text
+телефон A TX STUB -> телефон B remote_witness_udp_rx -> visible remote report
+```
+
+После этого можно решать, оставляем ли UDP broadcast как debug path или
+переходим к более контролируемому discovery/transport слою.
