@@ -497,6 +497,33 @@ contact transport state to `tx=1 rx=0 rejected=0 rx self ignored` with
 no `wlan0` address during the test; it was USB-visible but only on `rmnet*`,
 while OnePlus was on Wi-Fi `192.168.13.105/24`.
 
+## Phase 23: IFF Phone-to-Phone UDP RX Verification
+
+**Status:** completed
+
+**Goal:** Verify the Phase 22 UDP transport stub between two physical phones on
+the same Wi-Fi network.
+
+**Scope:**
+
+- Use existing `TX STUB`; no code changes.
+- Put Samsung and OnePlus on one Wi-Fi/hotspot subnet.
+- Verify `remote_witness_udp_rx` on the receiving phone.
+- Confirm UI and diagnostics keep unsigned packets as remote witness evidence,
+  not identity/proximity proof.
+
+**Verification:** Samsung `R3CT20C8A8N` had `10.14.135.249/24` on `swlan0`;
+OnePlus `e089985a` had `10.14.135.40/24` on `wlan0`; both shared broadcast
+`10.14.135.255`. Both opened `Main -> IFF` and showed
+`TRANSPORT: udp:45873 ... listening`. OnePlus `TX STUB` was received by
+Samsung: Samsung logged `remote_witness_udp_rx accepted=true from=10.14.135.40`
+and `remote_witness_received sourcePlayerId=debug-ne2215 targetPlayerId=local-you
+freshness=REMOTE_FRESH signatureStatus=SIGNATURE_PENDING`. A recorded
+`field_check` on Samsung showed `remoteReportCount=1` and
+`transportStatus="udp:45873 tx=1 rx=1 rejected=0 rx local-you"`. Analyzer
+completed on `artifacts/iff-field-session-20260520-1005` and wrote
+`artifacts/iff-field-analysis-20260520-1005`.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

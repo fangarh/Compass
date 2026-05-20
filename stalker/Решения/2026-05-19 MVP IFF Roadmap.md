@@ -463,3 +463,45 @@ Wi-Fi сеть или на один hotspot.
 
 После этого можно решать, оставляем ли UDP broadcast как debug path или
 переходим к более контролируемому discovery/transport слою.
+
+## Реализованный срез Phase 23
+
+Проверен реальный phone-to-phone UDP receive на двух физических телефонах:
+
+```text
+OnePlus TX STUB -> Samsung remote_witness_udp_rx -> remote report visible
+```
+
+Сеть:
+
+- Samsung `R3CT20C8A8N`: `10.14.135.249/24` на `swlan0`;
+- OnePlus `e089985a`: `10.14.135.40/24` на `wlan0`;
+- общий broadcast: `10.14.135.255`.
+
+Результат:
+
+- оба телефона открыли `Main -> IFF`;
+- оба показали `TRANSPORT: udp:45873 ... listening`;
+- направление Samsung -> OnePlus в этом проходе RX не показало;
+- направление OnePlus -> Samsung сработало;
+- Samsung записал `remote_witness_udp_rx accepted=true from=10.14.135.40`;
+- Samsung записал `remote_witness_received sourcePlayerId=debug-ne2215`;
+- `field_check` на Samsung показал
+  `transportStatus="udp:45873 tx=1 rx=1 rejected=0 rx local-you"`;
+- analyzer по сессии `20260520-1005` подтвердил `remoteReportCount=1`.
+
+Важно: это доказывает транспортный RX, но не доказывает identity/proximity.
+Пакет остается `SIGNATURE_PENDING`, поэтому это remote witness evidence, а не
+доверенная идентичность.
+
+## Следующий срез
+
+Сделать transport evidence более полезным для оператора:
+
+```text
+fresh remote RX -> visible CURRENT_SINGLE_WITNESS -> expiry -> STALE_EVIDENCE_ONLY
+```
+
+Нужно либо уменьшить задержку фиксации после RX, либо добавить явный индикатор
+fresh remote RX прямо в team/contact summary, чтобы полевой оператор видел
+свежесть до истечения окна.

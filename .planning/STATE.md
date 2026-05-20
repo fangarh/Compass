@@ -472,3 +472,26 @@ is charged; until then, keep transport test points local and log-driven.
   address during this test and only showed `rmnet*`; OnePlus was on Wi-Fi
   `192.168.13.105/24`. Put both phones on the same Wi-Fi/hotspot before
   claiming phone-to-phone UDP receive.
+
+2026-05-20 Phase 23:
+
+- Verified real phone-to-phone UDP RX for the existing Phase 22 transport stub.
+- Network setup:
+  - Samsung `R3CT20C8A8N`: `10.14.135.249/24` on `swlan0`;
+  - OnePlus `e089985a`: `10.14.135.40/24` on `wlan0`;
+  - shared broadcast: `10.14.135.255`.
+- Both phones opened `Main -> IFF`.
+- Both screens showed `TRANSPORT: udp:45873 ... listening`.
+- Samsung `TX STUB` emitted a packet, but OnePlus did not show RX in that
+  direction during this pass.
+- OnePlus `TX STUB` emitted a packet and Samsung received it.
+- Samsung diagnostics recorded:
+  `event=remote_witness_udp_rx accepted=true from=10.14.135.40 sourcePlayerId=debug-ne2215 targetPlayerId=local-you freshness=REMOTE_FRESH contract=iff-remote-witness-v1`.
+- Samsung diagnostics recorded:
+  `event=remote_witness_received contract=iff-remote-witness-v1 sourcePlayerId=debug-ne2215 targetPlayerId=local-you freshness=REMOTE_FRESH rssi=-63 ageMs=2500 signatureStatus=SIGNATURE_PENDING`.
+- Samsung `field_check` recorded:
+  `remoteReportCount=1 remoteFreshSources=0 remoteStaleSources=1 transportStatus="udp:45873 tx=1 rx=1 rejected=0 rx local-you"`.
+- Analyzer completed on `artifacts/iff-field-session-20260520-1005` and wrote
+  `artifacts/iff-field-analysis-20260520-1005`.
+- Result: UDP RX is proven at least in the OnePlus-to-Samsung direction, and
+  unsigned transport remains evidence only; identity/proximity are not upgraded.
