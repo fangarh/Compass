@@ -46,12 +46,20 @@ public final class IffBleFieldRadio {
     }
 
     public static void start(Context context, String nextLocalPlayerId) {
+        start(context, nextLocalPlayerId, "VISIBLE_SCREEN_ONLY");
+    }
+
+    public static void startFromForegroundService(Context context, String nextLocalPlayerId) {
+        start(context, nextLocalPlayerId, "FOREGROUND_SERVICE_CONNECTED_DEVICE");
+    }
+
+    private static void start(Context context, String nextLocalPlayerId, String lifecycle) {
         if (context == null || Build.VERSION.SDK_INT < 21) {
             setStatus("unsupported_api", false, false);
             return;
         }
         synchronized (LOCK) {
-            if (running && safe(nextLocalPlayerId).equals(localPlayerId)) {
+            if (running && safe(nextLocalPlayerId).equals(localPlayerId) && safe(lifecycle).equals(lifecycleStatus)) {
                 return;
             }
         }
@@ -59,7 +67,7 @@ public final class IffBleFieldRadio {
         synchronized (LOCK) {
             running = true;
             localPlayerId = safe(nextLocalPlayerId);
-            lifecycleStatus = "VISIBLE_SCREEN_ONLY";
+            lifecycleStatus = safe(lifecycle);
             lastStatus = "starting " + localPlayerId;
         }
         startLocked(context.getApplicationContext(), localPlayerId);
@@ -70,8 +78,10 @@ public final class IffBleFieldRadio {
     }
 
     public static void stop(String reason) {
+        String stoppedLifecycle;
         synchronized (LOCK) {
             running = false;
+            stoppedLifecycle = lifecycleStatus;
         }
         try {
             if (advertiser != null && advertiseCallback != null) {
@@ -92,12 +102,11 @@ public final class IffBleFieldRadio {
             scanCallback = null;
             advertising = false;
             scanning = false;
-            lifecycleStatus = "VISIBLE_SCREEN_ONLY";
             lastStatus = "stopped " + safe(reason);
         }
         FieldDiagnosticLog.event("IFF_DIAG", "event=ble_field_radio_stop"
                 + " reason=" + safe(reason)
-                + " lifecycle=" + lifecycleStatus
+                + " lifecycle=" + stoppedLifecycle
                 + " policy=\"" + clean(IffRadioWitnessStore.freshnessPolicyLabel()) + "\"");
     }
 

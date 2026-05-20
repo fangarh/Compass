@@ -690,3 +690,54 @@ IFF radio foreground service -> screen off -> app background -> BLE still measur
 
 Для Android 14 это надо делать через foreground service type `connectedDevice`,
 с явным notification/lifecycle UI и полевым тестом screen-off/background.
+
+## Реализованный срез Phase 28
+
+Добавлен foreground service skeleton для IFF BLE radio:
+
+```text
+IffActivity -> IffForegroundRadioService -> BLE advertise/scan
+```
+
+Что изменилось:
+
+- добавлен `IffForegroundRadioService`;
+- service объявлен как `foregroundServiceType="connectedDevice"`;
+- IFF-экран запускает service с текущим `THIS DEVICE`;
+- BLE scan/advertise теперь стартует из foreground service;
+- `IffActivity.onPause` больше не останавливает BLE напрямую;
+- UI показывает `RADIO SERVICE`;
+- BLE policy теперь показывает `FOREGROUND_SERVICE_CONNECTED_DEVICE`;
+- diagnostic log пишет `iff_radio_service_start` / `iff_radio_service_stop`.
+
+Проверка на OnePlus:
+
+- debug APK собран и установлен;
+- `Main -> IFF` показал foreground service state;
+- после `Home` service остался foreground:
+  `IffForegroundRadioService isForeground=true`;
+- `dumpsys` показал foreground type `0x00000010`;
+- field-check записал:
+  `fieldRadioPolicy="FOREGROUND_SERVICE_CONNECTED_DEVICE / fresh<=15s stale<=60s then UNKNOWN"`.
+
+Важно: это доказывает app-side foreground lifecycle skeleton на одном телефоне.
+Это еще не доказывает, что два телефона стабильно слышат BLE через screen-off и
+background. Для этого нужен отдельный полевой прогон с двумя телефонами.
+
+## Следующий срез
+
+Двухтелефонная проверка foreground BLE:
+
+```text
+phone A screen off/background advertises
+phone B screen off/background scans
+field_check records fresh/stale/unknown transitions
+```
+
+Нужно проверить отдельно:
+
+- foreground service active on both phones;
+- screen off on advertiser;
+- screen off on scanner;
+- app background on one/both phones;
+- fresh witness не становится stale false-positive.

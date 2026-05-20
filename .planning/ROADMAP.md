@@ -643,6 +643,36 @@ UI showed `FIELD RADIO POLICY`, and `ЗАПИСАТЬ` logged
 state the fresh/stale/unknown policy directly. The next slice can implement a
 real foreground service lifecycle without changing the evidence model.
 
+## Phase 28: IFF BLE Foreground Service
+
+**Status:** completed
+
+**Goal:** Move IFF BLE radio ownership from the visible IFF activity into an
+Android foreground service.
+
+**Scope:**
+
+- Add `IffForegroundRadioService`.
+- Declare it with `android:foregroundServiceType="connectedDevice"`.
+- Start it from `IffActivity` using the current `THIS DEVICE` roster identity.
+- Run BLE scan/advertise from the foreground service.
+- Stop direct BLE shutdown from `IffActivity.onPause`.
+- Show foreground service state in the IFF UI.
+- Log foreground service start/stop and field-radio policy.
+
+**Verification:** Android foreground-service docs were checked. Analyzer smoke
+test passed. Debug APK built successfully and installed on OnePlus `e089985a`.
+UIAutomator verified `Main -> IFF`; the team screen showed
+`RADIO SERVICE: iff radio service on local=local-you foreground connectedDevice`
+and `BLE POLICY: FOREGROUND_SERVICE_CONNECTED_DEVICE / fresh<=15s stale<=60s then UNKNOWN`.
+After pressing Home, `dumpsys activity services net.afterday.compas` showed
+`IffForegroundRadioService isForeground=true` with foreground type `0x00000010`.
+The diagnostic log recorded `iff_radio_service_start` and a field check with
+foreground-service `fieldRadioPolicy`.
+
+**Result:** the BLE path now has a foreground-service lifecycle skeleton. Full
+field proof still needs a two-phone screen-off/background BLE test.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

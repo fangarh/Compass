@@ -75,6 +75,11 @@
             </intent-filter>
         </service>
 
+        <service
+            android:name="net.afterday.compas.iff.IffForegroundRadioService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
         <receiver
             android:name="net.afterday.compas.ActionsReceiver"
             android:exported="false">

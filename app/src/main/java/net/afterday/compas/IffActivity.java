@@ -18,6 +18,7 @@ import java.util.List;
 import net.afterday.compas.iff.IffBleFieldRadio;
 import net.afterday.compas.iff.IffConfidence;
 import net.afterday.compas.iff.IffConfidence.Snapshot;
+import net.afterday.compas.iff.IffForegroundRadioService;
 import net.afterday.compas.iff.IffRemoteWitnessReport;
 import net.afterday.compas.iff.IffRemoteWitnessStore;
 import net.afterday.compas.iff.IffRadioWitnessStore;
@@ -98,7 +99,7 @@ public class IffActivity extends Activity {
     protected void onResume() {
         super.onResume();
         IffUdpWitnessTransport.ensureStarted();
-        IffBleFieldRadio.start(this, localDevicePlayerId);
+        IffForegroundRadioService.start(this, localDevicePlayerId);
         render();
         if (approachActive) {
             scheduleApproachExpire();
@@ -111,7 +112,6 @@ public class IffActivity extends Activity {
     protected void onPause() {
         handler.removeCallbacks(expireApproach);
         handler.removeCallbacks(refreshRadioState);
-        IffBleFieldRadio.stop("activity_pause");
         IffUdpWitnessTransport.stop();
         super.onPause();
     }
@@ -297,6 +297,7 @@ public class IffActivity extends Activity {
                 + " / stale " + staleWitnessEvidenceCount()
                 + " / radio " + freshWitnessCount() + "/" + strongProximityCount() + "\n"
                 + "FIELD RADIO: " + IffBleFieldRadio.compactStatus() + "\n"
+                + "RADIO SERVICE: " + IffForegroundRadioService.compactStatus() + "\n"
                 + "BLE POLICY: " + IffBleFieldRadio.lifecycleStatus() + "\n"
                 + "REMOTE REPORTS: " + remoteReportCount() + " / DIRECTION: UNKNOWN");
         body.setText("Выберите участника, чтобы открыть карточку контакта.\n"
@@ -304,6 +305,7 @@ public class IffActivity extends Activity {
                 + "Operator summary отделяет current witness от stale evidence.\n"
                 + "Проценты - текущая уверенность слоя, а не финальное доказательство.\n"
                 + "Field radio не должен требовать общей Wi-Fi сети.\n"
+                + "Radio service: " + IffForegroundRadioService.compactStatus() + "\n"
                 + "BLE lifecycle: " + IffBleFieldRadio.lifecycleStatus() + "\n"
                 + "BLE skeleton: " + IffBleFieldRadio.compactStatus() + "\n"
                 + "Remote witness contract: " + IffRemoteWitnessReport.CONTRACT_VERSION + "\n"
@@ -325,6 +327,7 @@ public class IffActivity extends Activity {
         status.setText("POSITION/DIRECTION: UNKNOWN 0%\n"
                 + "RADIO: local " + freshWitnessCount() + " fresh / remote " + remoteReportCount() + "\n"
                 + "FIELD RADIO: " + IffBleFieldRadio.compactStatus() + "\n"
+                + "RADIO SERVICE: " + IffForegroundRadioService.compactStatus() + "\n"
                 + "BLE POLICY: " + IffBleFieldRadio.lifecycleStatus() + "\n"
                 + "UDP DEBUG: " + IffUdpWitnessTransport.compactStatus());
         bodyContainer.removeAllViews();
@@ -472,7 +475,7 @@ public class IffActivity extends Activity {
         FieldDiagnosticLog.event("IFF_DIAG", "event=device_identity_selected"
                 + " localDevicePlayerId=" + player.playerId
                 + " displayName=\"" + safe(player.displayName) + "\"");
-        IffBleFieldRadio.start(this, localDevicePlayerId);
+        IffForegroundRadioService.start(this, localDevicePlayerId);
         render();
     }
 
@@ -668,8 +671,9 @@ public class IffActivity extends Activity {
 
     private String fieldRadioPolicyDetails() {
         return "- lifecycle: " + IffBleFieldRadio.lifecycleStatus() + "\n"
-                + "- current implementation runs while IFF screen is visible\n"
-                + "- app pause stops BLE scan/advertise and logs ble_field_radio_stop\n"
+                + "- service: " + IffForegroundRadioService.compactStatus() + "\n"
+                + "- foreground service keeps BLE radio outside visible IFF activity\n"
+                + "- notification stop action stops BLE scan/advertise and logs service stop\n"
                 + "- stale BLE/Wi-Fi witness remains visible but is not current proof\n"
                 + "- expired witness returns proximity to UNKNOWN";
     }

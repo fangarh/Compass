@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 27: IFF BLE Expiry Policy completed.
+Phase 28: IFF BLE Foreground Service completed.
 
 ## Last Verified Baseline
 
@@ -23,9 +23,10 @@ Phase 27: IFF BLE Expiry Policy completed.
 
 ## Next Action
 
-Next useful slice: implement an actual IFF BLE foreground service path using
-Android `connectedDevice` foreground service requirements, then verify whether
-BLE advertise/scan survives screen-off and app-background field conditions.
+Next useful slice: run a two-phone BLE foreground-service field test. Verify
+whether phone A continues advertising and phone B continues scanning through
+screen-off and app-background transitions, then log fresh/stale/unknown
+behavior.
 
 ## Verification
 
@@ -609,3 +610,39 @@ BLE advertise/scan survives screen-off and app-background field conditions.
   `fieldRadioPolicy="VISIBLE_SCREEN_ONLY / fresh<=15s stale<=60s then UNKNOWN"`.
 - Samsung `R3CT20C8A8N` was not visible over ADB during this verification;
   this is not blocking for the UI/policy slice.
+
+2026-05-20 Phase 28:
+
+- Checked official Android documentation for foreground service type
+  `connectedDevice`.
+- Added `IffForegroundRadioService`.
+- Manifest now declares:
+  `net.afterday.compas.iff.IffForegroundRadioService` with
+  `android:foregroundServiceType="connectedDevice"`.
+- `IffActivity` now starts the IFF radio service on resume with the current
+  `localDevicePlayerId`.
+- BLE scan/advertise is now started from the foreground service via
+  `IffBleFieldRadio.startFromForegroundService(...)`.
+- `IffActivity.onPause` no longer stops BLE radio directly; it still stops the
+  UDP debug transport.
+- IFF team/map/contact UI now shows:
+  - `RADIO SERVICE: iff radio service ... foreground connectedDevice`;
+  - `BLE POLICY: FOREGROUND_SERVICE_CONNECTED_DEVICE / fresh<=15s stale<=60s then UNKNOWN`.
+- Foreground service start/stop events are logged as:
+  - `iff_radio_service_start`;
+  - `iff_radio_service_stop`.
+- `scripts/test-analyze-field-logs.ps1` passed.
+- `:app:assembleDebug` completed successfully.
+- APK installed on OnePlus `e089985a`.
+- UIAutomator verified `Main -> IFF`.
+- After pressing Home, `dumpsys activity services net.afterday.compas` showed:
+  `IffForegroundRadioService isForeground=true`, notification channel
+  `compass_iff_radio`, foreground type `0x00000010`.
+- Diagnostic log `field-radio-20260520-151429.log` recorded
+  `iff_radio_service_start`, BLE scan/advertise start, and a `field_check`
+  with:
+  `fieldRadioPolicy="FOREGROUND_SERVICE_CONNECTED_DEVICE / fresh<=15s stale<=60s then UNKNOWN"`.
+- Verification was intentionally one-phone only because the second phone was
+  not needed for the service lifecycle skeleton.
+- App was force-stopped after verification to avoid leaving BLE foreground
+  radio running on the user's phone.
