@@ -376,3 +376,46 @@ SIM STALE -> STALE_REMOTE_WITNESS 0/3
 Либо первый transport stub для remote witness exchange, либо компактный
 operator view, который быстрее отделяет current witness evidence от stale
 evidence в боевом UI.
+
+## Реализованный срез Phase 21
+
+Добавлен компактный operator view для witness evidence:
+
+```text
+current witness -> stale evidence -> no current evidence
+```
+
+Новые operator verdict labels:
+
+- `CURRENT_MULTI_WITNESS`
+- `CURRENT_SINGLE_WITNESS`
+- `STALE_EVIDENCE_ONLY`
+- `LOCAL_DECLARED_ONLY`
+- `NO_CURRENT_EVIDENCE`
+
+Что изменилось:
+
+- карточка контакта сверху показывает `OPERATOR: ...`;
+- блок `OPERATOR VIEW` показывает current/stale counts;
+- команда показывает счетчики `CURRENT WITNESS` и `STALE EVIDENCE`;
+- строки roster показывают operator verdict вместе с identity/proximity;
+- diagnostic log пишет `operatorVerdict`;
+- analyzer выводит operator verdict в CSV/Markdown.
+
+Проверка на Samsung:
+
+- `Main -> IFF -> Команда -> Петя -> SIM FRESH -> SIM STALE -> Записать`;
+- fresh state: `OPERATOR: CURRENT_MULTI_WITNESS`;
+- stale state: `OPERATOR: STALE_EVIDENCE_ONLY`;
+- log: `operatorVerdict=STALE_EVIDENCE_ONLY`;
+- analyzer по сессии `20260520-0914` подтвердил `STALE_EVIDENCE_ONLY`.
+
+Важно: operator verdict - это сводка для боевого чтения UI, а не новый источник
+доказательства. Identity/proximity/position/direction остаются отдельными
+слоями.
+
+## Следующий срез
+
+Первый real transport stub для remote witness exchange. Когда второй телефон
+зарядится, его можно использовать для проверки приема/передачи; до этого
+transport points стоит держать локальными и хорошо логируемыми.

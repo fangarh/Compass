@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 20: IFF Remote Witness Expiry Fixture completed.
+Phase 21: IFF Operator Witness Summary completed.
 
 ## Last Verified Baseline
 
@@ -24,8 +24,8 @@ Phase 20: IFF Remote Witness Expiry Fixture completed.
 ## Next Action
 
 Next useful slice: define the first real remote witness transport stub while
-keeping reports unsigned and identity unchanged, or add a compact operator view
-that prioritizes current vs stale witness evidence.
+keeping reports unsigned and identity unchanged. Use the second phone when it
+is charged; until then, keep transport test points local and log-driven.
 
 ## Verification
 
@@ -411,3 +411,33 @@ that prioritizes current vs stale witness evidence.
   `artifacts/iff-field-session-20260519-1735` ->
   `artifacts/iff-field-analysis-20260519-1735`, 743 scan entries, CSV row
   `STALE_REMOTE_WITNESS 0/3` with `2 reports / 0 fresh / 2 stale`.
+
+2026-05-20 Phase 21:
+
+- Added contact-level operator verdicts:
+  - `CURRENT_MULTI_WITNESS`;
+  - `CURRENT_SINGLE_WITNESS`;
+  - `STALE_EVIDENCE_ONLY`;
+  - `LOCAL_DECLARED_ONLY`;
+  - `NO_CURRENT_EVIDENCE`.
+- Added team counters for current witness evidence and stale evidence.
+- Roster rows now show operator verdict plus identity/proximity scores.
+- Contact details now include an `OPERATOR VIEW` block with current, stale, and
+  remote fresh/stale/total counts.
+- `IFF_DIAG event=field_check` now logs `operatorVerdict`.
+- Analyzer timeline and Markdown summary now include operator verdicts.
+- Initial ADB check showed only the emulator, then Samsung `R3CT20C8A8N`
+  appeared and was used for physical UI verification.
+- `:app:assembleDebug` completed successfully.
+- `scripts/test-analyze-field-logs.ps1` passed.
+- APK installed on Samsung `R3CT20C8A8N`.
+- UIAutomator/ADB verified:
+  `Main -> IFF -> КОМАНДА -> Петя -> SIM FRESH -> SIM STALE -> ЗАПИСАТЬ`.
+- UI showed `OPERATOR: CURRENT_MULTI_WITNESS` after `SIM FRESH` and
+  `OPERATOR: STALE_EVIDENCE_ONLY` after `SIM STALE`.
+- Diagnostic log `field-radio-20260520-091403.log` recorded:
+  `operatorVerdict=STALE_EVIDENCE_ONLY witnessQuorum=STALE_REMOTE_WITNESS remoteReportCount=2 remoteFreshSources=0 remoteStaleSources=2`.
+- Analyzer check completed:
+  `artifacts/iff-field-session-20260520-0914` ->
+  `artifacts/iff-field-analysis-20260520-0914`, 1893 scan entries, CSV/Markdown
+  row with `STALE_EVIDENCE_ONLY`.

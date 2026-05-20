@@ -441,6 +441,33 @@ Fresh simulation showed `MULTI_WITNESS 2/3`; stale simulation showed
 verification on `artifacts/iff-field-session-20260519-1735` produced
 `2 reports / 0 fresh / 2 stale`.
 
+## Phase 21: IFF Operator Witness Summary
+
+**Status:** completed
+
+**Goal:** Make the IFF screen answer the operator's immediate question faster:
+is there current witness evidence, only stale evidence, or no current evidence.
+
+**Scope:**
+
+- Add a compact operator verdict on the contact screen.
+- Add team-level current/stale witness evidence counters.
+- Show roster entries with the operator verdict plus identity/proximity scores.
+- Distinguish `CURRENT_MULTI_WITNESS`, `CURRENT_SINGLE_WITNESS`,
+  `STALE_EVIDENCE_ONLY`, `LOCAL_DECLARED_ONLY`, and `NO_CURRENT_EVIDENCE`.
+- Log and analyze `operatorVerdict`.
+- Keep identity, proximity, position, and direction confidence separate.
+
+**Verification:** debug APK builds. Analyzer smoke test passes. APK installed
+on Samsung `R3CT20C8A8N`. UIAutomator/ADB verified main PDA -> `IFF` ->
+`КОМАНДА` -> select `Петя` -> `SIM FRESH` -> `SIM STALE` -> `ЗАПИСАТЬ`.
+Fresh simulation showed `OPERATOR: CURRENT_MULTI_WITNESS`; stale simulation
+showed `OPERATOR: STALE_EVIDENCE_ONLY`. The diagnostic log
+`field-radio-20260520-091403.log` recorded
+`operatorVerdict=STALE_EVIDENCE_ONLY` with `STALE_REMOTE_WITNESS 0/3`.
+Analyzer verification on `artifacts/iff-field-session-20260520-0914` produced
+CSV/Markdown rows with `STALE_EVIDENCE_ONLY`.
+
 ## Backlog
 
 - Analyze customer Wi-Fi module behavior after the module is available.

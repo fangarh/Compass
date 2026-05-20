@@ -231,12 +231,15 @@ public class IffActivity extends Activity {
         boolean localApproachSelected = approachActive && selected.local;
         title.setText(localApproachSelected ? "ВЫ ПОДХОДИТЕ" : selected.displayName);
         subtitle.setText(selected.local ? "локальный игрок" : "локальный roster + radio witness");
-        status.setText("CONFIDENCE\n" + confidence.compactStatus() + "\nWITNESSES: " + quorum.compact());
+        status.setText("OPERATOR: " + operatorVerdictLabel(confidence, quorum) + "\n"
+                + "CONFIDENCE\n" + confidence.compactStatus() + "\nWITNESSES: " + quorum.compact());
         body.setText("ИГРОК\n"
                 + "- имя: " + selected.displayName + "\n"
                 + "- id: " + selected.playerId + "\n"
                 + "- команда: локальная IFF группа\n"
                 + "- ожидаемый beacon: " + IffRadioWitnessStore.expectedBeaconSsid(selected.playerId) + "\n\n"
+                + "OPERATOR VIEW\n"
+                + operatorDetails(confidence, quorum) + "\n\n"
                 + "СЛОИ УВЕРЕННОСТИ\n"
                 + confidenceDetails(confidence) + "\n\n"
                 + "СВИДЕТЕЛИ\n"
@@ -254,13 +257,14 @@ public class IffActivity extends Activity {
         title.setText("КОМАНДА");
         subtitle.setText("локальный roster + Wi-Fi beacon witness");
         status.setText((approachActive ? "ВЫ        ПОДХОДИТЕ   локально\n" : "")
-                + "УЧАСТНИКОВ: " + roster.length + "\n"
-                + "RADIO FRESH: " + freshWitnessCount() + "\n"
-                + "PROXIMITY STRONG: " + strongProximityCount() + "\n"
-                + "MULTI-WITNESS: " + multiWitnessCount() + "\n"
+                + "OPERATOR: " + teamOperatorSummaryLine() + "\n"
+                + "CURRENT WITNESS: " + currentWitnessEvidenceCount() + "\n"
+                + "STALE EVIDENCE: " + staleWitnessEvidenceCount() + "\n"
+                + "RADIO FRESH / STRONG: " + freshWitnessCount() + " / " + strongProximityCount() + "\n"
                 + "REMOTE REPORTS: " + remoteReportCount() + "\n"
                 + "DIRECTION: UNKNOWN");
         body.setText("Выберите участника, чтобы открыть карточку контакта.\n"
+                + "Operator summary отделяет current witness от stale evidence.\n"
                 + "Проценты - текущая уверенность слоя, а не финальное доказательство.\n"
                 + "Remote witness contract: " + IffRemoteWitnessReport.CONTRACT_VERSION + "\n"
                 + "Signature status пока placeholder: " + IffRemoteWitnessReport.SIGNATURE_PENDING + "\n"
@@ -299,6 +303,7 @@ public class IffActivity extends Activity {
                 + " positionScore=" + confidence.position.score
                 + " directionLabel=" + confidence.direction.label
                 + " directionScore=" + confidence.direction.score
+                + " operatorVerdict=" + operatorVerdictLabel(confidence, quorum)
                 + " witnessQuorum=" + quorum.label
                 + " witnessFreshSources=" + quorum.freshSources
                 + " witnessPossibleSources=" + quorum.possibleSources
@@ -369,16 +374,16 @@ public class IffActivity extends Activity {
         Button button = new Button(this);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(54));
+                dp(64));
         params.setMargins(0, dp(8), 0, 0);
         button.setLayoutParams(params);
         button.setBackgroundResource(R.drawable.popup_button);
         button.setTextColor(playerIndex == selectedPlayerIndex ? 0xffffd16a : 0xffffffff);
         WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
         Snapshot confidence = confidenceFor(player, witness);
-        button.setText(player.displayName + "\nidentity " + confidence.identity.score + "% / proximity "
-                + confidence.proximity.score + "% / " + rosterRadioLabel(player, witness));
-        button.setTextSize(13);
+        IffWitnessQuorum.Snapshot quorum = witnessQuorumFor(player, witness);
+        button.setText(player.displayName + "\n" + operatorRosterLine(player, confidence, quorum, witness));
+        button.setTextSize(12);
         button.setTransformationMethod(null);
         button.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -421,6 +426,24 @@ public class IffActivity extends Activity {
     }
 
     private String decisionText(Snapshot confidence, IffWitnessQuorum.Snapshot quorum) {
+        if (quorum.hasMultiWitness()) {
+            return "- есть current multi-witness evidence: " + quorum.freshSources + "/" + quorum.possibleSources + "\n"
+                    + "- это отдельный witness слой, не crypto identity\n"
+                    + "- confidence layers остаются как показано выше\n"
+                    + "- direction и точная position пока неизвестны";
+        }
+        if (quorum.freshSources > 0) {
+            return "- есть current single-witness evidence\n"
+                    + "- одного источника мало для quorum\n"
+                    + "- identity не повышается без crypto\n"
+                    + "- direction и точная position пока неизвестны";
+        }
+        if (quorum.staleSources > 0) {
+            return "- есть только stale witness evidence\n"
+                    + "- это память о старом сигнале, не текущий proof\n"
+                    + "- для боевого решения держим контакт UNKNOWN\n"
+                    + "- direction и точная position пока неизвестны";
+        }
         if ("RADIO_NEAR".equals(confidence.proximity.label)) {
             return "- рядом слышен свежий beacon заявленного участника\n"
                     + "- это сильный proximity hint, но не crypto identity\n"
@@ -447,6 +470,38 @@ public class IffActivity extends Activity {
         return "- участник остается известен только по локальному roster\n"
                 + "- proximity не подтверждена\n"
                 + "- direction и точная position пока неизвестны";
+    }
+
+    private String operatorDetails(Snapshot confidence, IffWitnessQuorum.Snapshot quorum) {
+        return "- verdict: " + operatorVerdictLabel(confidence, quorum) + "\n"
+                + "- current witnesses: " + quorum.freshSources + "/" + quorum.possibleSources + "\n"
+                + "- stale evidence: " + quorum.staleSources + "\n"
+                + "- remote fresh/stale/total: " + quorum.remoteFreshSources + "/"
+                + quorum.remoteStaleSources + "/" + quorum.remoteReportCount + "\n"
+                + "- identity remains: " + confidence.identity.label + " " + confidence.identity.score + "%\n"
+                + "- position/direction: UNKNOWN unless their own layers prove otherwise";
+    }
+
+    private String operatorVerdictLabel(Snapshot confidence, IffWitnessQuorum.Snapshot quorum) {
+        if (quorum.hasMultiWitness()) {
+            return "CURRENT_MULTI_WITNESS";
+        }
+        if (quorum.freshSources > 0) {
+            return "CURRENT_SINGLE_WITNESS";
+        }
+        if (quorum.staleSources > 0) {
+            return "STALE_EVIDENCE_ONLY";
+        }
+        if ("LOCAL_DECLARED_UNKNOWN".equals(confidence.proximity.label)) {
+            return "LOCAL_DECLARED_ONLY";
+        }
+        return "NO_CURRENT_EVIDENCE";
+    }
+
+    private String operatorRosterLine(IffPlayer player, Snapshot confidence, IffWitnessQuorum.Snapshot quorum,
+                                      WitnessSnapshot witness) {
+        return operatorVerdictLabel(confidence, quorum) + " / id " + confidence.identity.score
+                + "% / prox " + confidence.proximity.score + "% / " + rosterRadioLabel(player, witness);
     }
 
     private String witnessDetails(WitnessSnapshot witness) {
@@ -538,6 +593,46 @@ public class IffActivity extends Activity {
             }
         }
         return count;
+    }
+
+    private int currentWitnessEvidenceCount() {
+        int count = 0;
+        for (int i = 0; i < roster.length; i++) {
+            IffPlayer player = roster[i];
+            WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
+            if (witnessQuorumFor(player, witness).freshSources > 0) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private int staleWitnessEvidenceCount() {
+        int count = 0;
+        for (int i = 0; i < roster.length; i++) {
+            IffPlayer player = roster[i];
+            WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
+            IffWitnessQuorum.Snapshot quorum = witnessQuorumFor(player, witness);
+            if (quorum.freshSources == 0 && quorum.staleSources > 0) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private String teamOperatorSummaryLine() {
+        int current = currentWitnessEvidenceCount();
+        int stale = staleWitnessEvidenceCount();
+        if (multiWitnessCount() > 0) {
+            return "MULTI CURRENT";
+        }
+        if (current > 0) {
+            return "SINGLE CURRENT";
+        }
+        if (stale > 0) {
+            return "STALE ONLY";
+        }
+        return "NO CURRENT";
     }
 
     private int remoteReportCount() {

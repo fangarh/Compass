@@ -307,6 +307,7 @@ foreach ($log in $logs) {
                     PositionScore = Get-NumberOrNull (Get-FieldValue $message "positionScore")
                     DirectionLabel = Get-FieldValue $message "directionLabel"
                     DirectionScore = Get-NumberOrNull (Get-FieldValue $message "directionScore")
+                    OperatorVerdict = Get-FieldValue $message "operatorVerdict"
                     WitnessQuorum = Get-FieldValue $message "witnessQuorum"
                     WitnessFreshSources = Get-NumberOrNull (Get-FieldValue $message "witnessFreshSources")
                     WitnessPossibleSources = Get-NumberOrNull (Get-FieldValue $message "witnessPossibleSources")
@@ -695,6 +696,7 @@ $iffFieldCheckTimeline = $iffFieldChecks |
             PositionScore = $_.PositionScore
             DirectionLabel = $_.DirectionLabel
             DirectionScore = $_.DirectionScore
+            OperatorVerdict = $_.OperatorVerdict
             WitnessQuorum = $_.WitnessQuorum
             WitnessFreshSources = $_.WitnessFreshSources
             WitnessPossibleSources = $_.WitnessPossibleSources
@@ -739,6 +741,7 @@ $iffFieldCheckSummary = $iffFieldChecks |
             Count = $items.Count
             IdentityLabels = Get-LabelCountsText $items "IdentityLabel"
             ProximityLabels = Get-LabelCountsText $items "ProximityLabel"
+            OperatorVerdicts = Get-LabelCountsText $items "OperatorVerdict"
             WitnessQuorumLabels = Get-LabelCountsText $items "WitnessQuorum"
             RemoteWitnessContracts = Get-LabelCountsText $items "RemoteWitnessContract"
             WitnessFreshness = Get-LabelCountsText $items "WitnessFreshness"
@@ -1109,8 +1112,8 @@ $report.Add("")
 if ($iffFieldCheckTimeline.Count -eq 0) {
     $report.Add("No `IFF_DIAG event=field_check` lines found. Tap the IFF record button during field checks to capture identity/proximity snapshots.")
 } else {
-    $report.Add("| Time | Window | Device | Player | Identity | Proximity | Quorum | Remote | Witness | RSSI | Age ms | Position | Direction |")
-    $report.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |")
+    $report.Add("| Time | Window | Device | Player | Operator | Identity | Proximity | Quorum | Remote | Witness | RSSI | Age ms | Position | Direction |")
+    $report.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |")
     foreach ($row in $iffFieldCheckTimeline) {
         $player = if ([string]::IsNullOrWhiteSpace($row.DisplayName)) { $row.PlayerId } else { "$($row.DisplayName) ($($row.PlayerId))" }
         $rssi = if ($null -eq $row.WitnessRssi) { "" } else { $row.WitnessRssi }
@@ -1118,18 +1121,18 @@ if ($iffFieldCheckTimeline.Count -eq 0) {
         $quorum = if ([string]::IsNullOrWhiteSpace($row.WitnessQuorum)) { "" } else { "$($row.WitnessQuorum) $($row.WitnessFreshSources)/$($row.WitnessPossibleSources)" }
         $remoteStale = if ($null -eq $row.RemoteStaleSources) { 0 } else { $row.RemoteStaleSources }
         $remote = if ([string]::IsNullOrWhiteSpace($row.RemoteWitnessContract)) { "" } else { "$($row.RemoteReportCount) reports / $($row.RemoteFreshSources) fresh / $remoteStale stale" }
-        $report.Add("| $($row.Time) | $($row.Window) | $($row.Device) | $player | $($row.IdentityLabel) $($row.IdentityScore) | $($row.ProximityLabel) $($row.ProximityScore) | $quorum | $remote | $($row.WitnessFreshness) | $rssi | $age | $($row.PositionLabel) $($row.PositionScore) | $($row.DirectionLabel) $($row.DirectionScore) |")
+        $report.Add("| $($row.Time) | $($row.Window) | $($row.Device) | $player | $($row.OperatorVerdict) | $($row.IdentityLabel) $($row.IdentityScore) | $($row.ProximityLabel) $($row.ProximityScore) | $quorum | $remote | $($row.WitnessFreshness) | $rssi | $age | $($row.PositionLabel) $($row.PositionScore) | $($row.DirectionLabel) $($row.DirectionScore) |")
     }
 
     $report.Add("")
-    $report.Add("| Window | Device | Player | Checks | Identity labels | Proximity labels | Quorum labels | Remote contract | Remote max | Witness | Avg RSSI | Avg age ms |")
-    $report.Add("| --- | --- | --- | ---: | --- | --- | --- | --- | --- | --- | ---: | ---: |")
+    $report.Add("| Window | Device | Player | Checks | Operator verdicts | Identity labels | Proximity labels | Quorum labels | Remote contract | Remote max | Witness | Avg RSSI | Avg age ms |")
+    $report.Add("| --- | --- | --- | ---: | --- | --- | --- | --- | --- | --- | --- | ---: | ---: |")
     foreach ($row in $iffFieldCheckSummary) {
         $avgRssi = if ($null -eq $row.AvgRssi) { "" } else { $row.AvgRssi }
         $avgAge = if ($null -eq $row.AvgAgeMs) { "" } else { $row.AvgAgeMs }
         $remoteMaxStale = if ($null -eq $row.MaxRemoteStaleSources) { 0 } else { $row.MaxRemoteStaleSources }
         $remoteMax = if ($null -eq $row.MaxRemoteReportCount) { "" } else { "$($row.MaxRemoteReportCount) reports / $($row.MaxRemoteFreshSources) fresh / $remoteMaxStale stale" }
-        $report.Add("| $($row.Window) | $($row.Device) | $($row.DisplayName) ($($row.PlayerId)) | $($row.Count) | $($row.IdentityLabels) | $($row.ProximityLabels) | $($row.WitnessQuorumLabels) | $($row.RemoteWitnessContracts) | $remoteMax | $($row.WitnessFreshness) | $avgRssi | $avgAge |")
+        $report.Add("| $($row.Window) | $($row.Device) | $($row.DisplayName) ($($row.PlayerId)) | $($row.Count) | $($row.OperatorVerdicts) | $($row.IdentityLabels) | $($row.ProximityLabels) | $($row.WitnessQuorumLabels) | $($row.RemoteWitnessContracts) | $remoteMax | $($row.WitnessFreshness) | $avgRssi | $avgAge |")
     }
 
     $report.Add("")
