@@ -1,8 +1,14 @@
 $ErrorActionPreference = "Stop"
 
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
-$javac = "C:\Program Files\Android\Android Studio\jbr\bin\javac.exe"
-$java = "C:\Program Files\Android\Android Studio\jbr\bin\java.exe"
+$javaHome = $env:JAVA_HOME
+
+if ([string]::IsNullOrWhiteSpace($javaHome)) {
+    throw "JAVA_HOME is not set"
+}
+
+$javac = Join-Path $javaHome "bin\javac.exe"
+$java = Join-Path $javaHome "bin\java.exe"
 
 if (-not (Test-Path $javac)) {
     throw "javac not found at $javac"
