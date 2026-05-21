@@ -1,5 +1,6 @@
 param(
     [string]$InputRoot = "artifacts\field-logs",
+    [Alias("OutputRoot")]
     [string]$OutputDir = "artifacts\field-analysis",
     [string]$TestStart = "2026-05-19 09:55:30",
     [string]$NearEnd = "2026-05-19 10:00:00",
@@ -7,6 +8,8 @@ param(
     [string]$CorridorStart = "2026-05-19 10:02:05",
     [string]$Windows = "",
     [int]$BucketSeconds = 30,
+    [double]$OfficeBaselineSideA = [double]::NaN,
+    [double]$OfficeBaselineSideB = [double]::NaN,
     [string]$BeaconSsids = "COMPASS_BEACON*",
     [switch]$IncludeLegacyRootLogs
 )
@@ -129,6 +132,7 @@ $freshnessTicks = New-Object System.Collections.Generic.List[object]
 $sensorEvents = New-Object System.Collections.Generic.List[object]
 $locationEvents = New-Object System.Collections.Generic.List[object]
 $iffFieldChecks = New-Object System.Collections.Generic.List[object]
+$bleRssiEvents = New-Object System.Collections.Generic.List[object]
 
 function Get-FieldValue([string]$message, [string]$name) {
     if ($message -match "$name=""(?<quoted>[^""]*)""") {
@@ -288,6 +292,25 @@ foreach ($log in $logs) {
             $time = [datetime]::ParseExact($Matches.time, $timeFormat, $culture)
             $message = $Matches.message
             $event = Get-FieldValue $message "event"
+            if ($event -eq "ble_field_radio_rx") {
+                $window = Get-WindowName $time
+                $bucket = Get-BucketName $time
+                $rssi = Get-NumberOrNull (Get-FieldValue $message "rssi")
+                $bleRssiEvents.Add([pscustomobject]@{
+                    Device = $device
+                    LogFile = $log.Name
+                    Time = $time
+                    Window = $window
+                    Bucket = $bucket
+                    LocalPlayerId = Get-FieldValue $message "localPlayerId"
+                    SeenPlayerId = Get-FieldValue $message "playerId"
+                    Address = Get-FieldValue $message "address"
+                    Rssi = $rssi
+                    IsOutlier127 = ($rssi -eq 127)
+                    Contract = Get-FieldValue $message "contract"
+                    Message = $message
+                })
+            }
             if ($event -eq "field_check") {
                 $window = Get-WindowName $time
                 $bucket = Get-BucketName $time
@@ -300,6 +323,8 @@ foreach ($log in $logs) {
                     PlayerId = Get-FieldValue $message "playerId"
                     DisplayName = Get-FieldValue $message "displayName"
                     LocalDevicePlayerId = Get-FieldValue $message "localDevicePlayerId"
+                    OfficeRole = Get-FieldValue $message "officeRole"
+                    SelectedOfficeRole = Get-FieldValue $message "selectedOfficeRole"
                     SelectedIsLocalDevice = Get-FieldValue $message "selectedIsLocalDevice"
                     TrustedPlayer = Get-FieldValue $message "trustedPlayer"
                     TrustLabel = Get-FieldValue $message "trustLabel"
@@ -314,6 +339,11 @@ foreach ($log in $logs) {
                     DirectionLabel = Get-FieldValue $message "directionLabel"
                     DirectionScore = Get-NumberOrNull (Get-FieldValue $message "directionScore")
                     OperatorVerdict = Get-FieldValue $message "operatorVerdict"
+                    OfficeProximityVerdict = Get-FieldValue $message "officeProximityVerdict"
+                    OfficeProximityDeltaDb = Get-NumberOrNull (Get-FieldValue $message "officeProximityDeltaDb")
+                    OfficeProximityReason = Get-FieldValue $message "officeProximityReason"
+                    OfficeProximityA = Get-FieldValue $message "officeProximityA"
+                    OfficeProximityB = Get-FieldValue $message "officeProximityB"
                     WitnessQuorum = Get-FieldValue $message "witnessQuorum"
                     WitnessFreshSources = Get-NumberOrNull (Get-FieldValue $message "witnessFreshSources")
                     WitnessPossibleSources = Get-NumberOrNull (Get-FieldValue $message "witnessPossibleSources")
@@ -699,6 +729,8 @@ $iffFieldCheckTimeline = $iffFieldChecks |
             PlayerId = $_.PlayerId
             DisplayName = $_.DisplayName
             LocalDevicePlayerId = $_.LocalDevicePlayerId
+            OfficeRole = $_.OfficeRole
+            SelectedOfficeRole = $_.SelectedOfficeRole
             SelectedIsLocalDevice = $_.SelectedIsLocalDevice
             TrustedPlayer = $_.TrustedPlayer
             TrustLabel = $_.TrustLabel
@@ -713,6 +745,11 @@ $iffFieldCheckTimeline = $iffFieldChecks |
             DirectionLabel = $_.DirectionLabel
             DirectionScore = $_.DirectionScore
             OperatorVerdict = $_.OperatorVerdict
+            OfficeProximityVerdict = $_.OfficeProximityVerdict
+            OfficeProximityDeltaDb = $_.OfficeProximityDeltaDb
+            OfficeProximityReason = $_.OfficeProximityReason
+            OfficeProximityA = $_.OfficeProximityA
+            OfficeProximityB = $_.OfficeProximityB
             WitnessQuorum = $_.WitnessQuorum
             WitnessFreshSources = $_.WitnessFreshSources
             WitnessPossibleSources = $_.WitnessPossibleSources
@@ -759,9 +796,12 @@ $iffFieldCheckSummary = $iffFieldChecks |
             PlayerId = $items[0].PlayerId
             DisplayName = $items[0].DisplayName
             Count = $items.Count
+            OfficeRoles = Get-LabelCountsText $items "OfficeRole"
+            SelectedOfficeRoles = Get-LabelCountsText $items "SelectedOfficeRole"
             IdentityLabels = Get-LabelCountsText $items "IdentityLabel"
             ProximityLabels = Get-LabelCountsText $items "ProximityLabel"
             OperatorVerdicts = Get-LabelCountsText $items "OperatorVerdict"
+            OfficeProximityVerdicts = Get-LabelCountsText $items "OfficeProximityVerdict"
             TrustLabels = Get-LabelCountsText $items "TrustLabel"
             CombatStates = Get-LabelCountsText $items "CombatState"
             CombatActions = Get-LabelCountsText $items "CombatAction"
@@ -782,6 +822,114 @@ $iffFieldCheckSummary = $iffFieldChecks |
         }
     } |
     Sort-Object Window, Device, PlayerId
+
+$bleRssiTimeline = $bleRssiEvents |
+    Sort-Object Time, Device, LocalPlayerId, SeenPlayerId |
+    ForEach-Object {
+        [pscustomobject]@{
+            Device = $_.Device
+            LogFile = $_.LogFile
+            Time = $_.Time.ToString("yyyy-MM-dd HH:mm:ss.fff")
+            Window = $_.Window
+            Bucket = $_.Bucket
+            LocalPlayerId = $_.LocalPlayerId
+            SeenPlayerId = $_.SeenPlayerId
+            Address = $_.Address
+            Rssi = $_.Rssi
+            IsOutlier127 = $_.IsOutlier127
+            Contract = $_.Contract
+        }
+    }
+
+$bleRssiSummary = $bleRssiEvents |
+    Group-Object Window, Bucket, Device, LocalPlayerId, SeenPlayerId |
+    ForEach-Object {
+        $items = @($_.Group | Sort-Object Time)
+        $valid = @($items | Where-Object { $_.Rssi -ne 127 })
+        [pscustomobject]@{
+            Window = $items[0].Window
+            Bucket = $items[0].Bucket
+            Device = $items[0].Device
+            LocalPlayerId = $items[0].LocalPlayerId
+            SeenPlayerId = $items[0].SeenPlayerId
+            Count = $items.Count
+            ValidCount = $valid.Count
+            Outlier127 = ($items.Count - $valid.Count)
+            AvgRssi = if ($valid.Count -gt 0) { [math]::Round(($valid | Measure-Object Rssi -Average).Average, 1) } else { $null }
+            MinRssi = if ($valid.Count -gt 0) { ($valid | Measure-Object Rssi -Minimum).Minimum } else { $null }
+            MaxRssi = if ($valid.Count -gt 0) { ($valid | Measure-Object Rssi -Maximum).Maximum } else { $null }
+            FirstSeen = $items[0].Time.ToString("yyyy-MM-dd HH:mm:ss.fff")
+            LastSeen = $items[$items.Count - 1].Time.ToString("yyyy-MM-dd HH:mm:ss.fff")
+        }
+    } |
+    Sort-Object Window, Bucket, Device, LocalPlayerId, SeenPlayerId
+
+function Test-OfficeCalibrationEnabled {
+    return -not [double]::IsNaN($OfficeBaselineSideA) -and -not [double]::IsNaN($OfficeBaselineSideB)
+}
+
+function Get-OfficeCalibrationLabel {
+    if (-not (Test-OfficeCalibrationEnabled)) {
+        return "none"
+    }
+    return "sideA=$OfficeBaselineSideA sideB=$OfficeBaselineSideB"
+}
+
+function Get-OfficeProximityVerdictFromDelta([Nullable[double]]$delta) {
+    if ($null -eq $delta) {
+        return "INSUFFICIENT_DATA"
+    }
+    if ($delta -ge 8) {
+        return "CLOSER_TO_A"
+    }
+    if ($delta -le -8) {
+        return "CLOSER_TO_B"
+    }
+    return "BETWEEN_OR_AMBIGUOUS"
+}
+
+function Get-OfficeProximityVerdict([Nullable[double]]$sideARssi, [Nullable[double]]$sideBRssi) {
+    if ($null -eq $sideARssi -or $null -eq $sideBRssi) {
+        return "INSUFFICIENT_DATA"
+    }
+    return Get-OfficeProximityVerdictFromDelta ($sideARssi - $sideBRssi)
+}
+
+$officeProximityVerdicts = $bleRssiSummary |
+    Where-Object { $_.LocalPlayerId -eq "petya" } |
+    Group-Object Window, Bucket, Device, LocalPlayerId |
+    ForEach-Object {
+        $items = @($_.Group)
+        $sideA = $items | Where-Object SeenPlayerId -eq "vasya" | Select-Object -First 1
+        $sideB = $items | Where-Object SeenPlayerId -eq "zhenya" | Select-Object -First 1
+        $sideARssi = if ($sideA -and $sideA.ValidCount -gt 0) { [double]$sideA.AvgRssi } else { $null }
+        $sideBRssi = if ($sideB -and $sideB.ValidCount -gt 0) { [double]$sideB.AvgRssi } else { $null }
+        $rawDeltaDb = if ($null -ne $sideARssi -and $null -ne $sideBRssi) { [math]::Round($sideARssi - $sideBRssi, 1) } else { $null }
+        $deltaDb = $rawDeltaDb
+        if ((Test-OfficeCalibrationEnabled) -and $null -ne $sideARssi -and $null -ne $sideBRssi) {
+            $deltaDb = [math]::Round(($sideARssi - $OfficeBaselineSideA) - ($sideBRssi - $OfficeBaselineSideB), 1)
+        }
+        [pscustomobject]@{
+            Window = $items[0].Window
+            Bucket = $items[0].Bucket
+            Device = $items[0].Device
+            LocalPlayerId = $items[0].LocalPlayerId
+            SideAPlayerId = "vasya"
+            SideBPlayerId = "zhenya"
+            SideARssi = $sideARssi
+            SideBRssi = $sideBRssi
+            DeltaDb = $deltaDb
+            Verdict = Get-OfficeProximityVerdictFromDelta $deltaDb
+            RawDeltaDb = $rawDeltaDb
+            RawVerdict = Get-OfficeProximityVerdictFromDelta $rawDeltaDb
+            Calibration = Get-OfficeCalibrationLabel
+            SideAValidCount = if ($sideA) { $sideA.ValidCount } else { 0 }
+            SideBValidCount = if ($sideB) { $sideB.ValidCount } else { 0 }
+            SideAOutlier127 = if ($sideA) { $sideA.Outlier127 } else { 0 }
+            SideBOutlier127 = if ($sideB) { $sideB.Outlier127 } else { 0 }
+        }
+    } |
+    Sort-Object Window, Bucket, Device, LocalPlayerId
 
 $comparison = $scanSummary |
     Group-Object Window, Bssid |
@@ -1044,6 +1192,9 @@ $locationEvents | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $Outpu
 $locationSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "location-summary.csv")
 $iffFieldCheckTimeline | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "iff-field-checks.csv")
 $iffFieldCheckSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "iff-field-check-summary.csv")
+$bleRssiTimeline | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "ble-rssi-timeline.csv")
+$bleRssiSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "ble-rssi-summary.csv")
+$officeProximityVerdicts | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "office-proximity-verdict.csv")
 $windowDeviceSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "window-device-summary.csv")
 $comparison | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "device-comparison.csv")
 $contexts | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "device-context.csv")
@@ -1130,13 +1281,50 @@ if ($beaconSummary.Count -eq 0) {
     }
 }
 $report.Add("")
+$report.Add("## BLE RSSI Summary")
+$report.Add("")
+if ($bleRssiSummary.Count -eq 0) {
+    $report.Add("No `IFF_DIAG event=ble_field_radio_rx` lines found.")
+} else {
+    $report.Add("| Window | Bucket | Device | Local | Seen | Count | Valid | Outlier 127 | Avg RSSI | Min | Max | First | Last |")
+    $report.Add("| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |")
+    foreach ($row in $bleRssiSummary) {
+        $avg = if ($null -eq $row.AvgRssi) { "" } else { $row.AvgRssi }
+        $min = if ($null -eq $row.MinRssi) { "" } else { $row.MinRssi }
+        $max = if ($null -eq $row.MaxRssi) { "" } else { $row.MaxRssi }
+        $report.Add("| $($row.Window) | $($row.Bucket) | $($row.Device) | $($row.LocalPlayerId) | $($row.SeenPlayerId) | $($row.Count) | $($row.ValidCount) | $($row.Outlier127) | $avg | $min | $max | $($row.FirstSeen) | $($row.LastSeen) |")
+    }
+    if (($bleRssiSummary | Where-Object { $_.Outlier127 -gt 0 }).Count -gt 0) {
+        $report.Add("")
+        $report.Add("BLE RSSI value `127` is treated as an outlier and excluded from Avg/Min/Max.")
+    }
+}
+$report.Add("")
+$report.Add("## Office Proximity Verdict")
+$report.Add("")
+if ($officeProximityVerdicts.Count -eq 0) {
+    $report.Add("No local `petya` BLE buckets found for retrospective A/B proximity verdict.")
+} else {
+    $report.Add("Retrospective verdict compares C/Petya hearing A/Vasya against C/Petya hearing B/Zhenya per bucket.")
+    $report.Add("")
+    $report.Add("| Window | Bucket | Device | Local | A RSSI | B RSSI | Delta dB | Verdict | Raw delta | Raw verdict | Calibration | A valid | B valid | A outlier 127 | B outlier 127 |")
+    $report.Add("| --- | --- | --- | --- | ---: | ---: | ---: | --- | ---: | --- | --- | ---: | ---: | ---: | ---: |")
+    foreach ($row in $officeProximityVerdicts) {
+        $sideA = if ($null -eq $row.SideARssi) { "" } else { $row.SideARssi }
+        $sideB = if ($null -eq $row.SideBRssi) { "" } else { $row.SideBRssi }
+        $delta = if ($null -eq $row.DeltaDb) { "" } else { $row.DeltaDb }
+        $rawDelta = if ($null -eq $row.RawDeltaDb) { "" } else { $row.RawDeltaDb }
+        $report.Add("| $($row.Window) | $($row.Bucket) | $($row.Device) | $($row.LocalPlayerId) | $sideA | $sideB | $delta | $($row.Verdict) | $rawDelta | $($row.RawVerdict) | $($row.Calibration) | $($row.SideAValidCount) | $($row.SideBValidCount) | $($row.SideAOutlier127) | $($row.SideBOutlier127) |")
+    }
+}
+$report.Add("")
 $report.Add("## IFF Field Checks")
 $report.Add("")
 if ($iffFieldCheckTimeline.Count -eq 0) {
     $report.Add("No `IFF_DIAG event=field_check` lines found. Tap the IFF record button during field checks to capture identity/proximity snapshots.")
 } else {
-    $report.Add("| Time | Window | Device | Player | This Device | Trust | Combat | Operator | Identity | Proximity | Quorum | Remote | Field Radio | Field Radio Policy | UDP Debug | Witness | RSSI | Age ms | Position | Direction |")
-    $report.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |")
+    $report.Add("| Time | Window | Device | Office Role | Player | This Device | Trust | Combat | Operator | Office Proximity | Identity | Proximity | Quorum | Remote | Field Radio | Field Radio Policy | UDP Debug | Witness | RSSI | Age ms | Position | Direction |")
+    $report.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |")
     foreach ($row in $iffFieldCheckTimeline) {
         $player = if ([string]::IsNullOrWhiteSpace($row.DisplayName)) { $row.PlayerId } else { "$($row.DisplayName) ($($row.PlayerId))" }
         $rssi = if ($null -eq $row.WitnessRssi) { "" } else { $row.WitnessRssi }
@@ -1144,22 +1332,24 @@ if ($iffFieldCheckTimeline.Count -eq 0) {
         $quorum = if ([string]::IsNullOrWhiteSpace($row.WitnessQuorum)) { "" } else { "$($row.WitnessQuorum) $($row.WitnessFreshSources)/$($row.WitnessPossibleSources)" }
         $remoteStale = if ($null -eq $row.RemoteStaleSources) { 0 } else { $row.RemoteStaleSources }
         $remote = if ([string]::IsNullOrWhiteSpace($row.RemoteWitnessContract)) { "" } else { "$($row.RemoteReportCount) reports / $($row.RemoteFreshSources) fresh / $remoteStale stale" }
+        $officeRole = if ([string]::IsNullOrWhiteSpace($row.OfficeRole)) { "" } else { "$($row.OfficeRole) / selected=$($row.SelectedOfficeRole)" }
         $localDevice = if ([string]::IsNullOrWhiteSpace($row.LocalDevicePlayerId)) { "" } else { "$($row.LocalDevicePlayerId) / selected=$($row.SelectedIsLocalDevice)" }
         $fieldRadio = if ([string]::IsNullOrWhiteSpace($row.FieldRadioEnabled)) { $row.FieldRadioStatus } else { "$($row.FieldRadioEnabled) / $($row.FieldRadioStatus)" }
         $trust = if ([string]::IsNullOrWhiteSpace($row.TrustLabel)) { "" } else { "$($row.TrustLabel) / trusted=$($row.TrustedPlayer)" }
         $combat = if ([string]::IsNullOrWhiteSpace($row.CombatState)) { "" } else { "$($row.CombatState) / $($row.CombatAction)" }
-        $report.Add("| $($row.Time) | $($row.Window) | $($row.Device) | $player | $localDevice | $trust | $combat | $($row.OperatorVerdict) | $($row.IdentityLabel) $($row.IdentityScore) | $($row.ProximityLabel) $($row.ProximityScore) | $quorum | $remote | $fieldRadio | $($row.FieldRadioPolicy) | $($row.TransportStatus) | $($row.WitnessFreshness) | $rssi | $age | $($row.PositionLabel) $($row.PositionScore) | $($row.DirectionLabel) $($row.DirectionScore) |")
+        $officeProximity = if ([string]::IsNullOrWhiteSpace($row.OfficeProximityVerdict)) { "" } else { "$($row.OfficeProximityVerdict) delta=$($row.OfficeProximityDeltaDb)dB" }
+        $report.Add("| $($row.Time) | $($row.Window) | $($row.Device) | $officeRole | $player | $localDevice | $trust | $combat | $($row.OperatorVerdict) | $officeProximity | $($row.IdentityLabel) $($row.IdentityScore) | $($row.ProximityLabel) $($row.ProximityScore) | $quorum | $remote | $fieldRadio | $($row.FieldRadioPolicy) | $($row.TransportStatus) | $($row.WitnessFreshness) | $rssi | $age | $($row.PositionLabel) $($row.PositionScore) | $($row.DirectionLabel) $($row.DirectionScore) |")
     }
 
     $report.Add("")
-    $report.Add("| Window | Device | Player | Checks | Trust labels | Combat states | Combat actions | Operator verdicts | Identity labels | Proximity labels | Quorum labels | Remote contract | Remote max | Witness | Avg RSSI | Avg age ms |")
-    $report.Add("| --- | --- | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: |")
+    $report.Add("| Window | Device | Office Roles | Player | Checks | Trust labels | Combat states | Combat actions | Operator verdicts | Office proximity | Identity labels | Proximity labels | Quorum labels | Remote contract | Remote max | Witness | Avg RSSI | Avg age ms |")
+    $report.Add("| --- | --- | --- | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: |")
     foreach ($row in $iffFieldCheckSummary) {
         $avgRssi = if ($null -eq $row.AvgRssi) { "" } else { $row.AvgRssi }
         $avgAge = if ($null -eq $row.AvgAgeMs) { "" } else { $row.AvgAgeMs }
         $remoteMaxStale = if ($null -eq $row.MaxRemoteStaleSources) { 0 } else { $row.MaxRemoteStaleSources }
         $remoteMax = if ($null -eq $row.MaxRemoteReportCount) { "" } else { "$($row.MaxRemoteReportCount) reports / $($row.MaxRemoteFreshSources) fresh / $remoteMaxStale stale" }
-        $report.Add("| $($row.Window) | $($row.Device) | $($row.DisplayName) ($($row.PlayerId)) | $($row.Count) | $($row.TrustLabels) | $($row.CombatStates) | $($row.CombatActions) | $($row.OperatorVerdicts) | $($row.IdentityLabels) | $($row.ProximityLabels) | $($row.WitnessQuorumLabels) | $($row.RemoteWitnessContracts) | $remoteMax | $($row.WitnessFreshness) | $avgRssi | $avgAge |")
+        $report.Add("| $($row.Window) | $($row.Device) | $($row.OfficeRoles) | $($row.DisplayName) ($($row.PlayerId)) | $($row.Count) | $($row.TrustLabels) | $($row.CombatStates) | $($row.CombatActions) | $($row.OperatorVerdicts) | $($row.OfficeProximityVerdicts) | $($row.IdentityLabels) | $($row.ProximityLabels) | $($row.WitnessQuorumLabels) | $($row.RemoteWitnessContracts) | $remoteMax | $($row.WitnessFreshness) | $avgRssi | $avgAge |")
     }
 
     $report.Add("")

@@ -2,6 +2,7 @@ package net.afterday.compas.iff;
 
 import android.net.wifi.ScanResult;
 import android.os.SystemClock;
+import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -12,9 +13,11 @@ public final class IffRadioWitnessStore {
     public static final String SSID_PREFIX = "COMPASS_IFF_";
     public static final long FRESH_MS = 15000L;
     public static final long STALE_MS = 60000L;
+    private static final long HISTORY_RETENTION_MS = 60000L;
 
     private static final Object LOCK = new Object();
     private static final Map<String, WitnessSnapshot> WITNESSES = new HashMap<>();
+    private static final Map<String, ArrayDeque<RssiSample>> RSSI_HISTORY = new HashMap<>();
     private static final Map<String, String> LAST_FRESHNESS_LABELS = new HashMap<>();
 
     private IffRadioWitnessStore() {
@@ -85,6 +88,46 @@ public final class IffRadioWitnessStore {
     public static WitnessSnapshot getWitness(String playerId) {
         synchronized (LOCK) {
             return WITNESSES.get(playerId);
+        }
+    }
+
+    public static RssiWindowSnapshot getRssiWindow(String playerId, long windowMs) {
+        long now = SystemClock.elapsedRealtime();
+        long cutoff = now - Math.max(0L, windowMs);
+        synchronized (LOCK) {
+            ArrayDeque<RssiSample> samples = RSSI_HISTORY.get(playerId);
+            if (samples == null || samples.isEmpty()) {
+                return RssiWindowSnapshot.missing(playerId);
+            }
+            pruneHistoryLocked(samples, now);
+            int validCount = 0;
+            int outlier127Count = 0;
+            int sum = 0;
+            long newestSeenElapsedMs = -1L;
+            for (RssiSample sample : samples) {
+                if (sample.seenElapsedMs < cutoff) {
+                    continue;
+                }
+                if (sample.seenElapsedMs > newestSeenElapsedMs) {
+                    newestSeenElapsedMs = sample.seenElapsedMs;
+                }
+                if (sample.rssi == IffOfficeProximityVerdict.RSSI_OUTLIER_127) {
+                    outlier127Count++;
+                    continue;
+                }
+                validCount++;
+                sum += sample.rssi;
+            }
+            if (newestSeenElapsedMs < 0L) {
+                return RssiWindowSnapshot.missing(playerId);
+            }
+            long newestAgeMs = Math.max(0L, now - newestSeenElapsedMs);
+            if (validCount == 0) {
+                return new RssiWindowSnapshot(playerId, false, 0, 0, outlier127Count, newestAgeMs);
+            }
+            int averageRssi = Math.round(sum / (float) validCount);
+            return new RssiWindowSnapshot(playerId, newestAgeMs <= FRESH_MS,
+                    averageRssi, validCount, outlier127Count, newestAgeMs);
         }
     }
 
@@ -189,7 +232,25 @@ public final class IffRadioWitnessStore {
                 return false;
             }
             WITNESSES.put(next.playerId, next);
+            recordRssiSampleLocked(next);
             return true;
+        }
+    }
+
+    private static void recordRssiSampleLocked(WitnessSnapshot snapshot) {
+        ArrayDeque<RssiSample> samples = RSSI_HISTORY.get(snapshot.playerId);
+        if (samples == null) {
+            samples = new ArrayDeque<>();
+            RSSI_HISTORY.put(snapshot.playerId, samples);
+        }
+        samples.addLast(new RssiSample(snapshot.rssi, snapshot.seenElapsedMs));
+        pruneHistoryLocked(samples, SystemClock.elapsedRealtime());
+    }
+
+    private static void pruneHistoryLocked(ArrayDeque<RssiSample> samples, long now) {
+        long cutoff = now - HISTORY_RETENTION_MS;
+        while (!samples.isEmpty() && samples.peekFirst().seenElapsedMs < cutoff) {
+            samples.removeFirst();
         }
     }
 
@@ -236,6 +297,55 @@ public final class IffRadioWitnessStore {
 
     private static String safe(String value) {
         return value == null ? "" : value.replace('\n', ' ').replace('\r', ' ');
+    }
+
+    private static final class RssiSample {
+        final int rssi;
+        final long seenElapsedMs;
+
+        RssiSample(int rssi, long seenElapsedMs) {
+            this.rssi = rssi;
+            this.seenElapsedMs = seenElapsedMs;
+        }
+    }
+
+    public static final class RssiWindowSnapshot {
+        public final String playerId;
+        public final boolean fresh;
+        public final int averageRssi;
+        public final int validCount;
+        public final int outlier127Count;
+        public final long newestAgeMs;
+
+        RssiWindowSnapshot(String playerId, boolean fresh, int averageRssi,
+                           int validCount, int outlier127Count, long newestAgeMs) {
+            this.playerId = playerId;
+            this.fresh = fresh;
+            this.averageRssi = averageRssi;
+            this.validCount = validCount;
+            this.outlier127Count = outlier127Count;
+            this.newestAgeMs = newestAgeMs;
+        }
+
+        static RssiWindowSnapshot missing(String playerId) {
+            return new RssiWindowSnapshot(playerId, false, 0, 0, 0, -1L);
+        }
+
+        public IffOfficeProximityVerdict.Sample asOfficeSample() {
+            return IffOfficeProximityVerdict.Sample.window(
+                    fresh,
+                    averageRssi,
+                    validCount,
+                    outlier127Count,
+                    newestAgeMs);
+        }
+
+        public String freshnessLabel() {
+            if (validCount <= 0 && outlier127Count <= 0) {
+                return "missing";
+            }
+            return fresh ? "RADIO_FRESH_WINDOW" : "RADIO_STALE_WINDOW";
+        }
     }
 
     public static final class WitnessSnapshot {

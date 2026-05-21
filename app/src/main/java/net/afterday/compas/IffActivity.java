@@ -19,9 +19,11 @@ import net.afterday.compas.iff.IffBleFieldRadio;
 import net.afterday.compas.iff.IffConfidence;
 import net.afterday.compas.iff.IffConfidence.Snapshot;
 import net.afterday.compas.iff.IffForegroundRadioService;
+import net.afterday.compas.iff.IffOfficeProximityVerdict;
 import net.afterday.compas.iff.IffRemoteWitnessReport;
 import net.afterday.compas.iff.IffRemoteWitnessStore;
 import net.afterday.compas.iff.IffRadioWitnessStore;
+import net.afterday.compas.iff.IffRadioWitnessStore.RssiWindowSnapshot;
 import net.afterday.compas.iff.IffRadioWitnessStore.WitnessSnapshot;
 import net.afterday.compas.iff.IffTacticalMapView;
 import net.afterday.compas.iff.IffUdpWitnessTransport;
@@ -293,11 +295,14 @@ public class IffActivity extends Activity {
         subtitle.setText(selectedIsLocalDevice ? "этот телефон объявляет этого участника" : "локальный roster trust + radio witness");
         status.setText("COMBAT: " + combat.state + " / " + combat.action + "\n"
                 + "OPERATOR: " + operatorVerdictLabel(confidence, quorum) + "\n"
+                + "OFFICE ROLE: " + officeTestRole(localDevicePlayer()) + "\n"
                 + "CONFIDENCE\n" + confidence.compactStatus() + "\nWITNESSES: " + quorum.compact());
         body.setText("ИГРОК\n"
                 + "- имя: " + selected.displayName + "\n"
                 + "- id: " + selected.playerId + "\n"
                 + "- команда: локальная IFF группа\n"
+                + "- office role: " + officeTestRole(selected) + "\n"
+                + "- this device role: " + officeTestRole(localDevicePlayer()) + "\n"
                 + "- trust: " + trustLabel(selected) + "\n"
                 + "- ожидаемый beacon: " + IffRadioWitnessStore.expectedBeaconSsid(selected.playerId) + "\n\n"
                 + "БОЕВОЙ ВИД\n"
@@ -324,6 +329,8 @@ public class IffActivity extends Activity {
         subtitle.setText("локальный roster + field radio identity");
         status.setText((approachActive ? "ВЫ        ПОДХОДИТЕ   локально\n" : "")
                 + "THIS DEVICE: " + localDevicePlayer().displayName + "\n"
+                + "OFFICE ROLE: " + officeTestRole(localDevicePlayer()) + "\n"
+                + "OFFICE VERDICT: " + officeProximityLine() + "\n"
                 + "OPERATOR: " + teamOperatorSummaryLine()
                 + " / TRUSTED " + trustedRosterCount() + "/" + (roster.length - 1) + "\n"
                 + "COMBAT: current " + combatStateCount("CURRENT")
@@ -343,6 +350,8 @@ public class IffActivity extends Activity {
                 + "Operator summary отделяет current witness от stale evidence.\n"
                 + "Проценты - текущая уверенность слоя, а не финальное доказательство.\n"
                 + "Field radio не должен требовать общей Wi-Fi сети.\n"
+                + "Office proximity: " + officeProximityLine() + "\n"
+                + "Office samples: " + officeProximitySamplesLine() + "\n"
                 + "Radio control: " + (fieldRadioEnabled ? "ON" : "OFF") + "\n"
                 + "Radio service: " + IffForegroundRadioService.compactStatus() + "\n"
                 + "BLE lifecycle: " + IffBleFieldRadio.lifecycleStatus() + "\n"
@@ -365,6 +374,7 @@ public class IffActivity extends Activity {
         title.setText("КАРТА");
         subtitle.setText("mock карта: freshness без азимута");
         status.setText("POSITION/DIRECTION: UNKNOWN 0%\n"
+                + "OFFICE ROLE: " + officeTestRole(localDevicePlayer()) + "\n"
                 + "RADIO: local " + freshWitnessCount() + " fresh / remote " + remoteReportCount() + "\n"
                 + "RADIO CONTROL: " + (fieldRadioEnabled ? "ON" : "OFF") + "\n"
                 + "FIELD RADIO: " + IffBleFieldRadio.compactStatus() + "\n"
@@ -390,6 +400,7 @@ public class IffActivity extends Activity {
         Snapshot confidence = confidenceFor(selected, witness);
         IffWitnessQuorum.Snapshot quorum = witnessQuorumFor(selected, witness);
         CombatSnapshot combat = combatFor(selected, confidence, quorum);
+        IffOfficeProximityVerdict.Snapshot officeVerdict = officeProximityVerdict();
         boolean trustedPlayer = isTrustedPlayer(selected);
         String trustLabel = trustLabel(selected);
         String witnessState = witness == null
@@ -400,6 +411,8 @@ public class IffActivity extends Activity {
                 + " playerId=" + selected.playerId
                 + " displayName=\"" + safe(selected.displayName) + "\""
                 + " localDevicePlayerId=" + localDevicePlayerId
+                + " officeRole=" + officeTestRole(localDevicePlayer())
+                + " selectedOfficeRole=" + officeTestRole(selected)
                 + " selectedIsLocalDevice=" + isLocalDevice(selected)
                 + " trustedPlayer=" + trustedPlayer
                 + " trustLabel=" + trustLabel
@@ -414,6 +427,11 @@ public class IffActivity extends Activity {
                 + " directionLabel=" + confidence.direction.label
                 + " directionScore=" + confidence.direction.score
                 + " operatorVerdict=" + operatorVerdictLabel(confidence, quorum)
+                + " officeProximityVerdict=" + officeVerdict.label
+                + " officeProximityDeltaDb=" + officeVerdict.deltaDb
+                + " officeProximityReason=\"" + safe(officeVerdict.reason) + "\""
+                + " officeProximityA=\"" + safe(officeSampleLabel("vasya")) + "\""
+                + " officeProximityB=\"" + safe(officeSampleLabel("zhenya")) + "\""
                 + " witnessQuorum=" + quorum.label
                 + " witnessFreshSources=" + quorum.freshSources
                 + " witnessPossibleSources=" + quorum.possibleSources
@@ -549,6 +567,7 @@ public class IffActivity extends Activity {
         lastFieldCheckSummary = player.displayName + ": this device identity selected";
         FieldDiagnosticLog.event("IFF_DIAG", "event=device_identity_selected"
                 + " localDevicePlayerId=" + player.playerId
+                + " officeRole=" + officeTestRole(player)
                 + " displayName=\"" + safe(player.displayName) + "\"");
         ensureFieldRadioService();
         render();
@@ -644,6 +663,25 @@ public class IffActivity extends Activity {
     private IffPlayer localDevicePlayer() {
         int index = localDevicePlayerIndex();
         return roster[index < 0 ? LOCAL_PLAYER_INDEX : index];
+    }
+
+    private String officeTestRole(IffPlayer player) {
+        if (player == null) {
+            return "UNASSIGNED";
+        }
+        if ("vasya".equals(player.playerId)) {
+            return "PHONE_A_WITNESS";
+        }
+        if ("zhenya".equals(player.playerId)) {
+            return "PHONE_B_WITNESS";
+        }
+        if ("petya".equals(player.playerId)) {
+            return "PHONE_C_MOVING_TARGET";
+        }
+        if ("local-you".equals(player.playerId)) {
+            return "PHONE_OPERATOR";
+        }
+        return "UNASSIGNED";
     }
 
     private int localDevicePlayerIndex() {
@@ -1023,6 +1061,43 @@ public class IffActivity extends Activity {
             return "STALE ONLY";
         }
         return "NO CURRENT";
+    }
+
+    private IffOfficeProximityVerdict.Snapshot officeProximityVerdict() {
+        return IffOfficeProximityVerdict.evaluate(
+                localDevicePlayerId,
+                officeWindowSample("vasya"),
+                officeWindowSample("zhenya"));
+    }
+
+    private IffOfficeProximityVerdict.Sample officeWindowSample(String playerId) {
+        RssiWindowSnapshot window = IffRadioWitnessStore.getRssiWindow(
+                playerId,
+                IffOfficeProximityVerdict.WINDOW_MS);
+        return window.asOfficeSample();
+    }
+
+    private String officeProximityLine() {
+        IffOfficeProximityVerdict.Snapshot snapshot = officeProximityVerdict();
+        return snapshot.compact();
+    }
+
+    private String officeProximitySamplesLine() {
+        return "C-A " + officeSampleLabel("vasya") + " / C-B " + officeSampleLabel("zhenya");
+    }
+
+    private String officeSampleLabel(String playerId) {
+        RssiWindowSnapshot window = IffRadioWitnessStore.getRssiWindow(
+                playerId,
+                IffOfficeProximityVerdict.WINDOW_MS);
+        if (window.validCount <= 0 && window.outlier127Count <= 0) {
+            return "missing";
+        }
+        return window.freshnessLabel()
+                + " avg=" + window.averageRssi + "dBm"
+                + " n=" + window.validCount
+                + " out127=" + window.outlier127Count
+                + " newest=" + formatAge(window.newestAgeMs);
     }
 
     private int remoteReportCount() {
