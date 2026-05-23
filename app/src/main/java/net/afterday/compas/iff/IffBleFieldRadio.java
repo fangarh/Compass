@@ -16,7 +16,9 @@ import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.location.Location;
 import android.os.Build;
+import android.os.SystemClock;
 import java.util.ArrayList;
 import java.util.List;
 import net.afterday.compas.logging.FieldDiagnosticLog;
@@ -25,9 +27,9 @@ import net.afterday.compas.logging.FieldDiagnosticLog;
 public final class IffBleFieldRadio {
     private static final Object LOCK = new Object();
     private static final int MANUFACTURER_ID = 0xffff;
-    private static final byte MARKER_0 = 0x43; // C
-    private static final byte MARKER_1 = 0x49; // I
-    private static final byte CONTRACT_VERSION = 1;
+    private static final int MAX_ADVERTISE_FAILURES = 3;
+    private static final long GPS_ADVERTISE_FRESH_MS = 15000L;
+    private static final boolean GPS_IN_BLE_ADVERTISE_ENABLED = false;
 
     private static BluetoothLeAdvertiser advertiser;
     private static BluetoothLeScanner scanner;
@@ -35,12 +37,19 @@ public final class IffBleFieldRadio {
     private static ScanCallback scanCallback;
     private static boolean running;
     private static boolean advertising;
+    private static boolean advertiseStartPending;
+    private static boolean advertiseDisabledForSession;
     private static boolean scanning;
     private static int rxCount;
     private static int rejectedCount;
+    private static int rxOutlier127Count;
+    private static int advertiseFailureCount;
     private static String localPlayerId = "";
     private static String lastStatus = "idle";
     private static String lifecycleStatus = "VISIBLE_SCREEN_ONLY";
+    private static Location latestLocalGps;
+    private static byte[] lastAdvertisedPayload;
+    private static long lastAdvertiseRestartElapsedMs;
 
     private IffBleFieldRadio() {
     }
@@ -101,7 +110,12 @@ public final class IffBleFieldRadio {
             advertiseCallback = null;
             scanCallback = null;
             advertising = false;
+            advertiseStartPending = false;
+            advertiseDisabledForSession = false;
             scanning = false;
+            advertiseFailureCount = 0;
+            lastAdvertisedPayload = null;
+            lastAdvertiseRestartElapsedMs = 0L;
             lastStatus = "stopped " + safe(reason);
         }
         FieldDiagnosticLog.event("IFF_DIAG", "event=ble_field_radio_stop"
@@ -125,6 +139,51 @@ public final class IffBleFieldRadio {
         synchronized (LOCK) {
             return lifecycleStatus + " / " + IffRadioWitnessStore.freshnessPolicyLabel();
         }
+    }
+
+    public static void updateLocalGps(Location location) {
+        BluetoothLeAdvertiser nextAdvertiser;
+        String playerId;
+        boolean isRunning;
+        boolean isAdvertising;
+        boolean isAdvertiseStartPending;
+        boolean isAdvertiseDisabled;
+        byte[] previousPayload;
+        long previousRestartElapsedMs;
+        synchronized (LOCK) {
+            latestLocalGps = location == null ? null : new Location(location);
+            if (!running || advertiser == null) {
+                return;
+            }
+            nextAdvertiser = advertiser;
+            playerId = localPlayerId;
+            isRunning = running;
+            isAdvertising = advertising;
+            isAdvertiseStartPending = advertiseStartPending;
+            isAdvertiseDisabled = advertiseDisabledForSession;
+            previousPayload = lastAdvertisedPayload;
+            previousRestartElapsedMs = lastAdvertiseRestartElapsedMs;
+        }
+        if (isAdvertiseDisabled) {
+            return;
+        }
+        int code = IffRadioWitnessStore.playerIndexCode(playerId);
+        if (code < 0) {
+            return;
+        }
+        byte[] nextPayload = payloadFor(code);
+        if (!IffBleAdvertiseRestartPolicy.shouldRestart(
+                isRunning,
+                nextAdvertiser != null,
+                isAdvertising,
+                isAdvertiseStartPending,
+                previousRestartElapsedMs,
+                SystemClock.elapsedRealtime(),
+                previousPayload,
+                nextPayload)) {
+            return;
+        }
+        restartAdvertise(nextAdvertiser, playerId);
     }
 
     private static void startLocked(Context context, String playerId) {
@@ -187,11 +246,27 @@ public final class IffBleFieldRadio {
     }
 
     private static void startAdvertise(BluetoothLeAdvertiser nextAdvertiser, final String playerId) {
+        synchronized (LOCK) {
+            if (advertiseDisabledForSession) {
+                advertising = false;
+                advertiseStartPending = false;
+                lastStatus = "advertise_disabled_after_failures";
+                return;
+            }
+            if (advertiseStartPending
+                    && lastAdvertiseRestartElapsedMs > 0L
+                    && SystemClock.elapsedRealtime() - lastAdvertiseRestartElapsedMs
+                    < IffBleAdvertiseRestartPolicy.START_GRACE_MS) {
+                lastStatus = "advertise_start_pending";
+                return;
+            }
+        }
         int code = IffRadioWitnessStore.playerIndexCode(playerId);
         if (code < 0) {
             setStatus("unknown_player", false, scanning);
             return;
         }
+        final byte[] advertisePayload = payloadFor(code);
         AdvertiseSettings settings = new AdvertiseSettings.Builder()
                 .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
                 .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
@@ -200,13 +275,15 @@ public final class IffBleFieldRadio {
         AdvertiseData data = new AdvertiseData.Builder()
                 .setIncludeDeviceName(false)
                 .setIncludeTxPowerLevel(false)
-                .addManufacturerData(MANUFACTURER_ID, payloadFor(code))
+                .addManufacturerData(MANUFACTURER_ID, advertisePayload)
                 .build();
         advertiseCallback = new AdvertiseCallback() {
             @Override
             public void onStartSuccess(AdvertiseSettings settingsInEffect) {
                 synchronized (LOCK) {
                     advertising = true;
+                    advertiseStartPending = false;
+                    advertiseFailureCount = 0;
                     lastStatus = "advertising " + playerId;
                 }
                 FieldDiagnosticLog.event("IFF_DIAG", "event=ble_field_radio_advertise started=true localPlayerId=" + playerId);
@@ -216,29 +293,69 @@ public final class IffBleFieldRadio {
             public void onStartFailure(int errorCode) {
                 synchronized (LOCK) {
                     advertising = false;
+                    advertiseStartPending = false;
+                    advertiseFailureCount++;
+                    if (advertiseFailureCount >= MAX_ADVERTISE_FAILURES) {
+                        advertiseDisabledForSession = true;
+                    }
                     rejectedCount++;
-                    lastStatus = "advertise_error_" + errorCode;
+                    lastStatus = advertiseDisabledForSession
+                            ? "advertise_disabled_after_failures"
+                            : "advertise_error_" + errorCode;
                 }
                 FieldDiagnosticLog.event("IFF_DIAG", "event=ble_field_radio_advertise started=false localPlayerId="
-                        + playerId + " errorCode=" + errorCode);
+                        + playerId
+                        + " errorCode=" + errorCode
+                        + " failureCount=" + advertiseFailureCount
+                        + " disabled=" + advertiseDisabledForSession);
             }
         };
         try {
+            synchronized (LOCK) {
+                advertiseStartPending = true;
+                lastAdvertisedPayload = advertisePayload;
+                lastAdvertiseRestartElapsedMs = SystemClock.elapsedRealtime();
+            }
             nextAdvertiser.startAdvertising(settings, data, advertiseCallback);
         } catch (Exception e) {
             synchronized (LOCK) {
                 advertising = false;
+                advertiseStartPending = false;
+                advertiseFailureCount++;
+                if (advertiseFailureCount >= MAX_ADVERTISE_FAILURES) {
+                    advertiseDisabledForSession = true;
+                }
                 rejectedCount++;
-                lastStatus = "advertise_exception";
+                lastStatus = advertiseDisabledForSession
+                        ? "advertise_disabled_after_failures"
+                        : "advertise_exception";
             }
             FieldDiagnosticLog.event("IFF_DIAG", "event=ble_field_radio_advertise started=false localPlayerId="
-                    + playerId + " error=\"" + clean(e.getClass().getSimpleName()) + "\"");
+                    + playerId
+                    + " error=\"" + clean(e.getClass().getSimpleName()) + "\""
+                    + " failureCount=" + advertiseFailureCount
+                    + " disabled=" + advertiseDisabledForSession);
         }
+    }
+
+    private static void restartAdvertise(BluetoothLeAdvertiser nextAdvertiser, String playerId) {
+        try {
+            if (advertiseCallback != null) {
+                nextAdvertiser.stopAdvertising(advertiseCallback);
+            }
+        } catch (Exception ignored) {
+        }
+        synchronized (LOCK) {
+            advertising = false;
+            advertiseStartPending = false;
+            lastStatus = "advertise_restart " + playerId;
+        }
+        startAdvertise(nextAdvertiser, playerId);
     }
 
     private static void startScan(BluetoothLeScanner nextScanner, final String playerId) {
         ScanFilter filter = new ScanFilter.Builder()
-                .setManufacturerData(MANUFACTURER_ID, new byte[] {MARKER_0, MARKER_1},
+                .setManufacturerData(MANUFACTURER_ID, new byte[] {IffBlePayload.MARKER_0, IffBlePayload.MARKER_1},
                         new byte[] {(byte) 0xff, (byte) 0xff})
                 .build();
         List<ScanFilter> filters = new ArrayList<>();
@@ -299,7 +416,8 @@ public final class IffBleFieldRadio {
         }
         ScanRecord record = result.getScanRecord();
         byte[] payload = record.getManufacturerSpecificData(MANUFACTURER_ID);
-        String playerId = playerIdFromPayload(payload);
+        IffBlePayload.Parsed parsed = IffBlePayload.parse(payload);
+        String playerId = parsed == null ? null : IffRadioWitnessStore.playerIdFromCode(parsed.playerCode);
         if (playerId == null) {
             synchronized (LOCK) {
                 rejectedCount++;
@@ -315,30 +433,89 @@ public final class IffBleFieldRadio {
         }
         String address = result.getDevice() == null ? "" : result.getDevice().getAddress();
         IffRadioWitnessStore.updateFromBleAdvert(playerId, address, result.getRssi());
+        recordTargetObservationFromBle(currentLocalPlayerId, playerId, address, result.getRssi());
+        if (parsed.hasGps) {
+            long now = SystemClock.elapsedRealtime();
+            IffRemoteWitnessStore.receiveReport(new IffRemoteWitnessReport(
+                    "ble-" + playerId,
+                    playerId,
+                    IffRadioWitnessStore.expectedBeaconSsid(playerId),
+                    address,
+                    result.getRssi(),
+                    0,
+                    now,
+                    now,
+                    IffRemoteWitnessReport.SIGNATURE_PENDING,
+                    parsed.gpsLatE7,
+                    parsed.gpsLonE7,
+                    parsed.gpsAccuracyM,
+                    now - parsed.gpsAgeMs));
+        }
         synchronized (LOCK) {
             rxCount++;
-            lastStatus = "rx " + playerId + " " + result.getRssi() + "dBm";
+            if (result.getRssi() == IffOfficeProximityVerdict.RSSI_OUTLIER_127) {
+                rxOutlier127Count++;
+            }
+            lastStatus = IffFieldSnapshotFormatter.bleRxStatus(
+                    playerId,
+                    result.getRssi(),
+                    lastStatus,
+                    rxOutlier127Count);
         }
         FieldDiagnosticLog.event("IFF_DIAG", "event=ble_field_radio_rx"
                 + " playerId=" + playerId
                 + " localPlayerId=" + currentLocalPlayerId
                 + " address=" + clean(address)
                 + " rssi=" + result.getRssi()
-                + " contract=ble-iff-v1");
+                + " gps=" + parsed.hasGps
+                + " contract=ble-iff-v" + parsed.contractVersion);
+    }
+
+    private static void recordTargetObservationFromBle(
+            String currentLocalPlayerId,
+            String observedPlayerId,
+            String address,
+            int rssi) {
+        if (!IffTargetObservationPolicy.shouldRecordAnchorObservation(currentLocalPlayerId, observedPlayerId)) {
+            return;
+        }
+        if (rssi >= 0) {
+            return;
+        }
+        IffWifiTargetObservationStore.updateLocalObservation(currentLocalPlayerId, observedPlayerId, rssi);
+        IffWifiDirectDiscoveryTransport.updateTargetObservation(observedPlayerId, rssi);
+        FieldDiagnosticLog.event("IFF_DIAG", "event=ble_target_observation"
+                + " localDevicePlayerId=" + clean(currentLocalPlayerId)
+                + " targetPlayerId=" + clean(observedPlayerId)
+                + " address=" + clean(address)
+                + " rssi=" + rssi
+                + " source=ble_scan");
     }
 
     private static byte[] payloadFor(int playerCode) {
-        return new byte[] {MARKER_0, MARKER_1, CONTRACT_VERSION, (byte) playerCode};
+        if (!GPS_IN_BLE_ADVERTISE_ENABLED) {
+            return IffBlePayload.forPlayer(playerCode);
+        }
+        Location gps;
+        synchronized (LOCK) {
+            gps = latestLocalGps == null ? null : new Location(latestLocalGps);
+        }
+        if (hasFreshGps(gps)) {
+            return IffBlePayload.forPlayerWithGps(
+                    playerCode,
+                    IffRemoteWitnessFrame.coordinateE7(gps.getLatitude()),
+                    IffRemoteWitnessFrame.coordinateE7(gps.getLongitude()),
+                    gps.hasAccuracy() ? Math.round(gps.getAccuracy()) : 0,
+                    Math.max(0L, System.currentTimeMillis() - gps.getTime()));
+        }
+        return IffBlePayload.forPlayer(playerCode);
     }
 
-    private static String playerIdFromPayload(byte[] payload) {
-        if (payload == null || payload.length < 4) {
-            return null;
-        }
-        if (payload[0] != MARKER_0 || payload[1] != MARKER_1 || payload[2] != CONTRACT_VERSION) {
-            return null;
-        }
-        return IffRadioWitnessStore.playerIdFromCode(payload[3] & 0xff);
+    private static boolean hasFreshGps(Location location) {
+        return location != null
+                && Math.abs(location.getLatitude()) <= 90.0d
+                && Math.abs(location.getLongitude()) <= 180.0d
+                && System.currentTimeMillis() - location.getTime() <= GPS_ADVERTISE_FRESH_MS;
     }
 
     private static boolean hasBleScanPermissions(Context context) {

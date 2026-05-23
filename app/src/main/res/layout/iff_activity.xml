@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="38dp"
         android:orientation="horizontal"
-        android:weightSum="3">
+        android:weightSum="4">
 
         <Button
             android:id="@id/iff_contact_tab"
@@ -19,9 +19,9 @@
             android:layout_marginRight="4dp"
             android:layout_weight="1"
             android:background="@drawable/popup_button"
-            android:text="КОНТАКТ"
+            android:text="CONTACT"
             android:textColor="#ffd16a"
-            android:textSize="13sp" />
+            android:textSize="12sp" />
 
         <Button
             android:id="@id/iff_team_tab"
@@ -31,20 +31,32 @@
             android:layout_marginRight="4dp"
             android:layout_weight="1"
             android:background="@drawable/popup_button"
-            android:text="КОМАНДА"
+            android:text="TEAM"
             android:textColor="#b8c49a"
-            android:textSize="13sp" />
+            android:textSize="12sp" />
 
         <Button
             android:id="@id/iff_map_tab"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_marginLeft="4dp"
+            android:layout_marginRight="4dp"
             android:layout_weight="1"
             android:background="@drawable/popup_button"
-            android:text="КАРТА"
+            android:text="MAP"
             android:textColor="#b8c49a"
-            android:textSize="13sp" />
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@id/iff_log_tab"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginLeft="4dp"
+            android:layout_weight="1"
+            android:background="@drawable/popup_button"
+            android:text="LOG"
+            android:textColor="#b8c49a"
+            android:textSize="12sp" />
     </LinearLayout>
 
     <TextView
@@ -100,7 +112,7 @@
         android:layout_height="44dp"
         android:layout_marginTop="8dp"
         android:orientation="horizontal"
-        android:weightSum="7">
+        android:weightSum="4">
 
         <Button
             android:id="@id/iff_approach"
@@ -109,7 +121,7 @@
             android:layout_marginRight="4dp"
             android:layout_weight="1"
             android:background="@drawable/popup_button"
-            android:text="Я ПОДХОЖУ"
+            android:text="APPROACH"
             android:textColor="#ffffff"
             android:textSize="8sp" />
 
@@ -133,7 +145,7 @@
             android:layout_marginRight="4dp"
             android:layout_weight="1"
             android:background="@drawable/popup_button"
-            android:text="ЗАПИСАТЬ"
+            android:text="CHECK"
             android:textColor="#ffffff"
             android:textSize="8sp" />
 
@@ -142,45 +154,9 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_marginLeft="4dp"
-            android:layout_marginRight="4dp"
             android:layout_weight="1"
             android:background="@drawable/popup_button"
             android:text="RADIO ON"
-            android:textColor="#ffffff"
-            android:textSize="8sp" />
-
-        <Button
-            android:id="@id/iff_tx_witness"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_marginLeft="4dp"
-            android:layout_marginRight="4dp"
-            android:layout_weight="1"
-            android:background="@drawable/popup_button"
-            android:text="TX STUB"
-            android:textColor="#ffffff"
-            android:textSize="8sp" />
-
-        <Button
-            android:id="@id/iff_sim_witness"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_marginLeft="4dp"
-            android:layout_marginRight="4dp"
-            android:layout_weight="1"
-            android:background="@drawable/popup_button"
-            android:text="SIM FRESH"
-            android:textColor="#ffffff"
-            android:textSize="8sp" />
-
-        <Button
-            android:id="@id/iff_sim_stale_witness"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_marginLeft="4dp"
-            android:layout_weight="1"
-            android:background="@drawable/popup_button"
-            android:text="SIM STALE"
             android:textColor="#ffffff"
             android:textSize="8sp" />
     </LinearLayout>

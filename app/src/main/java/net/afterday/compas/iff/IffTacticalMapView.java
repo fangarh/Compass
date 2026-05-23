@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.view.MotionEvent;
 import android.view.View;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,6 +14,8 @@ public final class IffTacticalMapView extends View {
     private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final List<MapPoint> points = new ArrayList<>();
     private String localLabel = "";
+    private IffFieldMapSnapshot fieldState;
+    private int detailMode;
 
     public IffTacticalMapView(Context context) {
         super(context);
@@ -30,6 +33,24 @@ public final class IffTacticalMapView extends View {
         invalidate();
     }
 
+    public void setFieldState(IffFieldMapSnapshot nextFieldState) {
+        fieldState = nextFieldState;
+        invalidate();
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if (event == null) {
+            return false;
+        }
+        if (event.getAction() == MotionEvent.ACTION_UP) {
+            detailMode = (detailMode + 1) % 3;
+            invalidate();
+            return true;
+        }
+        return true;
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
@@ -41,7 +62,7 @@ public final class IffTacticalMapView extends View {
 
         drawBackground(canvas, width, height);
         drawFrame(canvas, width, height);
-        drawLocalNode(canvas, width, height);
+        drawFieldGeometry(canvas, width, height);
         drawPoints(canvas, width, height);
         drawLegend(canvas, width, height);
     }
@@ -70,36 +91,85 @@ public final class IffTacticalMapView extends View {
         canvas.drawRect(dp(2), dp(2), width - dp(2), height - dp(2), paint);
 
         textPaint.setColor(0xffffd16a);
-        canvas.drawText("IFF TACTICAL MAP MOCK", dp(12), dp(22), textPaint);
+        canvas.drawText("IFF FIELD MAP", dp(12), dp(22), textPaint);
         textPaint.setColor(0xffb8c49a);
-        canvas.drawText("NO GPS POSITION / NO BEARING", dp(12), dp(40), textPaint);
+        canvas.drawText(fieldState == null ? "NO FIELD STATE" : fieldState.statusLine, dp(12), dp(40), textPaint);
     }
 
-    private void drawLocalNode(Canvas canvas, int width, int height) {
+    private void drawFieldGeometry(Canvas canvas, int width, int height) {
         float cx = width * 0.5f;
-        float cy = height * 0.54f;
+        float cy = height * 0.64f;
+        float scale = Math.min(width, height);
+
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(dp(1));
         paint.setColor(0xff405037);
-        canvas.drawCircle(cx, cy, Math.min(width, height) * 0.18f, paint);
-        canvas.drawCircle(cx, cy, Math.min(width, height) * 0.31f, paint);
-        canvas.drawCircle(cx, cy, Math.min(width, height) * 0.43f, paint);
+        canvas.drawCircle(cx, cy, scale * 0.16f, paint);
+        canvas.drawCircle(cx, cy, scale * 0.24f, paint);
+        canvas.drawCircle(cx, cy, scale * 0.32f, paint);
+        canvas.drawCircle(cx, cy, scale * 0.40f, paint);
+
+        float leftX = width * 0.22f;
+        float rightX = width * 0.78f;
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(0xff5ea8ff);
+        canvas.drawCircle(leftX, cy, dp(10), paint);
+        canvas.drawCircle(rightX, cy, dp(10), paint);
+        textPaint.setColor(0xffffffff);
+        canvas.drawText("VASYA", leftX - dp(28), cy + dp(26), textPaint);
+        canvas.drawText("PETYA", rightX - dp(28), cy + dp(26), textPaint);
+
+        if (fieldState != null && fieldState.targetVisible) {
+            drawTargetEstimate(canvas, width, height, cx, cy, scale);
+        }
 
         paint.setStyle(Paint.Style.FILL);
-        paint.setColor(0xffffd16a);
-        canvas.drawCircle(cx, cy, dp(11), paint);
+        paint.setColor(0xffd8dfca);
+        canvas.drawCircle(cx, cy, dp(4), paint);
+    }
+
+    private void drawTargetEstimate(Canvas canvas, int width, int height, float cx, float cy, float scale) {
+        float tx = width * fieldState.targetX;
+        float ty = height * fieldState.targetY;
+        float ringRadius = radiusFor(fieldState.distanceBucketM, scale);
+
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(dp(2));
+        paint.setColor(fieldState.directionKnown ? 0xff7dff73 : 0xffffd16a);
+        canvas.drawCircle(cx, cy, ringRadius, paint);
+
+        if (fieldState.directionKnown) {
+            float sweepRadius = Math.max(dp(36), ringRadius);
+            RectF arc = new RectF(cx - sweepRadius, cy - sweepRadius, cx + sweepRadius, cy + sweepRadius);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(18));
+            paint.setColor(0x667dff73);
+            canvas.drawArc(arc, startAngleForClock(fieldState.clockDirection), 38.0f, false, paint);
+            paint.setStrokeWidth(dp(2));
+            paint.setColor(0xff7dff73);
+            canvas.drawLine(cx, cy, tx, ty, paint);
+        }
+
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(fieldState.directionKnown ? 0xff7dff73 : 0xffffd16a);
+        canvas.drawCircle(tx, ty, dp(12), paint);
         textPaint.setColor(0xffffffff);
-        canvas.drawText("THIS DEVICE: " + localLabel, cx + dp(16), cy + dp(4), textPaint);
+        canvas.drawText("ZHENYA", tx + dp(16), ty - dp(4), textPaint);
+        textPaint.setColor(0xffb8c49a);
+        canvas.drawText(fieldState.distanceBucketM + "m / " + fieldState.clockDirection, tx + dp(16), ty + dp(13), textPaint);
     }
 
     private void drawPoints(Canvas canvas, int width, int height) {
+        if (detailMode == 0) {
+            return;
+        }
         float cx = width * 0.5f;
-        float cy = height * 0.54f;
+        float cy = height * 0.64f;
         float[][] slots = new float[][] {
-                {-0.62f, -0.30f},
-                {0.56f, -0.32f},
-                {-0.52f, 0.42f},
-                {0.50f, 0.44f}
+                {-0.70f, -0.52f},
+                {0.48f, -0.52f},
+                {-0.70f, 0.20f},
+                {0.48f, 0.20f}
         };
         float radius = Math.min(width, height) * 0.42f;
 
@@ -126,10 +196,11 @@ public final class IffTacticalMapView extends View {
     }
 
     private void drawLegend(Canvas canvas, int width, int height) {
-        int y = height - dp(36);
+        int y = height - dp(52);
         textPaint.setColor(0xffb8c49a);
-        canvas.drawText("Slots are roster order, not direction", dp(12), y, textPaint);
-        canvas.drawText("green=fresh  amber=stale  gray=unknown", dp(12), y + dp(17), textPaint);
+        canvas.drawText("tap: map / details / roster", dp(12), y, textPaint);
+        canvas.drawText("green=two anchors  amber=one anchor/fallback", dp(12), y + dp(17), textPaint);
+        canvas.drawText("local: " + localLabel, dp(12), y + dp(34), textPaint);
     }
 
     private int colorFor(MapPoint point) {
@@ -147,6 +218,42 @@ public final class IffTacticalMapView extends View {
 
     private int dp(int value) {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private float radiusFor(int distanceBucketM, float scale) {
+        if (distanceBucketM <= 5) {
+            return scale * 0.16f;
+        }
+        if (distanceBucketM <= 10) {
+            return scale * 0.24f;
+        }
+        if (distanceBucketM <= 15) {
+            return scale * 0.32f;
+        }
+        if (distanceBucketM <= 20) {
+            return scale * 0.40f;
+        }
+        return scale * 0.46f;
+    }
+
+    private float startAngleForClock(String clockDirection) {
+        float center;
+        if ("3".equals(clockDirection)) {
+            center = 0.0f;
+        } else if ("2".equals(clockDirection)) {
+            center = -30.0f;
+        } else if ("1".equals(clockDirection)) {
+            center = -60.0f;
+        } else if ("9".equals(clockDirection)) {
+            center = 180.0f;
+        } else if ("10".equals(clockDirection)) {
+            center = 150.0f;
+        } else if ("11".equals(clockDirection)) {
+            center = 120.0f;
+        } else {
+            center = -90.0f;
+        }
+        return center - 19.0f;
     }
 
     private float sp(int value) {

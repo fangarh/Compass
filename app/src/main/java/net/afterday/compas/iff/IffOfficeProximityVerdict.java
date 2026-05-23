@@ -20,10 +20,19 @@ public final class IffOfficeProximityVerdict {
             return new Snapshot("INSUFFICIENT_DATA", 0,
                     "local device is not PHONE_C_MOVING_TARGET");
         }
-        if (!isUsable(sideA) || !isUsable(sideB)) {
+        boolean usableA = isUsable(sideA);
+        boolean usableB = isUsable(sideB);
+        if (!usableA && !usableB) {
             return new Snapshot("INSUFFICIENT_DATA", 0,
-                    "fresh A and B BLE windows need at least " + MIN_VALID_SAMPLES
-                            + " valid samples each; rssi=127 is ignored");
+                    "no usable fresh BLE office side; rssi=127 is ignored");
+        }
+        if (usableA && !usableB) {
+            return new Snapshot("ONLY_A_VISIBLE", 0,
+                    "only A has usable fresh BLE samples; B may be shadowed by wall");
+        }
+        if (!usableA) {
+            return new Snapshot("ONLY_B_VISIBLE", 0,
+                    "only B has usable fresh BLE samples; A may be shadowed by wall");
         }
 
         int deltaDb = calibratedDeltaDb(sideA, sideB, calibration);

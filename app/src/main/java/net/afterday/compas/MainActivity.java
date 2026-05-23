@@ -97,6 +97,7 @@ public class MainActivity extends AppCompatActivity {
     private Healthbar mHealthbar;
     private Indicator mIndicator;
     private Button mIffButton;
+    private Button mLogButton;
     private ImageButton mQrButton;
     private Radbar mRadbar;
     private Bar mStaminaBar;
@@ -499,6 +500,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setupLog() {
+        if (this.logList == null) {
+            return;
+        }
         RecyclerView.LayoutManager logListManager = new LinearLayoutManager(this, 1, true);
         ((LinearLayoutManager) logListManager).setStackFromEnd(true);
         this.logList.setLayoutManager(logListManager);
@@ -558,6 +562,12 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 openIff();
+            }
+        });
+        this.mLogButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                openGameLog();
             }
         });
         this.mQrButton.setOnTouchListener(new $$Lambda$MainActivity$6uO8oY_j9sXKnjCLwnBqutuFrs(this));
@@ -701,6 +711,7 @@ public class MainActivity extends AppCompatActivity {
         this.mBattery = (Battery) findViewById(R.id.battery);
         this.mTube = (Tube) findViewById(R.id.tube);
         this.mIffButton = (Button) findViewById(R.id.iffbutton);
+        this.mLogButton = (Button) findViewById(R.id.logbutton);
         this.mQrButton = (ImageButton) findViewById(R.id.qrbutton);
         this.logList = (RecyclerView) findViewById(R.id.log_list);
         this.mIndicator = (Indicator) findViewById(R.id.indicator);
@@ -803,6 +814,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void openIff() {
         startActivity(new Intent(this, IffActivity.class));
+    }
+
+    void openGameLog() {
+        startActivity(new Intent(this, GameLogActivity.class));
     }
 
     private void setupListeners() {

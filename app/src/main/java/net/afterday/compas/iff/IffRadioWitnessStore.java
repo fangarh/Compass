@@ -92,8 +92,17 @@ public final class IffRadioWitnessStore {
     }
 
     public static RssiWindowSnapshot getRssiWindow(String playerId, long windowMs) {
+        return getRssiWindow(playerId, windowMs, 0L);
+    }
+
+    public static RssiWindowSnapshot getPreviousRssiWindow(String playerId, long windowMs) {
+        return getRssiWindow(playerId, windowMs, Math.max(0L, windowMs));
+    }
+
+    private static RssiWindowSnapshot getRssiWindow(String playerId, long windowMs, long endOffsetMs) {
         long now = SystemClock.elapsedRealtime();
-        long cutoff = now - Math.max(0L, windowMs);
+        long end = now - Math.max(0L, endOffsetMs);
+        long cutoff = end - Math.max(0L, windowMs);
         synchronized (LOCK) {
             ArrayDeque<RssiSample> samples = RSSI_HISTORY.get(playerId);
             if (samples == null || samples.isEmpty()) {
@@ -105,7 +114,7 @@ public final class IffRadioWitnessStore {
             int sum = 0;
             long newestSeenElapsedMs = -1L;
             for (RssiSample sample : samples) {
-                if (sample.seenElapsedMs < cutoff) {
+                if (sample.seenElapsedMs < cutoff || sample.seenElapsedMs > end) {
                     continue;
                 }
                 if (sample.seenElapsedMs > newestSeenElapsedMs) {
@@ -333,6 +342,15 @@ public final class IffRadioWitnessStore {
 
         public IffOfficeProximityVerdict.Sample asOfficeSample() {
             return IffOfficeProximityVerdict.Sample.window(
+                    fresh,
+                    averageRssi,
+                    validCount,
+                    outlier127Count,
+                    newestAgeMs);
+        }
+
+        public IffDistanceTrend.Sample asDistanceSample() {
+            return IffDistanceTrend.Sample.window(
                     fresh,
                     averageRssi,
                     validCount,

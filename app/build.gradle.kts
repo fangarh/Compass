@@ -14,8 +14,8 @@ android {
         applicationId = "net.afterday.compas"
         minSdk = 23
         targetSdk = 35
-        versionCode = 1816
-        versionName = "1816-diagnostic-sensors-1s"
+        versionCode = 1845
+        versionName = "1845-operator-two-anchor-snapshot"
     }
 
     compileOptions {

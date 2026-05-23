@@ -48,6 +48,26 @@ public final class IffRemoteWitnessStore {
         }
     }
 
+    public static IffRemoteWitnessReport getFreshGpsReportFor(String targetPlayerId) {
+        synchronized (LOCK) {
+            List<IffRemoteWitnessReport> reports = REPORTS_BY_TARGET.get(targetPlayerId);
+            if (reports == null) {
+                return null;
+            }
+            IffRemoteWitnessReport best = null;
+            for (int i = 0; i < reports.size(); i++) {
+                IffRemoteWitnessReport report = reports.get(i);
+                if (report == null || !report.hasGpsFix() || !report.isFresh()) {
+                    continue;
+                }
+                if (best == null || report.gpsAgeMs() < best.gpsAgeMs()) {
+                    best = report;
+                }
+            }
+            return best;
+        }
+    }
+
     public static int reportCountFor(String targetPlayerId) {
         synchronized (LOCK) {
             List<IffRemoteWitnessReport> reports = REPORTS_BY_TARGET.get(targetPlayerId);

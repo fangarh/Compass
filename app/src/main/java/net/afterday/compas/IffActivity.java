@@ -1,8 +1,14 @@
 package net.afterday.compas;
 
+import android.Manifest;
 import android.app.Activity;
+import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Typeface;
+import android.location.Location;
+import android.location.LocationManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.SystemClock;
@@ -18,8 +24,14 @@ import java.util.List;
 import net.afterday.compas.iff.IffBleFieldRadio;
 import net.afterday.compas.iff.IffConfidence;
 import net.afterday.compas.iff.IffConfidence.Snapshot;
+import net.afterday.compas.iff.IffDistanceTrend;
+import net.afterday.compas.iff.IffFieldLocatorSnapshot;
+import net.afterday.compas.iff.IffFieldMapSnapshot;
+import net.afterday.compas.iff.IffFieldRunSummary;
 import net.afterday.compas.iff.IffForegroundRadioService;
+import net.afterday.compas.iff.IffGpsSnapshot;
 import net.afterday.compas.iff.IffOfficeProximityVerdict;
+import net.afterday.compas.iff.IffOperatorFieldSnapshotStore;
 import net.afterday.compas.iff.IffRemoteWitnessReport;
 import net.afterday.compas.iff.IffRemoteWitnessStore;
 import net.afterday.compas.iff.IffRadioWitnessStore;
@@ -28,15 +40,18 @@ import net.afterday.compas.iff.IffRadioWitnessStore.WitnessSnapshot;
 import net.afterday.compas.iff.IffTacticalMapView;
 import net.afterday.compas.iff.IffUdpWitnessTransport;
 import net.afterday.compas.iff.IffWitnessQuorum;
+import net.afterday.compas.iff.IffWifiTargetObservationStore;
 import net.afterday.compas.logging.FieldDiagnosticLog;
 
 public class IffActivity extends Activity {
     private static final int TAB_CONTACT = 0;
     private static final int TAB_TEAM = 1;
     private static final int TAB_MAP = 2;
+    private static final int TAB_LOG = 3;
     private static final int LOCAL_PLAYER_INDEX = 0;
     private static final long APPROACH_DURATION_MS = 120000L;
     private static final long RADIO_REFRESH_MS = 2000L;
+    private static final long DISTANCE_WINDOW_MS = 6000L;
     private static final String PREFS_NAME = "iff";
     private static final String PREF_LOCAL_DEVICE_PLAYER_ID = "local_device_player_id";
     private static final String PREF_FIELD_RADIO_ENABLED = "field_radio_enabled";
@@ -50,6 +65,8 @@ public class IffActivity extends Activity {
     };
 
     private final Handler handler = new Handler();
+    private final IffOperatorFieldSnapshotStore operatorFieldSnapshotStore =
+            new IffOperatorFieldSnapshotStore();
     private int activeTab = TAB_TEAM;
     private int selectedPlayerIndex = LOCAL_PLAYER_INDEX;
     private String localDevicePlayerId = "local-you";
@@ -59,13 +76,11 @@ public class IffActivity extends Activity {
     private Button contactTab;
     private Button teamTab;
     private Button mapTab;
+    private Button logTab;
     private Button approachButton;
     private Button trustButton;
     private Button recordCheckButton;
     private Button radioServiceButton;
-    private Button txWitnessButton;
-    private Button simWitnessButton;
-    private Button simStaleWitnessButton;
     private TextView title;
     private TextView subtitle;
     private TextView status;
@@ -93,6 +108,7 @@ public class IffActivity extends Activity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        FieldDiagnosticLog.start(this);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         setContentView(R.layout.iff_activity);
@@ -129,13 +145,11 @@ public class IffActivity extends Activity {
         contactTab = (Button) findViewById(R.id.iff_contact_tab);
         teamTab = (Button) findViewById(R.id.iff_team_tab);
         mapTab = (Button) findViewById(R.id.iff_map_tab);
+        logTab = (Button) findViewById(R.id.iff_log_tab);
         approachButton = (Button) findViewById(R.id.iff_approach);
         trustButton = (Button) findViewById(R.id.iff_trust);
         recordCheckButton = (Button) findViewById(R.id.iff_record_check);
         radioServiceButton = (Button) findViewById(R.id.iff_radio_service);
-        txWitnessButton = (Button) findViewById(R.id.iff_tx_witness);
-        simWitnessButton = (Button) findViewById(R.id.iff_sim_witness);
-        simStaleWitnessButton = (Button) findViewById(R.id.iff_sim_stale_witness);
         title = (TextView) findViewById(R.id.iff_title);
         subtitle = (TextView) findViewById(R.id.iff_subtitle);
         status = (TextView) findViewById(R.id.iff_status);
@@ -152,13 +166,11 @@ public class IffActivity extends Activity {
         contactTab.setTypeface(mono, Typeface.BOLD);
         teamTab.setTypeface(mono, Typeface.BOLD);
         mapTab.setTypeface(mono, Typeface.BOLD);
+        logTab.setTypeface(mono, Typeface.BOLD);
         approachButton.setTypeface(mono, Typeface.BOLD);
         trustButton.setTypeface(mono, Typeface.BOLD);
         recordCheckButton.setTypeface(mono, Typeface.BOLD);
         radioServiceButton.setTypeface(mono, Typeface.BOLD);
-        txWitnessButton.setTypeface(mono, Typeface.BOLD);
-        simWitnessButton.setTypeface(mono, Typeface.BOLD);
-        simStaleWitnessButton.setTypeface(mono, Typeface.BOLD);
     }
 
     private void setListeners() {
@@ -180,6 +192,13 @@ public class IffActivity extends Activity {
             @Override
             public void onClick(View v) {
                 activeTab = TAB_MAP;
+                render();
+            }
+        });
+        logTab.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                activeTab = TAB_LOG;
                 render();
             }
         });
@@ -209,24 +228,6 @@ public class IffActivity extends Activity {
             @Override
             public void onClick(View v) {
                 toggleFieldRadioService();
-            }
-        });
-        txWitnessButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                transmitWitnessStub();
-            }
-        });
-        simWitnessButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                simulateRemoteWitnesses(false);
-            }
-        });
-        simStaleWitnessButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                simulateRemoteWitnesses(true);
             }
         });
     }
@@ -259,16 +260,15 @@ public class IffActivity extends Activity {
         renderTrustButton(selected);
         radioServiceButton.setText(fieldRadioEnabled ? "RADIO ON" : "RADIO OFF");
         radioServiceButton.setTextColor(fieldRadioEnabled ? 0xff7dff73 : 0xffffd16a);
-        txWitnessButton.setText("TX STUB");
-        simWitnessButton.setText("SIM FRESH");
-        simStaleWitnessButton.setText("SIM STALE");
         renderTabs();
         if (activeTab == TAB_CONTACT) {
             renderContact();
         } else if (activeTab == TAB_TEAM) {
             renderTeam();
-        } else {
+        } else if (activeTab == TAB_MAP) {
             renderMap();
+        } else {
+            renderLog();
         }
     }
 
@@ -276,6 +276,7 @@ public class IffActivity extends Activity {
         setTabState(contactTab, activeTab == TAB_CONTACT);
         setTabState(teamTab, activeTab == TAB_TEAM);
         setTabState(mapTab, activeTab == TAB_MAP);
+        setTabState(logTab, activeTab == TAB_LOG);
     }
 
     private void setTabState(Button tab, boolean active) {
@@ -289,6 +290,10 @@ public class IffActivity extends Activity {
         Snapshot confidence = confidenceFor(selected, witness);
         IffWitnessQuorum.Snapshot quorum = witnessQuorumFor(selected, witness);
         CombatSnapshot combat = combatFor(selected, confidence, quorum);
+        if (SystemClock.elapsedRealtime() >= 0L) {
+            renderContactGame(selected, witness, confidence, quorum, combat);
+            return;
+        }
         boolean selectedIsLocalDevice = isLocalDevice(selected);
         boolean localApproachSelected = approachActive && selectedIsLocalDevice;
         title.setText(localApproachSelected ? "ВЫ ПОДХОДИТЕ" : selected.displayName);
@@ -325,6 +330,10 @@ public class IffActivity extends Activity {
 
     private void renderTeam() {
         resetBody();
+        if (SystemClock.elapsedRealtime() >= 0L) {
+            renderTeamGame();
+            return;
+        }
         title.setText("КОМАНДА");
         subtitle.setText("локальный roster + field radio identity");
         status.setText((approachActive ? "ВЫ        ПОДХОДИТЕ   локально\n" : "")
@@ -360,7 +369,7 @@ public class IffActivity extends Activity {
                 + "Remote witness contract: " + IffRemoteWitnessReport.CONTRACT_VERSION + "\n"
                 + "Signature status пока placeholder: " + IffRemoteWitnessReport.SIGNATURE_PENDING + "\n"
                 + "UDP debug: " + IffUdpWitnessTransport.compactStatus() + "\n"
-                + "Transport stub: UDP broadcast, unsigned, debug only.\n"
+                + "Transport: UDP diagnostic channel.\n"
                 + "Последняя проверка: " + lastFieldCheckSummary);
         bodyContainer.removeAllViews();
         for (int i = 0; i < roster.length; i++) {
@@ -369,10 +378,52 @@ public class IffActivity extends Activity {
         bodyContainer.addView(body);
     }
 
+    private void renderContactGame(IffPlayer selected, WitnessSnapshot witness, Snapshot confidence,
+                                   IffWitnessQuorum.Snapshot quorum, CombatSnapshot combat) {
+        boolean selectedIsLocalDevice = isLocalDevice(selected);
+        title.setText(approachActive && selectedIsLocalDevice ? "APPROACHING" : selected.displayName);
+        subtitle.setText(selectedIsLocalDevice ? "this phone identity" : "field contact");
+        status.setText("COMBAT: " + combat.state + " / " + combat.action + "\n"
+                + "OPERATOR: " + operatorVerdictLabel(confidence, quorum) + "\n"
+                + "PROXIMITY: " + confidence.proximity.label + " " + confidence.proximity.score + "%\n"
+                + "DISTANCE: " + distanceTrendFor(selected).compact() + "\n"
+                + "WITNESS: " + quorum.compact());
+        body.setText("PLAYER\n"
+                + "- name: " + selected.displayName + "\n"
+                + "- id: " + selected.playerId + "\n"
+                + "- trust: " + trustLabel(selected) + "\n"
+                + "- radio: " + rosterRadioLabel(selected, witness) + "\n"
+                + "- distance: " + distanceTrendFor(selected).compact() + "\n"
+                + "- office role: " + officeTestRole(selected) + "\n\n"
+                + "ACTION\n"
+                + "- " + combat.action + "\n"
+                + "- last check: " + lastFieldCheckSummary);
+    }
+
+    private void renderTeamGame() {
+        title.setText("TEAM");
+        subtitle.setText("field roster");
+        status.setText((approachActive ? "APPROACHING locally\n" : "")
+                + "THIS DEVICE: " + localDevicePlayer().displayName + "\n"
+                + "OFFICE: " + officeProximityLine() + "\n"
+                + "CONTACTS: current " + currentWitnessEvidenceCount()
+                + " / stale " + staleWitnessEvidenceCount()
+                + " / unknown " + combatStateCount("UNKNOWN") + "\n"
+                + "RADIO: " + (fieldRadioEnabled ? "ON" : "OFF"));
+        bodyContainer.removeAllViews();
+        for (int i = 0; i < roster.length; i++) {
+            bodyContainer.addView(createRosterButton(i));
+        }
+    }
+
     private void renderMap() {
         resetBody();
+        if (SystemClock.elapsedRealtime() >= 0L) {
+            renderMapGame();
+            return;
+        }
         title.setText("КАРТА");
-        subtitle.setText("mock карта: freshness без азимута");
+        subtitle.setText("field contacts");
         status.setText("POSITION/DIRECTION: UNKNOWN 0%\n"
                 + "OFFICE ROLE: " + officeTestRole(localDevicePlayer()) + "\n"
                 + "RADIO: local " + freshWitnessCount() + " fresh / remote " + remoteReportCount() + "\n"
@@ -389,9 +440,71 @@ public class IffActivity extends Activity {
         mapParams.setMargins(0, 0, 0, dp(8));
         mapView.setLayoutParams(mapParams);
         mapView.setState(localDevicePlayer().displayName, mapPoints());
+        mapView.setFieldState(fieldMapSnapshot());
         bodyContainer.addView(mapView);
         bodyContainer.addView(body);
         body.setText(mapWitnessList());
+    }
+
+    private void renderMapGame() {
+        title.setText("MAP");
+        subtitle.setText("field contacts");
+        status.setText("POSITION: UNKNOWN\n"
+                + "OFFICE: " + officeProximityLine() + "\n"
+                + "DISTANCE: " + officeDistanceTrendLine() + "\n"
+                + "GPS: " + gpsUiStatus() + "\n"
+                + "RADIO: " + freshWitnessCount() + " current / " + staleWitnessEvidenceCount() + " stale");
+        bodyContainer.removeAllViews();
+        IffTacticalMapView mapView = new IffTacticalMapView(this);
+        LinearLayout.LayoutParams mapParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(260));
+        mapParams.setMargins(0, 0, 0, dp(8));
+        mapView.setLayoutParams(mapParams);
+        mapView.setState(localDevicePlayer().displayName, mapPoints());
+        mapView.setFieldState(fieldMapSnapshot());
+        bodyContainer.addView(mapView);
+        bodyContainer.addView(body);
+        body.setText(fieldMapSummary());
+    }
+
+    private void renderLog() {
+        resetBody();
+        title.setText("LOG");
+        subtitle.setText("field diagnostics");
+        status.setText("RADIO: " + (fieldRadioEnabled ? "ON" : "OFF") + "\n"
+                + "OFFICE: " + officeProximityLine() + "\n"
+                + "DISTANCE: " + distanceTrendFor(roster[selectedPlayerIndex]).compact() + "\n"
+                + "GPS: " + gpsUiStatus() + "\n"
+                + "RUN: " + fieldRunHeader() + "\n"
+                + "LAST CHECK: " + lastFieldCheckSummary);
+        IffPlayer selected = roster[selectedPlayerIndex];
+        WitnessSnapshot witness = IffRadioWitnessStore.getWitness(selected.playerId);
+        Snapshot confidence = confidenceFor(selected, witness);
+        IffWitnessQuorum.Snapshot quorum = witnessQuorumFor(selected, witness);
+        CombatSnapshot combat = combatFor(selected, confidence, quorum);
+        body.setText("SELECTED\n"
+                + operatorDetails(selected, confidence, quorum, combat) + "\n\n"
+                + "CONFIDENCE\n"
+                + confidenceDetails(confidence) + "\n\n"
+                + "WITNESS\n"
+                + witnessDetails(witness) + "\n\n"
+                + "FIELD RADIO\n"
+                + fieldRadioPolicyDetails() + "\n\n"
+                + "OFFICE\n"
+                + "- verdict: " + officeProximityLine() + "\n"
+                + "- samples: " + officeProximitySamplesLine() + "\n\n"
+                + "DISTANCE / MOVEMENT\n"
+                + "- selected: " + distanceTrendFor(selected).compact() + "\n"
+                + "- office: " + officeDistanceTrendLine() + "\n"
+                + "- gps: " + gpsUiStatus() + "\n\n"
+                + "FIELD LOCATOR\n"
+                + "- service: " + IffForegroundRadioService.compactStatus() + "\n"
+                + "- two-anchor: " + IffWifiTargetObservationStore.compactStatus() + "\n\n"
+                + "FIELD RUN\n"
+                + IffFieldRunSummary.details() + "\n\n"
+                + "QUORUM\n"
+                + witnessQuorumDetails(selected, quorum));
     }
 
     private void recordFieldCheck() {
@@ -401,6 +514,7 @@ public class IffActivity extends Activity {
         IffWitnessQuorum.Snapshot quorum = witnessQuorumFor(selected, witness);
         CombatSnapshot combat = combatFor(selected, confidence, quorum);
         IffOfficeProximityVerdict.Snapshot officeVerdict = officeProximityVerdict();
+        IffDistanceTrend.Snapshot distanceTrend = distanceTrendFor(selected);
         boolean trustedPlayer = isTrustedPlayer(selected);
         String trustLabel = trustLabel(selected);
         String witnessState = witness == null
@@ -432,6 +546,13 @@ public class IffActivity extends Activity {
                 + " officeProximityReason=\"" + safe(officeVerdict.reason) + "\""
                 + " officeProximityA=\"" + safe(officeSampleLabel("vasya")) + "\""
                 + " officeProximityB=\"" + safe(officeSampleLabel("zhenya")) + "\""
+                + " distanceClass=" + distanceTrend.distanceClass
+                + " distanceConfidence=" + distanceTrend.distanceConfidence
+                + " movementTrend=" + distanceTrend.movementTrend
+                + " movementConfidence=" + distanceTrend.movementConfidence
+                + " movementRssiDeltaDb=" + distanceTrend.movementRssiDeltaDb
+                + " gpsStatus=" + gpsUiStatus().split(" ")[0]
+                + " gpsAccuracyM=na gpsDistanceM=na gpsBearingDeg=na"
                 + " witnessQuorum=" + quorum.label
                 + " witnessFreshSources=" + quorum.freshSources
                 + " witnessPossibleSources=" + quorum.possibleSources
@@ -441,6 +562,7 @@ public class IffActivity extends Activity {
                 + " remoteStaleSources=" + quorum.remoteStaleSources
                 + " fieldRadioStatus=\"" + safe(IffBleFieldRadio.compactStatus()) + "\""
                 + " fieldRadioPolicy=\"" + safe(IffBleFieldRadio.lifecycleStatus()) + "\""
+                + " wifiTargetStatus=\"" + safe(IffWifiTargetObservationStore.compactStatus()) + "\""
                 + " fieldRadioEnabled=" + fieldRadioEnabled
                 + " transportStatus=\"" + safe(IffUdpWitnessTransport.compactStatus()) + "\""
                 + " witness=" + witnessState
@@ -475,71 +597,6 @@ public class IffActivity extends Activity {
                 + " localDevicePlayerId=" + localDevicePlayerId);
         activeTab = TAB_CONTACT;
         render();
-    }
-
-    private void transmitWitnessStub() {
-        IffPlayer target = roster[selectedPlayerIndex];
-        WitnessSnapshot witness = IffRadioWitnessStore.getWitness(target.playerId);
-        boolean queued = IffUdpWitnessTransport.sendReport(
-                target.playerId,
-                IffRadioWitnessStore.expectedBeaconSsid(target.playerId),
-                witness);
-        FieldDiagnosticLog.event("IFF_DIAG", "event=remote_witness_transport_stub"
-                + " queued=" + queued
-                + " sourcePlayerId=" + IffUdpWitnessTransport.sourcePlayerId()
-                + " targetPlayerId=" + target.playerId
-                + " hasLocalWitness=" + (witness != null)
-                + " contract=" + IffRemoteWitnessReport.CONTRACT_VERSION
-                + " signatureStatus=" + IffRemoteWitnessReport.SIGNATURE_PENDING);
-        lastFieldCheckSummary = target.displayName + ": tx stub " + (queued ? "queued" : "failed")
-                + " / " + IffRemoteWitnessReport.SIGNATURE_PENDING;
-        activeTab = TAB_CONTACT;
-        render();
-    }
-
-    private void simulateRemoteWitnesses(boolean stale) {
-        IffPlayer target = roster[selectedPlayerIndex];
-        long now = SystemClock.elapsedRealtime();
-        IffRemoteWitnessStore.clearReportsFor(target.playerId);
-        int added = 0;
-        for (int i = 0; i < roster.length && added < 2; i++) {
-            IffPlayer source = roster[i];
-            if (source.playerId.equals(target.playerId)) {
-                continue;
-            }
-            int rssi = added == 0 ? -48 : -61;
-            IffRemoteWitnessReport report = new IffRemoteWitnessReport(
-                    source.playerId,
-                    target.playerId,
-                    IffRadioWitnessStore.expectedBeaconSsid(target.playerId),
-                    "sim:" + (stale ? "stale:" : "fresh:") + source.playerId + ":" + target.playerId,
-                    rssi,
-                    2412,
-                    now - simulatedReportAgeMs(stale, added),
-                    now,
-                    IffRemoteWitnessReport.SIGNATURE_PENDING);
-            if (IffRemoteWitnessStore.receiveReport(report)) {
-                added++;
-            }
-        }
-        FieldDiagnosticLog.event("IFF_DIAG", "event=remote_witness_simulated"
-                + " targetPlayerId=" + target.playerId
-                + " added=" + added
-                + " mode=" + (stale ? "stale" : "fresh")
-                + " contract=" + IffRemoteWitnessReport.CONTRACT_VERSION
-                + " signatureStatus=" + IffRemoteWitnessReport.SIGNATURE_PENDING);
-        lastFieldCheckSummary = target.displayName + ": simulated " + (stale ? "stale" : "fresh")
-                + " remote witnesses " + added + " / "
-                + IffRemoteWitnessReport.SIGNATURE_PENDING;
-        activeTab = TAB_CONTACT;
-        render();
-    }
-
-    private long simulatedReportAgeMs(boolean stale, int added) {
-        if (stale) {
-            return IffRadioWitnessStore.FRESH_MS + 5000L + (added * 900L);
-        }
-        return 2500L + (added * 900L);
     }
 
     private void resetBody() {
@@ -954,7 +1011,7 @@ public class IffActivity extends Activity {
                         .append("\n");
             }
         }
-        builder.append("- transport: UDP_STUB unsigned debug only\n")
+        builder.append("- transport: UDP diagnostic channel\n")
                 .append("- signature: ").append(IffRemoteWitnessReport.SIGNATURE_PENDING).append("\n")
                 .append("- identity is not upgraded by quorum without crypto");
         return builder.toString();
@@ -1086,6 +1143,112 @@ public class IffActivity extends Activity {
         return "C-A " + officeSampleLabel("vasya") + " / C-B " + officeSampleLabel("zhenya");
     }
 
+    private IffDistanceTrend.Snapshot distanceTrendFor(IffPlayer player) {
+        if (player == null || isLocalDevice(player)) {
+            return IffDistanceTrend.evaluate(null, null);
+        }
+        RssiWindowSnapshot current = IffRadioWitnessStore.getRssiWindow(
+                player.playerId,
+                DISTANCE_WINDOW_MS);
+        RssiWindowSnapshot previous = IffRadioWitnessStore.getPreviousRssiWindow(
+                player.playerId,
+                DISTANCE_WINDOW_MS);
+        return IffDistanceTrend.evaluate(current.asDistanceSample(), previous.asDistanceSample());
+    }
+
+    private String officeDistanceTrendLine() {
+        RssiWindowSnapshot sideA = IffRadioWitnessStore.getRssiWindow("vasya", DISTANCE_WINDOW_MS);
+        RssiWindowSnapshot sideB = IffRadioWitnessStore.getRssiWindow("zhenya", DISTANCE_WINDOW_MS);
+        RssiWindowSnapshot current = strongestUsable(sideA, sideB);
+        if (current == null) {
+            return IffDistanceTrend.evaluate(null, null).compact();
+        }
+        RssiWindowSnapshot previous = IffRadioWitnessStore.getPreviousRssiWindow(
+                current.playerId,
+                DISTANCE_WINDOW_MS);
+        return IffDistanceTrend.evaluate(current.asDistanceSample(), previous.asDistanceSample()).compact();
+    }
+
+    private RssiWindowSnapshot strongestUsable(RssiWindowSnapshot left, RssiWindowSnapshot right) {
+        boolean leftUsable = left != null && left.fresh && left.validCount > 0;
+        boolean rightUsable = right != null && right.fresh && right.validCount > 0;
+        if (!leftUsable && !rightUsable) {
+            return null;
+        }
+        if (leftUsable && !rightUsable) {
+            return left;
+        }
+        if (rightUsable && !leftUsable) {
+            return right;
+        }
+        return left.averageRssi >= right.averageRssi ? left : right;
+    }
+
+    private String gpsUiStatus() {
+        if (!hasLocationPermission()) {
+            return "GPS_UNAVAILABLE";
+        }
+        LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        if (locationManager == null) {
+            return "GPS_UNAVAILABLE";
+        }
+        Location best = bestLastKnownLocation(locationManager);
+        if (best == null) {
+            return "GPS_UNAVAILABLE";
+        }
+        long ageMs = Math.max(0L, System.currentTimeMillis() - best.getTime());
+        return IffGpsSnapshot.from(
+                ageMs,
+                best.hasAccuracy(),
+                best.hasAccuracy() ? best.getAccuracy() : -1.0f,
+                best.hasBearing(),
+                best.hasBearing() ? best.getBearing() : -1.0f).compact();
+    }
+
+    private String fieldRunHeader() {
+        String compact = IffFieldRunSummary.compact();
+        int officeIndex = compact.indexOf(" office=");
+        if (officeIndex <= 0) {
+            return compact;
+        }
+        return compact.substring(0, officeIndex);
+    }
+
+    private boolean hasLocationPermission() {
+        if (Build.VERSION.SDK_INT < 23) {
+            return true;
+        }
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    @Nullable
+    private Location bestLastKnownLocation(LocationManager locationManager) {
+        Location gps = lastKnown(locationManager, LocationManager.GPS_PROVIDER);
+        Location network = lastKnown(locationManager, LocationManager.NETWORK_PROVIDER);
+        if (gps == null) {
+            return network;
+        }
+        if (network == null) {
+            return gps;
+        }
+        return gps.getTime() >= network.getTime() ? gps : network;
+    }
+
+    @Nullable
+    private Location lastKnown(LocationManager locationManager, String provider) {
+        try {
+            if (!locationManager.isProviderEnabled(provider)) {
+                return null;
+            }
+            return locationManager.getLastKnownLocation(provider);
+        } catch (SecurityException e) {
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private String officeSampleLabel(String playerId) {
         RssiWindowSnapshot window = IffRadioWitnessStore.getRssiWindow(
                 playerId,
@@ -1108,9 +1271,65 @@ public class IffActivity extends Activity {
         return count;
     }
 
+    private String simpleMapWitnessList() {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < roster.length; i++) {
+            IffPlayer player = roster[i];
+            WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
+            builder.append(player.displayName)
+                    .append(": ")
+                    .append(mapRadioLabel(witness, witnessQuorumFor(player, witness)))
+                    .append("\n");
+        }
+        return builder.toString();
+    }
+
+    private IffFieldMapSnapshot fieldMapSnapshot() {
+        IffFieldLocatorSnapshot locator = IffFieldLocatorSnapshot.from(
+                IffWifiTargetObservationStore.snapshot(),
+                mapRadioDistanceTrend(),
+                IffGpsSnapshot.unavailable());
+        IffFieldMapSnapshot raw = IffFieldMapSnapshot.from(locator, IffWifiTargetObservationStore.compactStatus());
+        return operatorFieldSnapshotStore.update(raw, SystemClock.elapsedRealtime());
+    }
+
+    private IffDistanceTrend.Snapshot mapRadioDistanceTrend() {
+        if (!IffWifiTargetObservationStore.TARGET_PLAYER_ID.equals(localDevicePlayerId)) {
+            return distanceTrendFor(playerById(IffWifiTargetObservationStore.TARGET_PLAYER_ID));
+        }
+        RssiWindowSnapshot vasya = IffRadioWitnessStore.getRssiWindow("vasya", DISTANCE_WINDOW_MS);
+        RssiWindowSnapshot petya = IffRadioWitnessStore.getRssiWindow("petya", DISTANCE_WINDOW_MS);
+        RssiWindowSnapshot current = strongestUsable(vasya, petya);
+        if (current == null) {
+            return IffDistanceTrend.evaluate(null, null);
+        }
+        RssiWindowSnapshot previous = IffRadioWitnessStore.getPreviousRssiWindow(
+                current.playerId,
+                DISTANCE_WINDOW_MS);
+        return IffDistanceTrend.evaluate(current.asDistanceSample(), previous.asDistanceSample());
+    }
+
+    private IffPlayer playerById(String playerId) {
+        for (int i = 0; i < roster.length; i++) {
+            if (roster[i].playerId.equals(playerId)) {
+                return roster[i];
+            }
+        }
+        return null;
+    }
+
+    private String fieldMapSummary() {
+        IffFieldMapSnapshot map = fieldMapSnapshot();
+        return "FIELD MAP\n"
+                + "- " + map.statusLine + "\n"
+                + "- anchors: " + IffWifiTargetObservationStore.compactStatus() + "\n"
+                + "- radio fallback: " + mapRadioDistanceTrend().compact() + "\n\n"
+                + simpleMapWitnessList();
+    }
+
     private String mapWitnessList() {
         StringBuilder builder = new StringBuilder();
-        builder.append("КАРТА MOCK: СЛОТЫ НЕ ЯВЛЯЮТСЯ НАПРАВЛЕНИЕМ\n\n");
+        builder.append("FIELD CONTACTS\n\n");
         for (int i = 0; i < roster.length; i++) {
             IffPlayer player = roster[i];
             WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
@@ -1122,7 +1341,7 @@ public class IffActivity extends Activity {
                     .append("\n");
         }
         builder.append("\nGPS и направление будут отдельными слоями уверенности.\n")
-                .append("BLE field radio не требует общей Wi-Fi сети; TX STUB остается debug UDP.\n")
+                .append("BLE field radio does not require shared Wi-Fi.\n")
                 .append("Freshness policy: ").append(IffRadioWitnessStore.freshnessPolicyLabel()).append("\n")
                 .append("BLE lifecycle: ").append(IffBleFieldRadio.lifecycleStatus());
         return builder.toString();

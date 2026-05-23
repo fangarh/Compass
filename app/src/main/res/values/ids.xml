@@ -75,6 +75,7 @@
     <id name="iff_body" />
     <id name="iff_body_container" />
     <id name="iff_contact_tab" />
+    <id name="iff_log_tab" />
     <id name="iff_map_tab" />
     <id name="iff_record_check" />
     <id name="iff_radio_service" />
@@ -112,6 +113,7 @@
     <id name="listMode" />
     <id name="list_item" />
     <id name="log_background" />
+    <id name="logbutton" />
     <id name="log_list" />
     <id name="media_actions" />
     <id name="middle" />

@@ -5,7 +5,8 @@ public final class IffOfficeProximityVerdictTest {
         reportsCloserToAWhenAMovingTargetSignalIsClearlyStronger();
         reportsCloserToBWhenBMovingTargetSignalIsClearlyStronger();
         reportsAmbiguousWhenSignalsAreTooClose();
-        reportsInsufficientDataWhenSamplesAreMissingOrOutliers();
+        reportsOnlyVisibleSideWhenOneSideIsMissingOrOutlier();
+        reportsInsufficientDataWhenBothSidesAreMissingOrOutliers();
         reportsInsufficientDataWhenLocalDeviceIsNotMovingTarget();
         reportsCloserToAAfterPairCalibrationRemovesDeviceBias();
         reportsAmbiguousWhenCalibratedSignalsAreTooClose();
@@ -41,7 +42,7 @@ public final class IffOfficeProximityVerdictTest {
         assertEquals(5, snapshot.deltaDb);
     }
 
-    private static void reportsInsufficientDataWhenSamplesAreMissingOrOutliers() {
+    private static void reportsOnlyVisibleSideWhenOneSideIsMissingOrOutlier() {
         IffOfficeProximityVerdict.Snapshot missing = IffOfficeProximityVerdict.evaluate(
                 "petya",
                 window(-50, 5),
@@ -50,14 +51,23 @@ public final class IffOfficeProximityVerdictTest {
                 "petya",
                 window(-50, 5),
                 IffOfficeProximityVerdict.Sample.window(true, 0, 0, 5, 100L));
-        IffOfficeProximityVerdict.Snapshot tooFewSamples = IffOfficeProximityVerdict.evaluate(
+
+        assertEquals("ONLY_A_VISIBLE", missing.label);
+        assertEquals("ONLY_A_VISIBLE", outlier.label);
+    }
+
+    private static void reportsInsufficientDataWhenBothSidesAreMissingOrOutliers() {
+        IffOfficeProximityVerdict.Snapshot missing = IffOfficeProximityVerdict.evaluate(
                 "petya",
-                window(-50, 2),
-                window(-65, 5));
+                null,
+                null);
+        IffOfficeProximityVerdict.Snapshot outlier = IffOfficeProximityVerdict.evaluate(
+                "petya",
+                IffOfficeProximityVerdict.Sample.window(true, 0, 0, 5, 100L),
+                IffOfficeProximityVerdict.Sample.window(true, 0, 0, 5, 100L));
 
         assertEquals("INSUFFICIENT_DATA", missing.label);
         assertEquals("INSUFFICIENT_DATA", outlier.label);
-        assertEquals("INSUFFICIENT_DATA", tooFewSamples.label);
     }
 
     private static void reportsInsufficientDataWhenLocalDeviceIsNotMovingTarget() {

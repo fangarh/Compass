@@ -19,6 +19,5 @@
     <net.afterday.compas.view.Clock android:id="@id/clock" app:layout_heightPercent="5.799997%" app:layout_marginLeftPercent="1.4999986%" app:layout_marginTopPercent="0.34999847%" app:layout_widthPercent="17.999994%" />
     <View android:id="@id/battery_background" android:background="@drawable/energy_v" app:layout_heightPercent="7.700002%" app:layout_marginLeftPercent="82.8%" app:layout_marginTopPercent="1.4999986%" app:layout_widthPercent="16.6%" />
     <net.afterday.compas.view.Battery android:id="@id/battery" app:layout_heightPercent="5.799997%" app:layout_marginLeftPercent="82.00001%" app:layout_marginTopPercent="0.34999847%" app:layout_widthPercent="19.000006%" />
-    <View android:id="@id/log_background" android:background="@drawable/log_v" app:layout_heightPercent="19.000006%" app:layout_marginLeftPercent="20.000004%" app:layout_marginTopPercent="79.99999%" app:layout_widthPercent="78.0%" />
-    <android.support.v7.widget.RecyclerView android:id="@id/log_list" app:layout_heightPercent="15.999996%" app:layout_marginLeftPercent="24.0%" app:layout_marginTopPercent="81.00001%" app:layout_widthPercent="72.0%" app:reverseLayout="true" app:stackFromEnd="true" />
+    <Button android:id="@id/logbutton" android:text="LOG" android:textColor="#ffffff" android:textSize="13.0sp" android:background="@drawable/popup_button" android:padding="0.0dp" app:layout_heightPercent="7.200003%" app:layout_marginLeftPercent="20.000004%" app:layout_marginTopPercent="88.49999%" app:layout_widthPercent="16.8%" />
 </android.support.percent.PercentRelativeLayout>

@@ -1,5 +1,6 @@
 package net.afterday.compas.iff;
 
+import android.location.Location;
 import android.os.Build;
 import android.os.SystemClock;
 import java.net.DatagramPacket;
@@ -18,7 +19,6 @@ import net.afterday.compas.logging.FieldDiagnosticLog;
 
 public final class IffUdpWitnessTransport {
     private static final Object LOCK = new Object();
-    private static final String FRAME_PREFIX = "COMPASS_IFF_REMOTE";
     private static final int PORT = 45873;
     private static final int MAX_PACKET_BYTES = 2048;
 
@@ -61,6 +61,11 @@ public final class IffUdpWitnessTransport {
     }
 
     public static boolean sendReport(String targetPlayerId, String targetBeaconSsid, WitnessSnapshot witness) {
+        return sendReport(targetPlayerId, targetBeaconSsid, witness, null);
+    }
+
+    public static boolean sendReport(String targetPlayerId, String targetBeaconSsid, WitnessSnapshot witness,
+                                     Location gpsLocation) {
         ensureStarted();
         final String sourcePlayerId = sourcePlayerId();
         final long ageMs = witness == null ? 2500L : witness.ageMs();
@@ -69,18 +74,22 @@ public final class IffUdpWitnessTransport {
         final String bssid = witness == null ? "udp:stub:" + sourcePlayerId + ":" + targetPlayerId : witness.bssid;
         final String mode = witness == null ? "stub_no_local_witness" : "local_witness";
         final String target = targetPlayerId;
-        String frame = FRAME_PREFIX
-                + "|v=" + IffRemoteWitnessReport.CONTRACT_VERSION
-                + "|source=" + cleanToken(sourcePlayerId)
-                + "|target=" + cleanToken(target)
-                + "|ssid=" + cleanToken(targetBeaconSsid)
-                + "|bssid=" + cleanToken(bssid)
-                + "|rssi=" + rssi
-                + "|freq=" + frequency
-                + "|ageMs=" + Math.max(0L, ageMs)
-                + "|signature=" + IffRemoteWitnessReport.SIGNATURE_PENDING;
+        IffRemoteWitnessFrame frame = new IffRemoteWitnessFrame(
+                IffRemoteWitnessReport.CONTRACT_VERSION,
+                sourcePlayerId,
+                target,
+                targetBeaconSsid,
+                bssid,
+                rssi,
+                frequency,
+                ageMs,
+                IffRemoteWitnessReport.SIGNATURE_PENDING,
+                gpsLatE7(gpsLocation),
+                gpsLonE7(gpsLocation),
+                gpsAccuracyM(gpsLocation),
+                gpsAgeMs(gpsLocation));
 
-        final String frameToSend = frame;
+        final String frameToSend = frame.toWire();
         synchronized (LOCK) {
             lastStatus = "tx queued " + target;
         }
@@ -88,6 +97,7 @@ public final class IffUdpWitnessTransport {
                 + " sourcePlayerId=" + sourcePlayerId
                 + " targetPlayerId=" + target
                 + " mode=" + mode
+                + " gps=" + frame.hasGps()
                 + " contract=" + IffRemoteWitnessReport.CONTRACT_VERSION
                 + " signatureStatus=" + IffRemoteWitnessReport.SIGNATURE_PENDING);
         Thread sender = new Thread(new Runnable() {
@@ -221,38 +231,25 @@ public final class IffUdpWitnessTransport {
     }
 
     private static IffRemoteWitnessReport parseFrame(String frame) {
-        if (frame == null || !frame.startsWith(FRAME_PREFIX + "|")) {
-            return null;
-        }
-        Map<String, String> fields = new HashMap<>();
-        String[] parts = frame.split("\\|");
-        for (int i = 1; i < parts.length; i++) {
-            int split = parts[i].indexOf('=');
-            if (split <= 0 || split >= parts[i].length() - 1) {
-                continue;
-            }
-            fields.put(parts[i].substring(0, split), parts[i].substring(split + 1));
-        }
-        if (!IffRemoteWitnessReport.CONTRACT_VERSION.equals(fields.get("v"))) {
-            return null;
-        }
-        long ageMs = parseLong(fields.get("ageMs"), -1L);
-        int rssi = parseInt(fields.get("rssi"), 0);
-        int frequency = parseInt(fields.get("freq"), 0);
-        if (ageMs < 0L || rssi == 0 || frequency == 0) {
+        IffRemoteWitnessFrame parsed = IffRemoteWitnessFrame.parse(frame);
+        if (parsed == null) {
             return null;
         }
         long now = SystemClock.elapsedRealtime();
         return new IffRemoteWitnessReport(
-                fields.get("source"),
-                fields.get("target"),
-                fields.get("ssid"),
-                fields.get("bssid"),
-                rssi,
-                frequency,
-                now - ageMs,
+                parsed.sourcePlayerId,
+                parsed.targetPlayerId,
+                parsed.targetBeaconSsid,
+                parsed.bssid,
+                parsed.rssi,
+                parsed.frequency,
+                now - parsed.ageMs,
                 now,
-                fields.get("signature"));
+                parsed.signatureStatus,
+                parsed.gpsLatE7,
+                parsed.gpsLonE7,
+                parsed.gpsAccuracyM,
+                parsed.hasGps() ? now - parsed.gpsAgeMs : -1L);
     }
 
     private static boolean sendFrame(String frame, InetAddress address) {
@@ -303,22 +300,6 @@ public final class IffUdpWitnessTransport {
         return addresses;
     }
 
-    private static int parseInt(String value, int fallback) {
-        try {
-            return Integer.parseInt(value);
-        } catch (Exception e) {
-            return fallback;
-        }
-    }
-
-    private static long parseLong(String value, long fallback) {
-        try {
-            return Long.parseLong(value);
-        } catch (Exception e) {
-            return fallback;
-        }
-    }
-
     private static String cleanToken(String value) {
         if (value == null) {
             return "";
@@ -328,5 +309,29 @@ public final class IffUdpWitnessTransport {
 
     private static String cleanText(String value) {
         return value == null ? "" : value.replace('\n', ' ').replace('\r', ' ');
+    }
+
+    private static int gpsLatE7(Location location) {
+        return location == null ? IffRemoteWitnessFrame.GPS_UNAVAILABLE_INT
+                : IffRemoteWitnessFrame.coordinateE7(location.getLatitude());
+    }
+
+    private static int gpsLonE7(Location location) {
+        return location == null ? IffRemoteWitnessFrame.GPS_UNAVAILABLE_INT
+                : IffRemoteWitnessFrame.coordinateE7(location.getLongitude());
+    }
+
+    private static int gpsAccuracyM(Location location) {
+        if (location == null || !location.hasAccuracy()) {
+            return IffRemoteWitnessFrame.GPS_UNAVAILABLE_INT;
+        }
+        return Math.round(location.getAccuracy());
+    }
+
+    private static long gpsAgeMs(Location location) {
+        if (location == null) {
+            return IffRemoteWitnessFrame.GPS_UNAVAILABLE_AGE_MS;
+        }
+        return Math.max(0L, System.currentTimeMillis() - location.getTime());
     }
 }

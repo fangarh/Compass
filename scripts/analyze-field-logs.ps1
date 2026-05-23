@@ -135,10 +135,11 @@ $iffFieldChecks = New-Object System.Collections.Generic.List[object]
 $bleRssiEvents = New-Object System.Collections.Generic.List[object]
 
 function Get-FieldValue([string]$message, [string]$name) {
-    if ($message -match "$name=""(?<quoted>[^""]*)""") {
+    $escapedName = [regex]::Escape($name)
+    if ($message -match "(^|\s)$escapedName=""(?<quoted>[^""]*)""") {
         return $Matches.quoted
     }
-    if ($message -match "$name=(?<plain>\S+)") {
+    if ($message -match "(^|\s)$escapedName=(?<plain>\S+)") {
         return $Matches.plain
     }
     return ""
@@ -311,10 +312,12 @@ foreach ($log in $logs) {
                     Message = $message
                 })
             }
-            if ($event -eq "field_check") {
+            if ($event -eq "field_check" -or $event -eq "auto_field_check") {
                 $window = Get-WindowName $time
                 $bucket = Get-BucketName $time
                 $iffFieldChecks.Add([pscustomobject]@{
+                    Source = if ($event -eq "auto_field_check") { "auto" } else { "manual" }
+                    SnapshotSource = if ($event -eq "auto_field_check") { Get-FieldValue $message "source" } else { "" }
                     Device = $device
                     LogFile = $log.Name
                     Time = $time
@@ -344,6 +347,16 @@ foreach ($log in $logs) {
                     OfficeProximityReason = Get-FieldValue $message "officeProximityReason"
                     OfficeProximityA = Get-FieldValue $message "officeProximityA"
                     OfficeProximityB = Get-FieldValue $message "officeProximityB"
+                    DistanceTargetPlayerId = Get-FieldValue $message "distanceTargetPlayerId"
+                    DistanceClass = Get-FieldValue $message "distanceClass"
+                    DistanceConfidence = Get-NumberOrNull (Get-FieldValue $message "distanceConfidence")
+                    MovementTrend = Get-FieldValue $message "movementTrend"
+                    MovementConfidence = Get-NumberOrNull (Get-FieldValue $message "movementConfidence")
+                    MovementRssiDeltaDb = Get-NumberOrNull (Get-FieldValue $message "movementRssiDeltaDb")
+                    GpsStatus = Get-FieldValue $message "gpsStatus"
+                    GpsAccuracyM = Get-NumberOrNull (Get-FieldValue $message "gpsAccuracyM")
+                    GpsDistanceM = Get-NumberOrNull (Get-FieldValue $message "gpsDistanceM")
+                    GpsBearingDeg = Get-NumberOrNull (Get-FieldValue $message "gpsBearingDeg")
                     WitnessQuorum = Get-FieldValue $message "witnessQuorum"
                     WitnessFreshSources = Get-NumberOrNull (Get-FieldValue $message "witnessFreshSources")
                     WitnessPossibleSources = Get-NumberOrNull (Get-FieldValue $message "witnessPossibleSources")
@@ -354,13 +367,19 @@ foreach ($log in $logs) {
                     FieldRadioStatus = Get-FieldValue $message "fieldRadioStatus"
                     FieldRadioPolicy = Get-FieldValue $message "fieldRadioPolicy"
                     FieldRadioEnabled = Get-FieldValue $message "fieldRadioEnabled"
+                    WifiFingerprintStatus = Get-FieldValue $message "wifiFingerprintStatus"
+                    WifiRefreshRequested = Get-FieldValue $message "wifiRefreshRequested"
+                    WifiRefreshAccepted = Get-FieldValue $message "wifiRefreshAccepted"
+                    WifiFreshness = Get-FieldValue $message "wifiFreshness"
+                    WifiFreshAgeMs = Get-NumberOrNull (Get-FieldValue $message "wifiFreshAgeMs")
+                    WifiFingerprint = Get-FieldValue $message "wifiFingerprint"
                     TransportStatus = Get-FieldValue $message "transportStatus"
-                    WitnessFreshness = Get-FieldValue $message "witness"
-                    WitnessRssi = Get-NumberOrNull (Get-FieldValue $message "rssi")
-                    WitnessAgeMs = Get-NumberOrNull (Get-FieldValue $message "ageMs")
-                    WitnessSsid = Get-FieldValue $message "ssid"
-                    WitnessBssid = Get-FieldValue $message "bssid"
-                    LocalApproach = Get-FieldValue $message "localApproach"
+                    WitnessFreshness = if ($event -eq "auto_field_check") { "" } else { Get-FieldValue $message "witness" }
+                    WitnessRssi = if ($event -eq "auto_field_check") { $null } else { Get-NumberOrNull (Get-FieldValue $message "rssi") }
+                    WitnessAgeMs = if ($event -eq "auto_field_check") { $null } else { Get-NumberOrNull (Get-FieldValue $message "ageMs") }
+                    WitnessSsid = if ($event -eq "auto_field_check") { "" } else { Get-FieldValue $message "ssid" }
+                    WitnessBssid = if ($event -eq "auto_field_check") { "" } else { Get-FieldValue $message "bssid" }
+                    LocalApproach = if ($event -eq "auto_field_check") { "" } else { Get-FieldValue $message "localApproach" }
                     Message = $message
                 })
             }
@@ -717,10 +736,132 @@ $locationSummary = $locationEvents |
     } |
     Sort-Object Window, Device
 
+function Test-ValidCoordinate([Nullable[double]]$lat, [Nullable[double]]$lon) {
+    return $null -ne $lat -and
+        $null -ne $lon -and
+        $lat -ge -90.0 -and
+        $lat -le 90.0 -and
+        $lon -ge -180.0 -and
+        $lon -le 180.0
+}
+
+function Get-GpsPairStatus($from, $to) {
+    if ($null -eq $from -or $null -eq $to) {
+        return "GPS_UNAVAILABLE"
+    }
+    if ($null -eq $from.AccuracyM -or $null -eq $to.AccuracyM) {
+        return "GPS_WEAK"
+    }
+    if ([double]$from.AccuracyM -le 25.0 -and [double]$to.AccuracyM -le 25.0) {
+        return "GPS_OK"
+    }
+    return "GPS_WEAK"
+}
+
+function Get-GpsPairAccuracy($from, $to) {
+    if ($null -eq $from.AccuracyM -and $null -eq $to.AccuracyM) {
+        return $null
+    }
+    if ($null -eq $from.AccuracyM) {
+        return [math]::Round([double]$to.AccuracyM, 0)
+    }
+    if ($null -eq $to.AccuracyM) {
+        return [math]::Round([double]$from.AccuracyM, 0)
+    }
+    return [math]::Round([math]::Max([double]$from.AccuracyM, [double]$to.AccuracyM), 0)
+}
+
+function Get-GpsDistanceMeters([double]$lat1, [double]$lon1, [double]$lat2, [double]$lon2) {
+    $earthRadiusM = 6371000.0
+    $dLat = [math]::PI * ($lat2 - $lat1) / 180.0
+    $dLon = [math]::PI * ($lon2 - $lon1) / 180.0
+    $rLat1 = [math]::PI * $lat1 / 180.0
+    $rLat2 = [math]::PI * $lat2 / 180.0
+    $a = [math]::Sin($dLat / 2.0) * [math]::Sin($dLat / 2.0) +
+        [math]::Cos($rLat1) * [math]::Cos($rLat2) *
+        [math]::Sin($dLon / 2.0) * [math]::Sin($dLon / 2.0)
+    $c = 2.0 * [math]::Atan2([math]::Sqrt($a), [math]::Sqrt(1.0 - $a))
+    return [math]::Round($earthRadiusM * $c, 0)
+}
+
+function Get-GpsBearingDegrees([double]$lat1, [double]$lon1, [double]$lat2, [double]$lon2) {
+    $rLat1 = [math]::PI * $lat1 / 180.0
+    $rLat2 = [math]::PI * $lat2 / 180.0
+    $dLon = [math]::PI * ($lon2 - $lon1) / 180.0
+    $y = [math]::Sin($dLon) * [math]::Cos($rLat2)
+    $x = [math]::Cos($rLat1) * [math]::Sin($rLat2) -
+        [math]::Sin($rLat1) * [math]::Cos($rLat2) * [math]::Cos($dLon)
+    $degrees = 180.0 * [math]::Atan2($y, $x) / [math]::PI
+    if ($degrees -lt 0.0) {
+        $degrees += 360.0
+    }
+    if ($degrees -ge 360.0) {
+        $degrees -= 360.0
+    }
+    return [math]::Round($degrees, 0)
+}
+
+$gpsFixes = $locationEvents |
+    Where-Object { $_.Event -eq "update" -or $_.Event -eq "last_known" } |
+    ForEach-Object {
+        $lat = Get-NumberOrNull $_.Lat
+        $lon = Get-NumberOrNull $_.Lon
+        if (-not (Test-ValidCoordinate $lat $lon)) {
+            return
+        }
+        [pscustomobject]@{
+            Window = $_.Window
+            Bucket = $_.Bucket
+            Device = $_.Device
+            Time = $_.Time
+            Provider = $_.Provider
+            Lat = [double]$lat
+            Lon = [double]$lon
+            AccuracyM = Get-NumberOrNull $_.AccuracyM
+        }
+    } |
+    Where-Object { $null -ne $_ } |
+    Group-Object Window, Bucket, Device |
+    ForEach-Object {
+        $_.Group | Sort-Object Time | Select-Object -Last 1
+    } |
+    Sort-Object Window, Bucket, Device
+
+$gpsDeviceVectors = New-Object System.Collections.Generic.List[object]
+foreach ($fixGroup in ($gpsFixes | Group-Object Window, Bucket)) {
+    $fixes = @($fixGroup.Group | Sort-Object Device)
+    for ($i = 0; $i -lt $fixes.Count; $i++) {
+        for ($j = 0; $j -lt $fixes.Count; $j++) {
+            if ($i -eq $j) {
+                continue
+            }
+            $from = $fixes[$i]
+            $to = $fixes[$j]
+            $gpsDeviceVectors.Add([pscustomobject]@{
+                Window = $from.Window
+                Bucket = $from.Bucket
+                FromDevice = $from.Device
+                ToDevice = $to.Device
+                Status = Get-GpsPairStatus $from $to
+                AccuracyM = Get-GpsPairAccuracy $from $to
+                DistanceM = Get-GpsDistanceMeters $from.Lat $from.Lon $to.Lat $to.Lon
+                BearingDeg = Get-GpsBearingDegrees $from.Lat $from.Lon $to.Lat $to.Lon
+                FromProvider = $from.Provider
+                ToProvider = $to.Provider
+                FromTime = $from.Time.ToString("yyyy-MM-dd HH:mm:ss.fff")
+                ToTime = $to.Time.ToString("yyyy-MM-dd HH:mm:ss.fff")
+            })
+        }
+    }
+}
+$gpsDeviceVectors = $gpsDeviceVectors | Sort-Object Window, Bucket, FromDevice, ToDevice
+
 $iffFieldCheckTimeline = $iffFieldChecks |
     Sort-Object Time, Device, PlayerId |
     ForEach-Object {
         [pscustomobject]@{
+            Source = $_.Source
+            SnapshotSource = $_.SnapshotSource
             Device = $_.Device
             LogFile = $_.LogFile
             Time = $_.Time.ToString("yyyy-MM-dd HH:mm:ss.fff")
@@ -750,6 +891,16 @@ $iffFieldCheckTimeline = $iffFieldChecks |
             OfficeProximityReason = $_.OfficeProximityReason
             OfficeProximityA = $_.OfficeProximityA
             OfficeProximityB = $_.OfficeProximityB
+            DistanceTargetPlayerId = $_.DistanceTargetPlayerId
+            DistanceClass = $_.DistanceClass
+            DistanceConfidence = $_.DistanceConfidence
+            MovementTrend = $_.MovementTrend
+            MovementConfidence = $_.MovementConfidence
+            MovementRssiDeltaDb = $_.MovementRssiDeltaDb
+            GpsStatus = $_.GpsStatus
+            GpsAccuracyM = $_.GpsAccuracyM
+            GpsDistanceM = $_.GpsDistanceM
+            GpsBearingDeg = $_.GpsBearingDeg
             WitnessQuorum = $_.WitnessQuorum
             WitnessFreshSources = $_.WitnessFreshSources
             WitnessPossibleSources = $_.WitnessPossibleSources
@@ -760,6 +911,12 @@ $iffFieldCheckTimeline = $iffFieldChecks |
             FieldRadioStatus = $_.FieldRadioStatus
             FieldRadioPolicy = $_.FieldRadioPolicy
             FieldRadioEnabled = $_.FieldRadioEnabled
+            WifiFingerprintStatus = $_.WifiFingerprintStatus
+            WifiRefreshRequested = $_.WifiRefreshRequested
+            WifiRefreshAccepted = $_.WifiRefreshAccepted
+            WifiFreshness = $_.WifiFreshness
+            WifiFreshAgeMs = $_.WifiFreshAgeMs
+            WifiFingerprint = $_.WifiFingerprint
             TransportStatus = $_.TransportStatus
             WitnessFreshness = $_.WitnessFreshness
             WitnessRssi = $_.WitnessRssi
@@ -802,6 +959,9 @@ $iffFieldCheckSummary = $iffFieldChecks |
             ProximityLabels = Get-LabelCountsText $items "ProximityLabel"
             OperatorVerdicts = Get-LabelCountsText $items "OperatorVerdict"
             OfficeProximityVerdicts = Get-LabelCountsText $items "OfficeProximityVerdict"
+            DistanceClasses = Get-LabelCountsText $items "DistanceClass"
+            MovementTrends = Get-LabelCountsText $items "MovementTrend"
+            GpsStatuses = Get-LabelCountsText $items "GpsStatus"
             TrustLabels = Get-LabelCountsText $items "TrustLabel"
             CombatStates = Get-LabelCountsText $items "CombatState"
             CombatActions = Get-LabelCountsText $items "CombatAction"
@@ -822,6 +982,45 @@ $iffFieldCheckSummary = $iffFieldChecks |
         }
     } |
     Sort-Object Window, Device, PlayerId
+
+function Get-OfficeWallShadowSide([string]$verdict, [string]$side) {
+    if ($verdict -eq "ONLY_A_VISIBLE" -and $side -eq "visible") {
+        return "A"
+    }
+    if ($verdict -eq "ONLY_A_VISIBLE" -and $side -eq "missing") {
+        return "B"
+    }
+    if ($verdict -eq "ONLY_B_VISIBLE" -and $side -eq "visible") {
+        return "B"
+    }
+    if ($verdict -eq "ONLY_B_VISIBLE" -and $side -eq "missing") {
+        return "A"
+    }
+    return ""
+}
+
+$officeWallShadowSummary = $iffFieldChecks |
+    Where-Object { $_.OfficeProximityVerdict -eq "ONLY_A_VISIBLE" -or $_.OfficeProximityVerdict -eq "ONLY_B_VISIBLE" } |
+    Group-Object Window, Device, LocalDevicePlayerId, OfficeProximityVerdict |
+    ForEach-Object {
+        $items = @($_.Group | Sort-Object Time)
+        $verdict = $items[0].OfficeProximityVerdict
+        [pscustomobject]@{
+            Window = $items[0].Window
+            Device = $items[0].Device
+            LocalDevicePlayerId = $items[0].LocalDevicePlayerId
+            OfficeRole = $items[0].OfficeRole
+            Verdict = $verdict
+            VisibleSide = Get-OfficeWallShadowSide $verdict "visible"
+            MissingSide = Get-OfficeWallShadowSide $verdict "missing"
+            Count = $items.Count
+            FirstCheck = $items[0].Time.ToString("yyyy-MM-dd HH:mm:ss.fff")
+            LastCheck = $items[$items.Count - 1].Time.ToString("yyyy-MM-dd HH:mm:ss.fff")
+            FirstReason = $items[0].OfficeProximityReason
+            LastReason = $items[$items.Count - 1].OfficeProximityReason
+        }
+    } |
+    Sort-Object Window, Device, Verdict
 
 $bleRssiTimeline = $bleRssiEvents |
     Sort-Object Time, Device, LocalPlayerId, SeenPlayerId |
@@ -1009,6 +1208,72 @@ $fingerprints = $scanSummary |
     } |
     Sort-Object Device, Zone, Bssid
 
+function New-AnalysisKey($parts) {
+    return ($parts | ForEach-Object { [string]$_ }) -join "`t"
+}
+
+function Add-ListItem($map, [string]$key, $item) {
+    if (-not $map.ContainsKey($key)) {
+        $map[$key] = New-Object System.Collections.Generic.List[object]
+    }
+    $map[$key].Add($item)
+}
+
+function Add-UniqueListValue($map, [string]$key, [string]$value) {
+    if (-not $map.ContainsKey($key)) {
+        $map[$key] = New-Object System.Collections.Generic.List[string]
+    }
+    if (-not $map[$key].Contains($value)) {
+        $map[$key].Add($value)
+    }
+}
+
+function Get-ZoneScoreFromFingerprintMap($bucketItems, $fingerprintByBssid, [int]$fingerprintBssidCount) {
+    $sharedCount = 0
+    $errorSum = 0.0
+    foreach ($bucketItem in $bucketItems) {
+        $fingerprintItem = $fingerprintByBssid[$bucketItem.Bssid]
+        if ($null -ne $fingerprintItem) {
+            $sharedCount++
+            $errorSum += [math]::Abs([double]$bucketItem.AvgRssi - [double]$fingerprintItem.AvgRssi)
+        }
+    }
+
+    $bucketBssidCount = $bucketItems.Count
+    $avgAbsError = if ($sharedCount -gt 0) { [math]::Round($errorSum / $sharedCount, 2) } else { 99.0 }
+    $overlapBucket = if ($bucketBssidCount -gt 0) { [math]::Round($sharedCount / $bucketBssidCount, 3) } else { 0 }
+    $overlapFingerprint = if ($fingerprintBssidCount -gt 0) { [math]::Round($sharedCount / $fingerprintBssidCount, 3) } else { 0 }
+    $score = [math]::Round(($sharedCount * 2.0) + ($overlapBucket * 20.0) + ($overlapFingerprint * 10.0) - $avgAbsError, 3)
+
+    [pscustomobject]@{
+        Score = $score
+        SharedBssid = $sharedCount
+        BucketBssid = $bucketBssidCount
+        FingerprintBssid = $fingerprintBssidCount
+        OverlapBucket = $overlapBucket
+        OverlapFingerprint = $overlapFingerprint
+        AvgAbsRssiError = $avgAbsError
+    }
+}
+
+$actualWindowByBucketDevice = @{}
+foreach ($entry in $scanEntries) {
+    $key = New-AnalysisKey @($entry.Bucket, $entry.Device)
+    if (-not $actualWindowByBucketDevice.ContainsKey($key)) {
+        $actualWindowByBucketDevice[$key] = $entry.Window
+    }
+}
+
+$fingerprintsByDeviceZone = @{}
+$fingerprintByDeviceZoneBssid = @{}
+$zonesByDevice = @{}
+foreach ($row in $fingerprints) {
+    $deviceZoneKey = New-AnalysisKey @($row.Device, $row.Zone)
+    Add-ListItem $fingerprintsByDeviceZone $deviceZoneKey $row
+    $fingerprintByDeviceZoneBssid[(New-AnalysisKey @($row.Device, $row.Zone, $row.Bssid))] = $row
+    Add-UniqueListValue $zonesByDevice $row.Device $row.Zone
+}
+
 $zoneEvaluation = New-Object System.Collections.Generic.List[object]
 $bucketGroups = $bucketSummary |
     Where-Object { $_.Bucket -ne "pre_test" } |
@@ -1017,43 +1282,28 @@ $bucketGroups = $bucketSummary |
 foreach ($bucketGroup in $bucketGroups) {
     $bucketItems = $bucketGroup.Group
     $device = $bucketItems[0].Device
-    $actualWindow = (($scanEntries | Where-Object { $_.Device -eq $device -and $_.Bucket -eq $bucketItems[0].Bucket } | Select-Object -First 1).Window)
-    $zones = $fingerprints | Where-Object Device -eq $device | Select-Object -ExpandProperty Zone -Unique
+    $bucket = $bucketItems[0].Bucket
+    $actualWindow = $actualWindowByBucketDevice[(New-AnalysisKey @($bucket, $device))]
+    $zones = $zonesByDevice[$device]
     foreach ($zone in $zones) {
-        $zoneFingerprint = $fingerprints | Where-Object { $_.Device -eq $device -and $_.Zone -eq $zone }
-        $shared = New-Object System.Collections.Generic.List[object]
-        foreach ($bucketItem in $bucketItems) {
-            $fingerprintItem = $zoneFingerprint | Where-Object Bssid -eq $bucketItem.Bssid | Select-Object -First 1
-            if ($fingerprintItem) {
-                $shared.Add([pscustomobject]@{
-                    Bssid = $bucketItem.Bssid
-                    BucketAvgRssi = [double]$bucketItem.AvgRssi
-                    FingerprintAvgRssi = [double]$fingerprintItem.AvgRssi
-                    AbsError = [math]::Abs([double]$bucketItem.AvgRssi - [double]$fingerprintItem.AvgRssi)
-                })
-            }
+        $fingerprintRows = $fingerprintsByDeviceZone[(New-AnalysisKey @($device, $zone))]
+        $fingerprintByBssid = @{}
+        foreach ($fingerprintItem in $fingerprintRows) {
+            $fingerprintByBssid[$fingerprintItem.Bssid] = $fingerprintItem
         }
-
-        $sharedCount = $shared.Count
-        $bucketBssidCount = ($bucketItems | Select-Object -ExpandProperty Bssid -Unique).Count
-        $fingerprintBssidCount = ($zoneFingerprint | Select-Object -ExpandProperty Bssid -Unique).Count
-        $avgAbsError = if ($sharedCount -gt 0) { [math]::Round(($shared | Measure-Object AbsError -Average).Average, 2) } else { 99.0 }
-        $overlapBucket = if ($bucketBssidCount -gt 0) { [math]::Round($sharedCount / $bucketBssidCount, 3) } else { 0 }
-        $overlapFingerprint = if ($fingerprintBssidCount -gt 0) { [math]::Round($sharedCount / $fingerprintBssidCount, 3) } else { 0 }
-        $score = [math]::Round(($sharedCount * 2.0) + ($overlapBucket * 20.0) + ($overlapFingerprint * 10.0) - $avgAbsError, 3)
-
+        $score = Get-ZoneScoreFromFingerprintMap $bucketItems $fingerprintByBssid $fingerprintRows.Count
         $zoneEvaluation.Add([pscustomobject]@{
-            Bucket = $bucketItems[0].Bucket
+            Bucket = $bucket
             Device = $device
             ActualWindow = $actualWindow
             CandidateZone = $zone
-            Score = $score
-            SharedBssid = $sharedCount
-            BucketBssid = $bucketBssidCount
-            FingerprintBssid = $fingerprintBssidCount
-            OverlapBucket = $overlapBucket
-            OverlapFingerprint = $overlapFingerprint
-            AvgAbsRssiError = $avgAbsError
+            Score = $score.Score
+            SharedBssid = $score.SharedBssid
+            BucketBssid = $score.BucketBssid
+            FingerprintBssid = $score.FingerprintBssid
+            OverlapBucket = $score.OverlapBucket
+            OverlapFingerprint = $score.OverlapFingerprint
+            AvgAbsRssiError = $score.AvgAbsRssiError
         })
     }
 }
@@ -1079,55 +1329,37 @@ $zonePredictions = $zoneEvaluation |
     } |
     Sort-Object Bucket, Device
 
-function New-FingerprintRows($sourceEntries) {
-    $sourceEntries |
-        Where-Object { $_.Window -ne "pre_test" -and $_.Window -ne "post_windows" } |
-        Group-Object Window, Device, Bssid |
-        ForEach-Object {
-            $items = $_.Group
-            if ($items.Count -lt 3) {
-                return
-            }
-            $ssid = (($items | Where-Object { $_.Ssid } | Group-Object Ssid | Sort-Object Count -Descending | Select-Object -First 1).Name)
-            [pscustomobject]@{
-                Device = $items[0].Device
-                Zone = $items[0].Window
-                Bssid = $items[0].Bssid
-                Ssid = $ssid
-                AvgRssi = [math]::Round(($items | Measure-Object Rssi -Average).Average, 1)
-                Count = $items.Count
-            }
+$zoneRawAggregatesByDeviceZone = @{}
+$zoneBucketRawAggregateByKey = @{}
+foreach ($scanEntry in $scanEntries) {
+    if ($scanEntry.Window -eq "pre_test" -or $scanEntry.Window -eq "post_windows") {
+        continue
+    }
+    $zoneKey = New-AnalysisKey @($scanEntry.Device, $scanEntry.Window, $scanEntry.Bssid)
+    if (-not $zoneBucketRawAggregateByKey.ContainsKey($zoneKey)) {
+        $aggregate = [pscustomobject]@{
+            Device = $scanEntry.Device
+            Zone = $scanEntry.Window
+            Bssid = $scanEntry.Bssid
+            Ssid = $scanEntry.Ssid
+            Count = 0
+            SumRssi = 0.0
         }
-}
+        $zoneBucketRawAggregateByKey[$zoneKey] = $aggregate
+        Add-ListItem $zoneRawAggregatesByDeviceZone (New-AnalysisKey @($scanEntry.Device, $scanEntry.Window)) $aggregate
+    }
+    $zoneBucketRawAggregateByKey[$zoneKey].Count++
+    $zoneBucketRawAggregateByKey[$zoneKey].SumRssi += [double]$scanEntry.Rssi
 
-function Score-Bucket($bucketItems, $zoneFingerprint) {
-    $shared = New-Object System.Collections.Generic.List[object]
-    foreach ($bucketItem in $bucketItems) {
-        $fingerprintItem = $zoneFingerprint | Where-Object Bssid -eq $bucketItem.Bssid | Select-Object -First 1
-        if ($fingerprintItem) {
-            $shared.Add([pscustomobject]@{
-                AbsError = [math]::Abs([double]$bucketItem.AvgRssi - [double]$fingerprintItem.AvgRssi)
-            })
+    $bucketZoneKey = New-AnalysisKey @($scanEntry.Device, $scanEntry.Bucket, $scanEntry.Window, $scanEntry.Bssid)
+    if (-not $zoneBucketRawAggregateByKey.ContainsKey($bucketZoneKey)) {
+        $zoneBucketRawAggregateByKey[$bucketZoneKey] = [pscustomobject]@{
+            Count = 0
+            SumRssi = 0.0
         }
     }
-
-    $sharedCount = $shared.Count
-    $bucketBssidCount = ($bucketItems | Select-Object -ExpandProperty Bssid -Unique).Count
-    $fingerprintBssidCount = ($zoneFingerprint | Select-Object -ExpandProperty Bssid -Unique).Count
-    $avgAbsError = if ($sharedCount -gt 0) { [math]::Round(($shared | Measure-Object AbsError -Average).Average, 2) } else { 99.0 }
-    $overlapBucket = if ($bucketBssidCount -gt 0) { [math]::Round($sharedCount / $bucketBssidCount, 3) } else { 0 }
-    $overlapFingerprint = if ($fingerprintBssidCount -gt 0) { [math]::Round($sharedCount / $fingerprintBssidCount, 3) } else { 0 }
-    $score = [math]::Round(($sharedCount * 2.0) + ($overlapBucket * 20.0) + ($overlapFingerprint * 10.0) - $avgAbsError, 3)
-
-    [pscustomobject]@{
-        Score = $score
-        SharedBssid = $sharedCount
-        BucketBssid = $bucketBssidCount
-        FingerprintBssid = $fingerprintBssidCount
-        OverlapBucket = $overlapBucket
-        OverlapFingerprint = $overlapFingerprint
-        AvgAbsRssiError = $avgAbsError
-    }
+    $zoneBucketRawAggregateByKey[$bucketZoneKey].Count++
+    $zoneBucketRawAggregateByKey[$bucketZoneKey].SumRssi += [double]$scanEntry.Rssi
 }
 
 $crossValidationEvaluation = New-Object System.Collections.Generic.List[object]
@@ -1135,13 +1367,26 @@ foreach ($bucketGroup in $bucketGroups) {
     $bucketItems = $bucketGroup.Group
     $device = $bucketItems[0].Device
     $bucket = $bucketItems[0].Bucket
-    $actualWindow = (($scanEntries | Where-Object { $_.Device -eq $device -and $_.Bucket -eq $bucket } | Select-Object -First 1).Window)
-    $trainingEntries = $scanEntries | Where-Object { -not ($_.Device -eq $device -and $_.Bucket -eq $bucket) }
-    $trainingFingerprints = New-FingerprintRows $trainingEntries
-    $zones = $trainingFingerprints | Where-Object Device -eq $device | Select-Object -ExpandProperty Zone -Unique
+    $actualWindow = $actualWindowByBucketDevice[(New-AnalysisKey @($bucket, $device))]
+    $zones = $zonesByDevice[$device]
     foreach ($zone in $zones) {
-        $zoneFingerprint = $trainingFingerprints | Where-Object { $_.Device -eq $device -and $_.Zone -eq $zone }
-        $score = Score-Bucket $bucketItems $zoneFingerprint
+        $zoneAggregates = $zoneRawAggregatesByDeviceZone[(New-AnalysisKey @($device, $zone))]
+        $trainingFingerprintByBssid = @{}
+        foreach ($aggregate in $zoneAggregates) {
+            $excluded = $zoneBucketRawAggregateByKey[(New-AnalysisKey @($device, $bucket, $zone, $aggregate.Bssid))]
+            $excludedCount = if ($null -ne $excluded) { $excluded.Count } else { 0 }
+            $excludedSum = if ($null -ne $excluded) { $excluded.SumRssi } else { 0.0 }
+            $trainingCount = $aggregate.Count - $excludedCount
+            if ($trainingCount -lt 3) {
+                continue
+            }
+            $trainingFingerprintByBssid[$aggregate.Bssid] = [pscustomobject]@{
+                Bssid = $aggregate.Bssid
+                AvgRssi = [math]::Round(($aggregate.SumRssi - $excludedSum) / $trainingCount, 1)
+            }
+        }
+
+        $score = Get-ZoneScoreFromFingerprintMap $bucketItems $trainingFingerprintByBssid $trainingFingerprintByBssid.Count
         $crossValidationEvaluation.Add([pscustomobject]@{
             Bucket = $bucket
             Device = $device
@@ -1190,8 +1435,10 @@ $sensorEvents | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputD
 $sensorSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "sensor-summary.csv")
 $locationEvents | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "location-timeline.csv")
 $locationSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "location-summary.csv")
+$gpsDeviceVectors | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "gps-device-vectors.csv")
 $iffFieldCheckTimeline | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "iff-field-checks.csv")
 $iffFieldCheckSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "iff-field-check-summary.csv")
+$officeWallShadowSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "office-wall-shadow-summary.csv")
 $bleRssiTimeline | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "ble-rssi-timeline.csv")
 $bleRssiSummary | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "ble-rssi-summary.csv")
 $officeProximityVerdicts | Export-Csv -NoTypeInformation -Encoding UTF8 (Join-Path $OutputDir "office-proximity-verdict.csv")
@@ -1318,13 +1565,28 @@ if ($officeProximityVerdicts.Count -eq 0) {
     }
 }
 $report.Add("")
+$report.Add("## Office Wall Shadow Summary")
+$report.Add("")
+if ($officeWallShadowSummary.Count -eq 0) {
+    $report.Add("No one-sided office visibility verdicts found.")
+} else {
+    $report.Add("Wall-shadow verdicts mean the moving phone has usable fresh BLE evidence from only one office side. Treat them as partial position evidence, not as missing data.")
+    $report.Add("")
+    $report.Add("| Window | Device | Player | Role | Verdict | Visible | Missing | Count | First | Last | Reason |")
+    $report.Add("| --- | --- | --- | --- | --- | --- | --- | ---: | --- | --- | --- |")
+    foreach ($row in $officeWallShadowSummary) {
+        $reason = ($row.LastReason -replace '\|', '/')
+        $report.Add("| $($row.Window) | $($row.Device) | $($row.LocalDevicePlayerId) | $($row.OfficeRole) | $($row.Verdict) | $($row.VisibleSide) | $($row.MissingSide) | $($row.Count) | $($row.FirstCheck) | $($row.LastCheck) | $reason |")
+    }
+}
+$report.Add("")
 $report.Add("## IFF Field Checks")
 $report.Add("")
 if ($iffFieldCheckTimeline.Count -eq 0) {
-    $report.Add("No `IFF_DIAG event=field_check` lines found. Tap the IFF record button during field checks to capture identity/proximity snapshots.")
+    $report.Add("No `IFF_DIAG event=field_check` or `IFF_DIAG event=auto_field_check` lines found. Tap the IFF record button or enable automatic field snapshots during field checks.")
 } else {
-    $report.Add("| Time | Window | Device | Office Role | Player | This Device | Trust | Combat | Operator | Office Proximity | Identity | Proximity | Quorum | Remote | Field Radio | Field Radio Policy | UDP Debug | Witness | RSSI | Age ms | Position | Direction |")
-    $report.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |")
+    $report.Add("| Source | Time | Window | Device | Office Role | Player | This Device | Trust | Combat | Operator | Office Proximity | Identity | Proximity | Quorum | Remote | Field Radio | Field Radio Policy | UDP Debug | Witness | RSSI | Age ms | Position | Direction |")
+    $report.Add("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |")
     foreach ($row in $iffFieldCheckTimeline) {
         $player = if ([string]::IsNullOrWhiteSpace($row.DisplayName)) { $row.PlayerId } else { "$($row.DisplayName) ($($row.PlayerId))" }
         $rssi = if ($null -eq $row.WitnessRssi) { "" } else { $row.WitnessRssi }
@@ -1338,7 +1600,7 @@ if ($iffFieldCheckTimeline.Count -eq 0) {
         $trust = if ([string]::IsNullOrWhiteSpace($row.TrustLabel)) { "" } else { "$($row.TrustLabel) / trusted=$($row.TrustedPlayer)" }
         $combat = if ([string]::IsNullOrWhiteSpace($row.CombatState)) { "" } else { "$($row.CombatState) / $($row.CombatAction)" }
         $officeProximity = if ([string]::IsNullOrWhiteSpace($row.OfficeProximityVerdict)) { "" } else { "$($row.OfficeProximityVerdict) delta=$($row.OfficeProximityDeltaDb)dB" }
-        $report.Add("| $($row.Time) | $($row.Window) | $($row.Device) | $officeRole | $player | $localDevice | $trust | $combat | $($row.OperatorVerdict) | $officeProximity | $($row.IdentityLabel) $($row.IdentityScore) | $($row.ProximityLabel) $($row.ProximityScore) | $quorum | $remote | $fieldRadio | $($row.FieldRadioPolicy) | $($row.TransportStatus) | $($row.WitnessFreshness) | $rssi | $age | $($row.PositionLabel) $($row.PositionScore) | $($row.DirectionLabel) $($row.DirectionScore) |")
+        $report.Add("| $($row.Source) | $($row.Time) | $($row.Window) | $($row.Device) | $officeRole | $player | $localDevice | $trust | $combat | $($row.OperatorVerdict) | $officeProximity | $($row.IdentityLabel) $($row.IdentityScore) | $($row.ProximityLabel) $($row.ProximityScore) | $quorum | $remote | $fieldRadio | $($row.FieldRadioPolicy) | $($row.TransportStatus) | $($row.WitnessFreshness) | $rssi | $age | $($row.PositionLabel) $($row.PositionScore) | $($row.DirectionLabel) $($row.DirectionScore) |")
     }
 
     $report.Add("")
@@ -1395,6 +1657,21 @@ if ($locationSummary.Count -eq 0) {
     $report.Add("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
     foreach ($row in $locationSummary) {
         $report.Add("| $($row.Window) | $($row.Device) | $($row.LocationEvents) | $($row.Updates) | $($row.LastKnown) | $($row.GpsUpdates) | $($row.NetworkUpdates) | $($row.BestAccuracyM) | $($row.AvgAccuracyM) |")
+    }
+}
+$report.Add("")
+$report.Add("## GPS Device Vectors")
+$report.Add("")
+if ($gpsDeviceVectors.Count -eq 0) {
+    $report.Add("No bucket-level GPS vectors found. Need at least two devices with valid `LOCATION_DIAG` coordinates in the same bucket.")
+} else {
+    $report.Add("Directed vectors are computed from each device's latest valid GPS fix in the bucket.")
+    $report.Add("")
+    $report.Add("| Window | Bucket | From | To | Status | Accuracy m | Distance m | Bearing deg |")
+    $report.Add("| --- | --- | --- | --- | --- | ---: | ---: | ---: |")
+    foreach ($row in ($gpsDeviceVectors | Select-Object -First 60)) {
+        $accuracy = if ($null -eq $row.AccuracyM) { "" } else { $row.AccuracyM }
+        $report.Add("| $($row.Window) | $($row.Bucket) | $($row.FromDevice) | $($row.ToDevice) | $($row.Status) | $accuracy | $($row.DistanceM) | $($row.BearingDeg) |")
     }
 }
 $report.Add("")

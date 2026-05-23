@@ -15,10 +15,27 @@ public final class IffRemoteWitnessReport {
     public final long observedElapsedMs;
     public final long receivedElapsedMs;
     public final String signatureStatus;
+    public final int gpsLatE7;
+    public final int gpsLonE7;
+    public final int gpsAccuracyM;
+    public final long gpsObservedElapsedMs;
 
     public IffRemoteWitnessReport(String sourcePlayerId, String targetPlayerId, String targetBeaconSsid,
                                   String bssid, int rssi, int frequency, long observedElapsedMs,
                                   long receivedElapsedMs, String signatureStatus) {
+        this(sourcePlayerId, targetPlayerId, targetBeaconSsid, bssid, rssi, frequency,
+                observedElapsedMs, receivedElapsedMs, signatureStatus,
+                IffRemoteWitnessFrame.GPS_UNAVAILABLE_INT,
+                IffRemoteWitnessFrame.GPS_UNAVAILABLE_INT,
+                IffRemoteWitnessFrame.GPS_UNAVAILABLE_INT,
+                -1L);
+    }
+
+    public IffRemoteWitnessReport(String sourcePlayerId, String targetPlayerId, String targetBeaconSsid,
+                                  String bssid, int rssi, int frequency, long observedElapsedMs,
+                                  long receivedElapsedMs, String signatureStatus,
+                                  int gpsLatE7, int gpsLonE7, int gpsAccuracyM,
+                                  long gpsObservedElapsedMs) {
         this.sourcePlayerId = safe(sourcePlayerId);
         this.targetPlayerId = safe(targetPlayerId);
         this.targetBeaconSsid = safe(targetBeaconSsid);
@@ -28,6 +45,10 @@ public final class IffRemoteWitnessReport {
         this.observedElapsedMs = observedElapsedMs;
         this.receivedElapsedMs = receivedElapsedMs;
         this.signatureStatus = safe(signatureStatus);
+        this.gpsLatE7 = gpsLatE7;
+        this.gpsLonE7 = gpsLonE7;
+        this.gpsAccuracyM = gpsAccuracyM;
+        this.gpsObservedElapsedMs = gpsObservedElapsedMs;
     }
 
     public long ageMs() {
@@ -55,6 +76,28 @@ public final class IffRemoteWitnessReport {
 
     public boolean hasSignatureProof() {
         return !SIGNATURE_PENDING.equals(signatureStatus) && signatureStatus.length() > 0;
+    }
+
+    public boolean hasGpsFix() {
+        return gpsLatE7 != IffRemoteWitnessFrame.GPS_UNAVAILABLE_INT
+                && gpsLonE7 != IffRemoteWitnessFrame.GPS_UNAVAILABLE_INT
+                && gpsAccuracyM >= 0
+                && gpsObservedElapsedMs > 0L;
+    }
+
+    public long gpsAgeMs() {
+        if (!hasGpsFix()) {
+            return -1L;
+        }
+        return Math.max(0L, SystemClock.elapsedRealtime() - gpsObservedElapsedMs);
+    }
+
+    public double gpsLatitude() {
+        return IffRemoteWitnessFrame.coordinateFromE7(gpsLatE7);
+    }
+
+    public double gpsLongitude() {
+        return IffRemoteWitnessFrame.coordinateFromE7(gpsLonE7);
     }
 
     public boolean hasValidShape() {
