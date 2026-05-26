@@ -21,6 +21,8 @@ public final class IffAutoFieldCheckSnapshotTest {
         shouldComputeGpsDistanceAndBearingBetweenFreshFixes();
         shouldRejectGpsOutlierWhenRadioSaysNearby();
         shouldRejectImpossibleLocalGpsJumpBeforeBleAdvertise();
+        shouldRecoverFromRepeatedConsistentJumpAfterBadFix();
+        shouldRecoverFromConsistentJumpWithModerateNetworkAccuracy();
         shouldSummarizeLiveFieldRunChecks();
     }
 
@@ -31,11 +33,11 @@ public final class IffAutoFieldCheckSnapshotTest {
 
     private static void shouldThrottleSnapshotsUntilIntervalPasses() {
         long last = 1000L;
-        assertEquals(2000L, IffAutoFieldCheckSnapshot.INTERVAL_MS);
-        assertFalse(IffAutoFieldCheckSnapshot.shouldRecord(last + 1999L, last),
-                "snapshot before 2s field interval should be skipped");
-        assertTrue(IffAutoFieldCheckSnapshot.shouldRecord(last + 2000L, last),
-                "snapshot at 2s field interval should be recorded");
+        assertEquals(1000L, IffAutoFieldCheckSnapshot.INTERVAL_MS);
+        assertFalse(IffAutoFieldCheckSnapshot.shouldRecord(last + 999L, last),
+                "snapshot before 1s field interval should be skipped");
+        assertTrue(IffAutoFieldCheckSnapshot.shouldRecord(last + 1000L, last),
+                "snapshot at 1s field interval should be recorded");
     }
 
     private static void shouldMapOfficeRoles() {
@@ -174,6 +176,13 @@ public final class IffAutoFieldCheckSnapshotTest {
         assertEquals("na", outlier.fieldValue(outlier.distanceM));
         assertEquals("na", outlier.fieldValue(outlier.bearingDeg));
 
+        IffGpsSnapshot edgeOutlier = IffGpsSnapshot.fromPair(
+                1000L, true, 8.0f, 55.755800, 37.617300,
+                1200L, true, 10.0f, 56.295800, 38.157300,
+                "EDGE");
+
+        assertEquals("GPS_OUTLIER", edgeOutlier.status);
+
         IffGpsSnapshot farAllowed = IffGpsSnapshot.fromPair(
                 1000L, true, 8.0f, 55.755800, 37.617300,
                 1200L, true, 10.0f, 56.295800, 38.157300,
@@ -201,6 +210,52 @@ public final class IffAutoFieldCheckSnapshotTest {
                 55.755900, 37.617300, true, 9.0f, 104000L, "gps");
         assertTrue(nearby.accepted, "nearby follow-up GPS fix should remain accepted");
         assertEquals("accepted", nearby.reason);
+    }
+
+    private static void shouldRecoverFromRepeatedConsistentJumpAfterBadFix() {
+        IffGpsStabilizer stabilizer = new IffGpsStabilizer();
+
+        IffGpsStabilizer.Decision badFirst = stabilizer.evaluate(
+                60.116500, 31.393000, true, 12.0f, 100000L, "gps");
+        assertTrue(badFirst.accepted, "first GPS fix is accepted before it can be compared");
+
+        IffGpsStabilizer.Decision firstGood = stabilizer.evaluate(
+                59.991600, 30.327000, true, 8.0f, 101000L, "gps");
+        assertFalse(firstGood.accepted, "first 60km correction should still be rejected");
+        assertEquals("rejected_jump", firstGood.reason);
+
+        IffGpsStabilizer.Decision secondGood = stabilizer.evaluate(
+                59.991610, 30.327020, true, 7.0f, 102000L, "gps");
+        assertFalse(secondGood.accepted, "second consistent correction should still be buffered");
+        assertEquals("rejected_jump", secondGood.reason);
+
+        IffGpsStabilizer.Decision thirdGood = stabilizer.evaluate(
+                59.991620, 30.327030, true, 7.0f, 103000L, "gps");
+        assertTrue(thirdGood.accepted, "third consistent correction should reset the bad anchor");
+        assertEquals("accepted_repeated_jump", thirdGood.reason);
+    }
+
+    private static void shouldRecoverFromConsistentJumpWithModerateNetworkAccuracy() {
+        IffGpsStabilizer stabilizer = new IffGpsStabilizer();
+
+        assertTrue(stabilizer.evaluate(
+                60.116411, 31.375548, true, 9.0f, 100000L, "gps").accepted,
+                "initial GPS anchor should be accepted");
+
+        IffGpsStabilizer.Decision firstNetwork = stabilizer.evaluate(
+                59.991149, 30.327417, true, 43.0f, 101000L, "network");
+        IffGpsStabilizer.Decision secondNetwork = stabilizer.evaluate(
+                59.991045, 30.327479, true, 62.0f, 102000L, "network");
+        IffGpsStabilizer.Decision weakNetwork = stabilizer.evaluate(
+                59.991620, 30.326460, true, 119.0f, 103000L, "network");
+        IffGpsStabilizer.Decision thirdNetwork = stabilizer.evaluate(
+                59.991620, 30.326460, true, 27.0f, 104000L, "network");
+
+        assertFalse(firstNetwork.accepted, "first correction should be buffered");
+        assertFalse(secondNetwork.accepted, "second moderate-accuracy correction should be buffered");
+        assertFalse(weakNetwork.accepted, "weak correction should not be accepted");
+        assertTrue(thirdNetwork.accepted, "third usable correction should recover from the bad GPS anchor");
+        assertEquals("accepted_repeated_jump", thirdNetwork.reason);
     }
 
 

@@ -7,6 +7,9 @@ public final class IffOperatorFieldSnapshotStoreTest {
     public static void run() {
         smoothsTwoAnchorClockAndDistance();
         holdsLastTwoAnchorFixDuringShortRelayGap();
+        doesNotOverrideGpsFixWithHeldWifiDirection();
+        keepsPlayableHoldForSparseFieldUpdates();
+        expiresHoldAfterPlayableWindow();
     }
 
     private static void smoothsTwoAnchorClockAndDistance() {
@@ -39,6 +42,61 @@ public final class IffOperatorFieldSnapshotStoreTest {
         assertContains(held.statusLine, "hold", "held status");
     }
 
+    private static void doesNotOverrideGpsFixWithHeldWifiDirection() {
+        IffOperatorFieldSnapshotStore store = new IffOperatorFieldSnapshotStore();
+
+        store.update(twoAnchor(25, "2"), 1000L);
+        IffGpsSnapshot gps = IffGpsSnapshot.fromPair(
+                1000L,
+                true,
+                5.0f,
+                55.0,
+                37.0,
+                1000L,
+                true,
+                5.0f,
+                55.00018,
+                37.0);
+        IffFieldLocatorSnapshot locator = IffFieldLocatorSnapshot.from(
+                IffWifiTargetLocator.estimate(0, 0, 0, 0),
+                IffDistanceTrend.evaluate(null, null),
+                gps);
+        IffFieldMapSnapshot gpsMap = IffFieldMapSnapshot.from(
+                locator,
+                "target=petya left=vasya:missing right=zhenya:missing locator=INSUFFICIENT_DATA");
+
+        IffFieldMapSnapshot selected = store.update(gpsMap, 3000L);
+
+        assertEquals("GPS_ASSISTED", selected.source, "gps should beat held wifi");
+        assertEquals("NO_ANCHORS", selected.readiness, "gps readiness preserved");
+        assertTrue(selected.directionKnown, "gps bearing remains known");
+    }
+
+    private static void keepsPlayableHoldForSparseFieldUpdates() {
+        IffOperatorFieldSnapshotStore store = new IffOperatorFieldSnapshotStore();
+
+        store.update(twoAnchor(25, "2"), 1000L);
+        IffFieldMapSnapshot held = store.update(oneAnchorFallback(), 11000L);
+
+        assertEquals("WIFI_TARGET_HOLD", held.source, "sparse hold source");
+        assertEquals(25, held.distanceBucketM, "sparse hold distance");
+        assertEquals("2", held.clockDirection, "sparse hold clock");
+        assertTrue(held.directionKnown, "sparse hold direction known");
+        assertContains(held.statusLine, "ageMs=10000", "sparse hold age");
+    }
+
+    private static void expiresHoldAfterPlayableWindow() {
+        IffOperatorFieldSnapshotStore store = new IffOperatorFieldSnapshotStore();
+
+        store.update(twoAnchor(25, "2"), 1000L);
+        IffFieldMapSnapshot expired = store.update(oneAnchorFallback(), 11001L);
+
+        assertEquals("FIELD_RADIO_RSSI", expired.source, "expired hold falls back to raw source");
+        assertEquals("ONE_ANCHOR", expired.readiness, "expired hold readiness");
+        assertEquals("na", expired.clockDirection, "expired hold clock");
+        assertTrue(!expired.directionKnown, "expired hold direction unknown");
+    }
+
     private static IffFieldMapSnapshot twoAnchor(int distanceM, String clock) {
         return IffFieldMapSnapshot.operatorSnapshot(
                 "TWO_ANCHORS",
@@ -52,11 +110,11 @@ public final class IffOperatorFieldSnapshotStoreTest {
         return IffFieldMapSnapshot.from(
                 IffFieldLocatorSnapshot.from(
                         IffWifiTargetLocator.estimate(0, 0, 0, 0),
-                        IffDistanceTrend.evaluate(
-                                IffDistanceTrend.Sample.window(true, -58, 3, 0, 1000L),
-                                null),
+                IffDistanceTrend.evaluate(
+                        IffDistanceTrend.Sample.window(true, -58, 3, 0, 1000L),
+                        null),
                         IffGpsSnapshot.unavailable()),
-                "target=zhenya left=vasya:-58 ageMs=1000 right=petya:missing locator=INSUFFICIENT_DATA");
+                "target=petya left=vasya:-58 ageMs=1000 right=zhenya:missing locator=INSUFFICIENT_DATA");
     }
 
     private static void assertEquals(String expected, String actual, String label) {

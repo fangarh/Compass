@@ -15,7 +15,11 @@ public final class IffTacticalMapView extends View {
     private final List<MapPoint> points = new ArrayList<>();
     private String localLabel = "";
     private IffFieldMapSnapshot fieldState;
+    private IffParticipantMapModel.Snapshot participantState;
     private int detailMode;
+    private boolean phoneHeadingAvailable;
+    private float phoneHeadingDeg;
+    private static final long CURRENT_POINT_MS = 2500L;
 
     public IffTacticalMapView(Context context) {
         super(context);
@@ -35,6 +39,17 @@ public final class IffTacticalMapView extends View {
 
     public void setFieldState(IffFieldMapSnapshot nextFieldState) {
         fieldState = nextFieldState;
+        invalidate();
+    }
+
+    public void setParticipantState(IffParticipantMapModel.Snapshot nextParticipantState) {
+        participantState = nextParticipantState;
+        invalidate();
+    }
+
+    public void setPhoneHeading(boolean available, float headingDeg) {
+        phoneHeadingAvailable = available;
+        phoneHeadingDeg = normalizeDegrees(headingDeg);
         invalidate();
     }
 
@@ -63,8 +78,27 @@ public final class IffTacticalMapView extends View {
         drawBackground(canvas, width, height);
         drawFrame(canvas, width, height);
         drawFieldGeometry(canvas, width, height);
-        drawPoints(canvas, width, height);
-        drawLegend(canvas, width, height);
+        drawParticipantPoints(canvas, width, height);
+        drawRadioRoster(canvas, width, height);
+        drawMapStatus(canvas, width);
+    }
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        int width = MeasureSpec.getSize(widthMeasureSpec);
+        if (width <= 0) {
+            width = dp(320);
+        }
+        int desiredHeight = Math.max(dp(180), Math.round(width * 9.0f / 16.0f));
+        int heightMode = MeasureSpec.getMode(heightMeasureSpec);
+        int heightSize = MeasureSpec.getSize(heightMeasureSpec);
+        int height = desiredHeight;
+        if (heightMode == MeasureSpec.AT_MOST && heightSize > 0) {
+            height = Math.min(desiredHeight, heightSize);
+        } else if (heightMode == MeasureSpec.EXACTLY && heightSize > 0) {
+            height = heightSize;
+        }
+        setMeasuredDimension(width, height);
     }
 
     private void drawBackground(Canvas canvas, int width, int height) {
@@ -90,42 +124,24 @@ public final class IffTacticalMapView extends View {
         paint.setColor(0xff6f7d42);
         canvas.drawRect(dp(2), dp(2), width - dp(2), height - dp(2), paint);
 
-        textPaint.setColor(0xffffd16a);
-        canvas.drawText("IFF FIELD MAP", dp(12), dp(22), textPaint);
-        textPaint.setColor(0xffb8c49a);
-        canvas.drawText(fieldState == null ? "NO FIELD STATE" : fieldState.statusLine, dp(12), dp(40), textPaint);
     }
 
     private void drawFieldGeometry(Canvas canvas, int width, int height) {
         float cx = width * 0.5f;
-        float cy = height * 0.64f;
+        float cy = height * 0.5f;
         float scale = Math.min(width, height);
 
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(dp(1));
         paint.setColor(0xff405037);
-        canvas.drawCircle(cx, cy, scale * 0.16f, paint);
-        canvas.drawCircle(cx, cy, scale * 0.24f, paint);
-        canvas.drawCircle(cx, cy, scale * 0.32f, paint);
-        canvas.drawCircle(cx, cy, scale * 0.40f, paint);
-
-        float leftX = width * 0.22f;
-        float rightX = width * 0.78f;
-        paint.setStyle(Paint.Style.FILL);
-        paint.setColor(0xff5ea8ff);
-        canvas.drawCircle(leftX, cy, dp(10), paint);
-        canvas.drawCircle(rightX, cy, dp(10), paint);
-        textPaint.setColor(0xffffffff);
-        canvas.drawText("VASYA", leftX - dp(28), cy + dp(26), textPaint);
-        canvas.drawText("PETYA", rightX - dp(28), cy + dp(26), textPaint);
-
-        if (fieldState != null && fieldState.targetVisible) {
-            drawTargetEstimate(canvas, width, height, cx, cy, scale);
-        }
+        canvas.drawCircle(cx, cy, scale * 0.09f, paint);
+        canvas.drawCircle(cx, cy, scale * 0.18f, paint);
+        canvas.drawCircle(cx, cy, scale * 0.30f, paint);
+        canvas.drawCircle(cx, cy, scale * 0.45f, paint);
 
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(0xffd8dfca);
-        canvas.drawCircle(cx, cy, dp(4), paint);
+        canvas.drawCircle(cx, cy, dp(5), paint);
     }
 
     private void drawTargetEstimate(Canvas canvas, int width, int height, float cx, float cy, float scale) {
@@ -157,6 +173,53 @@ public final class IffTacticalMapView extends View {
         canvas.drawText("ZHENYA", tx + dp(16), ty - dp(4), textPaint);
         textPaint.setColor(0xffb8c49a);
         canvas.drawText(fieldState.distanceBucketM + "m / " + fieldState.clockDirection, tx + dp(16), ty + dp(13), textPaint);
+    }
+
+    private void drawParticipantPoints(Canvas canvas, int width, int height) {
+        if (participantState == null) {
+            return;
+        }
+        if (participantState.points == null || participantState.points.isEmpty()) {
+            return;
+        }
+
+        int top = dp(32);
+        int bottom = height - dp(18);
+        for (int i = 0; i < participantState.points.size(); i++) {
+            IffParticipantMapModel.Point point = participantState.points.get(i);
+            float scale = Math.min(width, height);
+            float[] screenOffset = screenOffsetFor(point);
+            float x = clamp((width * 0.5f) + (screenOffset[0] * scale), dp(14), width - dp(14));
+            float y = clamp((height * 0.5f) + (screenOffset[1] * scale), top, bottom);
+            int color = distanceColor(point.distanceAccuracyMeters);
+
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(point.approachActive ? 0xff7dff73 : 0xffffd16a);
+            canvas.drawCircle(x, y, dp(7), paint);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(2));
+            paint.setColor(color);
+            canvas.drawCircle(x, y, dp(14), paint);
+
+            String callsign = safe(point.displayName);
+            String distanceLabel = point.distanceM + "m";
+            float oldTextSize = textPaint.getTextSize();
+            textPaint.setTextSize(sp(13));
+            float callsignWidth = textPaint.measureText(callsign);
+            textPaint.setTextSize(sp(24));
+            float distanceWidth = textPaint.measureText(distanceLabel);
+            float blockWidth = Math.max(callsignWidth, distanceWidth);
+            float textX = clamp(x + dp(16), dp(8), width - blockWidth - dp(8));
+            float labelOffset = (i - ((participantState.points.size() - 1) * 0.5f)) * dp(54);
+            float distanceY = clamp(y + dp(13) + labelOffset, top + dp(110), bottom);
+            textPaint.setTextSize(sp(13));
+            textPaint.setColor(0xffffffff);
+            canvas.drawText(callsign, textX, distanceY - dp(25), textPaint);
+            textPaint.setTextSize(sp(24));
+            textPaint.setColor(color);
+            canvas.drawText(distanceLabel, textX, distanceY, textPaint);
+            textPaint.setTextSize(oldTextSize);
+        }
     }
 
     private void drawPoints(Canvas canvas, int width, int height) {
@@ -196,11 +259,156 @@ public final class IffTacticalMapView extends View {
     }
 
     private void drawLegend(Canvas canvas, int width, int height) {
-        int y = height - dp(52);
+    }
+
+    private void drawRadioRoster(Canvas canvas, int width, int height) {
+        int radioCount = radioOnlyVisibleCount();
+        if (radioCount == 0) {
+            return;
+        }
+
+        boolean hasSpatialPoints = hasParticipantPoints();
+        int maxContacts = hasSpatialPoints ? 3 : 4;
+        int lines = Math.min(radioCount, maxContacts) + (hasSpatialPoints ? 0 : 1);
+        int rowHeight = dp(17);
+        int left = dp(10);
+        int top = Math.max(dp(48), height - dp(12) - (lines * rowHeight) - dp(7));
+        int right = Math.min(width - dp(10), left + dp(230));
+        int bottom = height - dp(8);
+
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(0xaa08100b);
+        canvas.drawRect(left - dp(4), top - dp(5), right + dp(4), bottom, paint);
+
+        float oldTextSize = textPaint.getTextSize();
+        textPaint.setTextSize(sp(12));
+        int y = top + dp(10);
+        if (!hasSpatialPoints) {
+            textPaint.setColor(0xffffd16a);
+            canvas.drawText(fitText("RADIO ONLY / NO GPS POINT", right - left), left, y, textPaint);
+            y += rowHeight;
+        }
+
+        int drawn = 0;
+        for (int i = 0; i < points.size() && drawn < maxContacts; i++) {
+            MapPoint point = points.get(i);
+            if (point.localDevice || (!point.current && !point.stale) || hasParticipantPoint(point.playerId)) {
+                continue;
+            }
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(colorFor(point));
+            canvas.drawCircle(left + dp(5), y - dp(4), dp(4), paint);
+            textPaint.setColor(point.current ? 0xffd8dfca : 0xffb8c49a);
+            canvas.drawText(fitText(point.name + " RADIO ONLY " + point.radioLabel, right - left - dp(16)),
+                    left + dp(16), y, textPaint);
+            y += rowHeight;
+            drawn++;
+        }
+        textPaint.setTextSize(oldTextSize);
+    }
+
+    private void drawMapStatus(Canvas canvas, int width) {
+        float oldTextSize = textPaint.getTextSize();
+        textPaint.setTextSize(sp(12));
+        int y = dp(20);
         textPaint.setColor(0xffb8c49a);
-        canvas.drawText("tap: map / details / roster", dp(12), y, textPaint);
-        canvas.drawText("green=two anchors  amber=one anchor/fallback", dp(12), y + dp(17), textPaint);
-        canvas.drawText("local: " + localLabel, dp(12), y + dp(34), textPaint);
+        drawRight(canvas, safe(participantState == null ? "NO_MAP" : participantState.mode), width - dp(10), y);
+        drawRight(canvas, phoneHeadingAvailable ? "PHONE-UP " + Math.round(phoneHeadingDeg) : "N-UP",
+                width - dp(10), y + dp(17));
+        if (participantState == null || participantState.points == null || participantState.points.isEmpty()) {
+            drawRight(canvas, "acc -- hidden="
+                            + (participantState == null ? 0 : participantState.hiddenCount),
+                    width - dp(10), y + dp(34));
+            textPaint.setTextSize(oldTextSize);
+            return;
+        }
+        for (int i = 0; i < participantState.points.size() && i < 3; i++) {
+            IffParticipantMapModel.Point point = participantState.points.get(i);
+            textPaint.setColor(distanceColor(point.distanceAccuracyMeters));
+            drawRight(canvas,
+                    safe(point.displayName)
+                            + " +/-" + Math.round(point.distanceAccuracyMeters) + "m "
+                            + freshnessLabel(point),
+                    width - dp(10),
+                    y + dp(17 * (i + 2)));
+        }
+        textPaint.setTextSize(oldTextSize);
+    }
+
+    private boolean hasParticipantPoints() {
+        return participantState != null
+                && participantState.points != null
+                && !participantState.points.isEmpty();
+    }
+
+    private boolean hasParticipantPoint(String playerId) {
+        if (participantState == null || participantState.points == null) {
+            return false;
+        }
+        for (int i = 0; i < participantState.points.size(); i++) {
+            IffParticipantMapModel.Point point = participantState.points.get(i);
+            if (point != null && safe(playerId).equals(point.playerId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private int radioOnlyVisibleCount() {
+        int count = 0;
+        for (int i = 0; i < points.size(); i++) {
+            MapPoint point = points.get(i);
+            if (!point.localDevice && (point.current || point.stale) && !hasParticipantPoint(point.playerId)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private String fitText(String text, float maxWidth) {
+        String value = safe(text);
+        if (textPaint.measureText(value) <= maxWidth) {
+            return value;
+        }
+        String suffix = "...";
+        float suffixWidth = textPaint.measureText(suffix);
+        int end = value.length();
+        while (end > 0 && textPaint.measureText(value.substring(0, end)) + suffixWidth > maxWidth) {
+            end--;
+        }
+        return end <= 0 ? suffix : value.substring(0, end) + suffix;
+    }
+
+    private float[] screenOffsetFor(IffParticipantMapModel.Point point) {
+        if (point == null || !phoneHeadingAvailable) {
+            return new float[] {point == null ? 0.0f : point.x - 0.5f, point == null ? 0.0f : point.y - 0.5f};
+        }
+        float dx = point.x - 0.5f;
+        float dy = point.y - 0.5f;
+        float radius = (float) Math.sqrt((dx * dx) + (dy * dy));
+        double relativeBearing = Math.toRadians(normalizeDegrees(point.bearingDeg - phoneHeadingDeg));
+        return new float[] {
+                (float) (Math.sin(relativeBearing) * radius),
+                -(float) (Math.cos(relativeBearing) * radius)
+        };
+    }
+
+    private void drawRight(Canvas canvas, String text, float right, float baseline) {
+        canvas.drawText(text, right - textPaint.measureText(text), baseline, textPaint);
+    }
+
+    private String freshnessLabel(IffParticipantMapModel.Point point) {
+        return point.ageMs <= CURRENT_POINT_MS ? "CURRENT" : "STALE";
+    }
+
+    private int distanceColor(float accuracyMeters) {
+        if (accuracyMeters <= 15.0f) {
+            return 0xff7dff73;
+        }
+        if (accuracyMeters <= 30.0f) {
+            return 0xffffb84d;
+        }
+        return 0xffff5f5f;
     }
 
     private int colorFor(MapPoint point) {
@@ -221,19 +429,29 @@ public final class IffTacticalMapView extends View {
     }
 
     private float radiusFor(int distanceBucketM, float scale) {
-        if (distanceBucketM <= 5) {
-            return scale * 0.16f;
-        }
-        if (distanceBucketM <= 10) {
-            return scale * 0.24f;
-        }
         if (distanceBucketM <= 15) {
-            return scale * 0.32f;
+            return scale * 0.09f;
         }
-        if (distanceBucketM <= 20) {
-            return scale * 0.40f;
+        if (distanceBucketM <= 30) {
+            return scale * 0.18f;
         }
-        return scale * 0.46f;
+        if (distanceBucketM <= 50) {
+            return scale * 0.30f;
+        }
+        return scale * 0.45f;
+    }
+
+    private float clamp(float value, float min, float max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
+    }
+
+    private float normalizeDegrees(float degrees) {
+        float value = degrees % 360.0f;
+        return value < 0.0f ? value + 360.0f : value;
     }
 
     private float startAngleForClock(String clockDirection) {
@@ -261,6 +479,7 @@ public final class IffTacticalMapView extends View {
     }
 
     public static final class MapPoint {
+        public final String playerId;
         public final String name;
         public final String radioLabel;
         public final boolean localDevice;
@@ -268,8 +487,9 @@ public final class IffTacticalMapView extends View {
         public final boolean current;
         public final boolean stale;
 
-        public MapPoint(String name, String radioLabel, boolean localDevice, boolean selected,
+        public MapPoint(String playerId, String name, String radioLabel, boolean localDevice, boolean selected,
                         boolean current, boolean stale) {
+            this.playerId = playerId == null ? "" : playerId;
             this.name = name;
             this.radioLabel = radioLabel;
             this.localDevice = localDevice;

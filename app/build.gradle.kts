@@ -14,8 +14,8 @@ android {
         applicationId = "net.afterday.compas"
         minSdk = 23
         targetSdk = 35
-        versionCode = 1845
-        versionName = "1845-operator-two-anchor-snapshot"
+        versionCode = 1853
+        versionName = "1853-wifi-target-rssi-averaging"
     }
 
     compileOptions {

@@ -17,6 +17,8 @@ import android.bluetooth.le.ScanSettings;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.location.Location;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.Build;
 import android.os.SystemClock;
 import java.util.ArrayList;
@@ -26,24 +28,29 @@ import net.afterday.compas.logging.FieldDiagnosticLog;
 @TargetApi(21)
 public final class IffBleFieldRadio {
     private static final Object LOCK = new Object();
+    private static final IffBleGpsAgeTracker GPS_AGE_TRACKER = new IffBleGpsAgeTracker();
     private static final int MANUFACTURER_ID = 0xffff;
     private static final int MAX_ADVERTISE_FAILURES = 3;
     private static final long GPS_ADVERTISE_FRESH_MS = 15000L;
-    private static final boolean GPS_IN_BLE_ADVERTISE_ENABLED = false;
+    private static final boolean GPS_IN_BLE_ADVERTISE_ENABLED = true;
 
     private static BluetoothLeAdvertiser advertiser;
     private static BluetoothLeScanner scanner;
+    private static Handler handler;
     private static AdvertiseCallback advertiseCallback;
     private static ScanCallback scanCallback;
+    private static Runnable scanRetryRunnable;
     private static boolean running;
     private static boolean advertising;
     private static boolean advertiseStartPending;
     private static boolean advertiseDisabledForSession;
     private static boolean scanning;
+    private static boolean scanRetryPending;
     private static int rxCount;
     private static int rejectedCount;
     private static int rxOutlier127Count;
     private static int advertiseFailureCount;
+    private static int scanFailureCount;
     private static String localPlayerId = "";
     private static String lastStatus = "idle";
     private static String lifecycleStatus = "VISIBLE_SCREEN_ONLY";
@@ -92,6 +99,17 @@ public final class IffBleFieldRadio {
             running = false;
             stoppedLifecycle = lifecycleStatus;
         }
+        Handler currentHandler;
+        Runnable currentScanRetry;
+        synchronized (LOCK) {
+            currentHandler = handler;
+            currentScanRetry = scanRetryRunnable;
+            scanRetryRunnable = null;
+            scanRetryPending = false;
+        }
+        if (currentHandler != null && currentScanRetry != null) {
+            currentHandler.removeCallbacks(currentScanRetry);
+        }
         try {
             if (advertiser != null && advertiseCallback != null) {
                 advertiser.stopAdvertising(advertiseCallback);
@@ -113,9 +131,12 @@ public final class IffBleFieldRadio {
             advertiseStartPending = false;
             advertiseDisabledForSession = false;
             scanning = false;
+            scanRetryPending = false;
             advertiseFailureCount = 0;
+            scanFailureCount = 0;
             lastAdvertisedPayload = null;
             lastAdvertiseRestartElapsedMs = 0L;
+            GPS_AGE_TRACKER.clear();
             lastStatus = "stopped " + safe(reason);
         }
         FieldDiagnosticLog.event("IFF_DIAG", "event=ble_field_radio_stop"
@@ -383,16 +404,19 @@ public final class IffBleFieldRadio {
             public void onScanFailed(int errorCode) {
                 synchronized (LOCK) {
                     scanning = false;
+                    scanFailureCount++;
                     rejectedCount++;
                     lastStatus = "scan_error_" + errorCode;
                 }
                 FieldDiagnosticLog.event("IFF_DIAG", "event=ble_field_radio_scan started=false errorCode=" + errorCode);
+                scheduleScanRetry(nextScanner, playerId, "error_" + errorCode);
             }
         };
         try {
             nextScanner.startScan(filters, settings, scanCallback);
             synchronized (LOCK) {
                 scanning = true;
+                scanRetryPending = false;
                 lastStatus = "scanning " + playerId;
             }
             FieldDiagnosticLog.event("IFF_DIAG", "event=ble_field_radio_scan started=true localPlayerId=" + playerId);
@@ -402,12 +426,55 @@ public final class IffBleFieldRadio {
         } catch (Exception e) {
             synchronized (LOCK) {
                 scanning = false;
+                scanFailureCount++;
                 rejectedCount++;
                 lastStatus = "scan_exception";
             }
             FieldDiagnosticLog.event("IFF_DIAG", "event=ble_field_radio_scan started=false error=\""
                     + clean(e.getClass().getSimpleName()) + "\"");
+            scheduleScanRetry(nextScanner, playerId, "exception");
         }
+    }
+
+    private static void scheduleScanRetry(
+            final BluetoothLeScanner nextScanner,
+            final String playerId,
+            String reason) {
+        final long delayMs;
+        Handler nextHandler;
+        synchronized (LOCK) {
+            if (!running || nextScanner == null || scanRetryPending) {
+                return;
+            }
+            scanRetryPending = true;
+            delayMs = IffBleScanRetryPolicy.delayMs(scanFailureCount);
+            nextHandler = mainHandlerLocked();
+            lastStatus = "scan_retry_scheduled_" + safe(reason);
+        }
+        Runnable retry = new Runnable() {
+            @Override
+            public void run() {
+                synchronized (LOCK) {
+                    if (!running || scanner != nextScanner) {
+                        scanRetryPending = false;
+                        return;
+                    }
+                    scanRetryPending = false;
+                }
+                FieldDiagnosticLog.event("IFF_DIAG", "event=ble_field_radio_scan_retry"
+                        + " localPlayerId=" + playerId
+                        + " delayMs=" + delayMs);
+                startScan(nextScanner, playerId);
+            }
+        };
+        synchronized (LOCK) {
+            scanRetryRunnable = retry;
+        }
+        nextHandler.postDelayed(retry, delayMs);
+        FieldDiagnosticLog.event("IFF_DIAG", "event=ble_field_radio_scan_retry_scheduled"
+                + " localPlayerId=" + playerId
+                + " reason=" + clean(reason)
+                + " delayMs=" + delayMs);
     }
 
     private static void handleScanResult(ScanResult result, String currentLocalPlayerId) {
@@ -436,6 +503,8 @@ public final class IffBleFieldRadio {
         recordTargetObservationFromBle(currentLocalPlayerId, playerId, address, result.getRssi());
         if (parsed.hasGps) {
             long now = SystemClock.elapsedRealtime();
+            long gpsAgeMs = GPS_AGE_TRACKER.effectiveGpsAgeMs(playerId + "/" + address, payload, now);
+            long gpsObservedElapsedMs = now - Math.max(0L, gpsAgeMs);
             IffRemoteWitnessStore.receiveReport(new IffRemoteWitnessReport(
                     "ble-" + playerId,
                     playerId,
@@ -449,10 +518,11 @@ public final class IffBleFieldRadio {
                     parsed.gpsLatE7,
                     parsed.gpsLonE7,
                     parsed.gpsAccuracyM,
-                    now - parsed.gpsAgeMs));
+                    gpsObservedElapsedMs));
         }
         synchronized (LOCK) {
             rxCount++;
+            scanFailureCount = 0;
             if (result.getRssi() == IffOfficeProximityVerdict.RSSI_OUTLIER_127) {
                 rxOutlier127Count++;
             }
@@ -513,8 +583,7 @@ public final class IffBleFieldRadio {
 
     private static boolean hasFreshGps(Location location) {
         return location != null
-                && Math.abs(location.getLatitude()) <= 90.0d
-                && Math.abs(location.getLongitude()) <= 180.0d
+                && IffGpsSanity.isPlausibleCoordinate(location.getLatitude(), location.getLongitude())
                 && System.currentTimeMillis() - location.getTime() <= GPS_ADVERTISE_FRESH_MS;
     }
 
@@ -544,6 +613,13 @@ public final class IffBleFieldRadio {
             scanning = scan;
             lastStatus = status;
         }
+    }
+
+    private static Handler mainHandlerLocked() {
+        if (handler == null) {
+            handler = new Handler(Looper.getMainLooper());
+        }
+        return handler;
     }
 
     private static String safe(String value) {

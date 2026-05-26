@@ -59,6 +59,10 @@ if ($twoAnchorReady.Count -ne 1) {
 if ($twoAnchorReady[0].Clock -ne "10" -or $twoAnchorReady[0].AvgDistanceM -ne "15") {
     throw "Expected TWO_ANCHORS clock=10 distance=15, got clock=$($twoAnchorReady[0].Clock) distance=$($twoAnchorReady[0].AvgDistanceM)"
 }
+$gpsEvent = @($events | Where-Object GpsRawDistanceM -eq "6")
+if ($gpsEvent.Count -ne 1 -or $gpsEvent[0].GpsLocalLatE7 -ne "551234567" -or $gpsEvent[0].GpsRawBearingDeg -ne "37") {
+    throw "Expected locator-events.csv to preserve GPS ground truth fields."
+}
 if ($summary -notlike "*BLE_ANCHOR*") {
     throw "Expected summary to mention BLE_ANCHOR"
 }

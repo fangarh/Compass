@@ -22,6 +22,7 @@ import android.os.IBinder;
 import android.os.SystemClock;
 import android.support.annotation.Nullable;
 import android.support.v4.app.NotificationCompat;
+import java.util.ArrayList;
 import java.util.List;
 import net.afterday.compas.IffActivity;
 import net.afterday.compas.R;
@@ -31,25 +32,52 @@ public final class IffForegroundRadioService extends Service {
     private static final String ACTION_START = "net.afterday.compas.iff.START_RADIO";
     private static final String ACTION_STOP = "net.afterday.compas.iff.STOP_RADIO";
     private static final String EXTRA_LOCAL_PLAYER_ID = "localPlayerId";
+    private static final String EXTRA_LOCAL_DISPLAY_NAME = "localDisplayName";
     private static final String CHANNEL_ID = "compass_iff_radio";
     private static final int NOTIFICATION_ID = 2701;
     private static final int WIFI_FINGERPRINT_MAX_ENTRIES = 8;
     private static final long DISTANCE_WINDOW_MS = 6000L;
     private static final long ACCEPTED_LOCATION_FRESH_MS = 15000L;
+    private static final long ACCEPTED_LOCATION_STALE_MS = 120000L;
+    private static final String FUSED_PROVIDER = "fused";
     private static final Object LOCK = new Object();
+    private static final String[] FIELD_PLAYER_IDS = new String[] {"petya", "vasya", "zhenya"};
+    private static final IffParticipantStore PARTICIPANTS = new IffParticipantStore("");
+    private static final IffApproachState APPROACH = new IffApproachState(30000L);
 
     private static boolean running;
     private static String localPlayerId = "";
+    private static String localDisplayName = "";
     private static String lastStatus = "service idle";
     private long lastAutoFieldCheckElapsedMs;
     private Location latestLocation;
     private LocationManager activeLocationManager;
     private final IffGpsStabilizer gpsStabilizer = new IffGpsStabilizer();
+    private final IffOperatorFieldSnapshotStore operatorFieldSnapshotStore =
+            new IffOperatorFieldSnapshotStore();
 
     private final LocationListener locationListener = new LocationListener() {
         @Override
         public void onLocationChanged(Location location) {
             rememberLocation(location, "location_update");
+        }
+
+        @Override
+        public void onStatusChanged(String provider, int status, Bundle extras) {
+        }
+
+        @Override
+        public void onProviderEnabled(String provider) {
+        }
+
+        @Override
+        public void onProviderDisabled(String provider) {
+        }
+    };
+    private final LocationListener singleLocationListener = new LocationListener() {
+        @Override
+        public void onLocationChanged(Location location) {
+            rememberLocation(location, "single_location_update");
         }
 
         @Override
@@ -75,17 +103,22 @@ public final class IffForegroundRadioService extends Service {
                 lastAutoFieldCheckElapsedMs = now;
                 recordAutoFieldCheckSnapshot("foreground_service_tick");
             }
-            handler.postDelayed(this, 2000L);
+            handler.postDelayed(this, IffAutoFieldCheckSnapshot.INTERVAL_MS);
         }
     };
 
     public static void start(Context context, String localPlayerId) {
+        start(context, localPlayerId, localPlayerId);
+    }
+
+    public static void start(Context context, String localPlayerId, String localDisplayName) {
         if (context == null) {
             return;
         }
         Intent intent = new Intent(context, IffForegroundRadioService.class);
         intent.setAction(ACTION_START);
         intent.putExtra(EXTRA_LOCAL_PLAYER_ID, safe(localPlayerId));
+        intent.putExtra(EXTRA_LOCAL_DISPLAY_NAME, safe(localDisplayName));
         if (Build.VERSION.SDK_INT >= 26) {
             context.startForegroundService(intent);
         } else {
@@ -106,8 +139,85 @@ public final class IffForegroundRadioService extends Service {
         synchronized (LOCK) {
             return "iff radio service " + (running ? "on" : "off")
                     + " local=" + localPlayerId
+                    + " name=\"" + clean(localDisplayName) + "\""
                     + " " + lastStatus;
         }
+    }
+
+    public static IffParticipantMapModel.Snapshot participantMapSnapshot(String requestedLocalPlayerId) {
+        String snapshotLocalPlayerId = safe(requestedLocalPlayerId);
+        if (snapshotLocalPlayerId.trim().length() == 0) {
+            synchronized (LOCK) {
+                snapshotLocalPlayerId = localPlayerId;
+            }
+        }
+        return IffParticipantMapModel.from(
+                PARTICIPANTS,
+                safe(snapshotLocalPlayerId),
+                SystemClock.elapsedRealtime());
+    }
+
+    public static void activateApproach() {
+        APPROACH.activate(SystemClock.elapsedRealtime());
+    }
+
+    public static void clearApproach() {
+        APPROACH.clear();
+    }
+
+    public static void mergeParticipantState(IffParticipantState state) {
+        if (state == null) {
+            return;
+        }
+        String currentLocalPlayerId;
+        synchronized (LOCK) {
+            currentLocalPlayerId = localPlayerId;
+        }
+        if (state.playerId.equals(safe(currentLocalPlayerId)) && state.hopCount > 0) {
+            return;
+        }
+        PARTICIPANTS.merge(state, SystemClock.elapsedRealtime());
+    }
+
+    public static String coordinateMessageForBroadcast(String requestedLocalPlayerId, long sequence) {
+        long now = SystemClock.elapsedRealtime();
+        String senderPlayerId = safe(requestedLocalPlayerId);
+        if (senderPlayerId.length() == 0) {
+            synchronized (LOCK) {
+                senderPlayerId = safe(localPlayerId);
+            }
+        }
+        if (senderPlayerId.length() == 0) {
+            return "";
+        }
+        List<IffParticipantState> sourceStates = PARTICIPANTS.snapshot(now);
+        List<IffParticipantState> broadcastStates = new ArrayList<>();
+        for (int i = 0; i < sourceStates.size(); i++) {
+            IffParticipantState state = sourceStates.get(i);
+            if (state == null) {
+                continue;
+            }
+            if (senderPlayerId.equals(state.playerId)) {
+                broadcastStates.add(state);
+                continue;
+            }
+            IffParticipantState relayed = IffParticipantState.create(
+                    state.playerId,
+                    senderPlayerId,
+                    state.displayName,
+                    state.latitude,
+                    state.longitude,
+                    state.accuracyMeters,
+                    state.locationTimeMillis,
+                    now,
+                    state.hopCount + 1,
+                    state.rssiDbm,
+                    state.approachActive);
+            if (relayed != null) {
+                broadcastStates.add(relayed);
+            }
+        }
+        return IffCoordinateMessage.encode(senderPlayerId, sequence, broadcastStates);
     }
 
     @Override
@@ -120,8 +230,9 @@ public final class IffForegroundRadioService extends Service {
         }
 
         String nextLocalPlayerId = intent == null ? "" : safe(intent.getStringExtra(EXTRA_LOCAL_PLAYER_ID));
+        String nextLocalDisplayName = intent == null ? "" : safe(intent.getStringExtra(EXTRA_LOCAL_DISPLAY_NAME));
         startForegroundNotification(nextLocalPlayerId);
-        startRadio(nextLocalPlayerId);
+        startRadio(nextLocalPlayerId, nextLocalDisplayName);
         return START_STICKY;
     }
 
@@ -137,16 +248,18 @@ public final class IffForegroundRadioService extends Service {
         return null;
     }
 
-    private void startRadio(String nextLocalPlayerId) {
+    private void startRadio(String nextLocalPlayerId, String nextLocalDisplayName) {
         FieldDiagnosticLog.start(this);
         synchronized (LOCK) {
             running = true;
             localPlayerId = safe(nextLocalPlayerId);
+            localDisplayName = normalizedDisplayName(nextLocalDisplayName, localPlayerId);
             lastStatus = "foreground connectedDevice";
         }
         FieldDiagnosticLog.event("IFF_DIAG", "event=iff_radio_service_start"
                 + " lifecycle=FOREGROUND_SERVICE_CONNECTED_DEVICE"
                 + " localPlayerId=" + localPlayerId
+                + " localDisplayName=\"" + clean(localDisplayName) + "\""
                 + " policy=\"" + clean(IffRadioWitnessStore.freshnessPolicyLabel()) + "\"");
         IffFieldRunSummary.reset(localPlayerId);
         startLocationUpdates();
@@ -185,18 +298,32 @@ public final class IffForegroundRadioService extends Service {
                 sideA.asOfficeSample(),
                 sideB.asOfficeSample());
         DistanceTargetSnapshot distanceTarget = preferredDistanceTarget(currentLocalPlayerId);
-        Location localGpsLocation = readBestLocation();
+        Location rawLocalGpsLocation = readBestLocation();
+        boolean localGpsOutlier = isGpsOutlier(rawLocalGpsLocation);
+        Location localGpsLocation = localGpsOutlier ? null : rawLocalGpsLocation;
+        if (localGpsOutlier) {
+            quarantineLocalGps(rawLocalGpsLocation, currentLocalPlayerId, "auto_field_check");
+        }
         IffBleFieldRadio.updateLocalGps(localGpsLocation);
+        IffWifiDirectDiscoveryTransport.updateLocalGps(localGpsLocation);
         IffRemoteWitnessReport remoteGpsReport = IffRemoteWitnessStore.getFreshGpsReportFor(distanceTarget.playerId);
-        IffGpsSnapshot gpsSnapshot = readGpsSnapshot(
-                localGpsLocation,
-                remoteGpsReport,
-                distanceTarget.trend.distanceClass);
+        long participantNowMillis = SystemClock.elapsedRealtime();
+        mergeLocalParticipantState(localGpsLocation, currentLocalPlayerId, participantNowMillis);
+        mergeFreshRemoteGpsReports(currentLocalPlayerId, participantNowMillis);
+        IffGpsSnapshot gpsSnapshot = localGpsOutlier
+                ? IffGpsSnapshot.outlier(gpsAccuracyValue(rawLocalGpsLocation))
+                : readGpsSnapshot(localGpsLocation, remoteGpsReport, distanceTarget.trend.distanceClass);
         WifiFingerprintSnapshot wifiSnapshot = readWifiFingerprintSnapshot(currentLocalPlayerId);
         IffFieldLocatorSnapshot locatorSnapshot = IffFieldLocatorSnapshot.from(
                 IffWifiTargetObservationStore.snapshot(),
                 distanceTarget.trend,
                 gpsSnapshot);
+        String wifiTargetStatus = IffWifiTargetObservationStore.compactStatus();
+        IffFieldMapSnapshot rawFieldMapSnapshot = IffFieldMapSnapshot.from(locatorSnapshot, wifiTargetStatus);
+        IffFieldMapSnapshot operatorFieldMapSnapshot = operatorFieldSnapshotStore.update(
+                rawFieldMapSnapshot,
+                SystemClock.elapsedRealtime());
+        IffParticipantMapModel.Snapshot participantMap = participantMapSnapshot(currentLocalPlayerId);
         String officeRole = IffAutoFieldCheckSnapshot.officeTestRole(currentLocalPlayerId);
 
         IffFieldRunSummary.record(new IffFieldRunSummary.Check(
@@ -229,14 +356,26 @@ public final class IffForegroundRadioService extends Service {
                 + " gpsDistanceM=" + gpsSnapshot.fieldValue(gpsSnapshot.distanceM)
                 + " gpsBearingDeg=" + gpsSnapshot.fieldValue(gpsSnapshot.bearingDeg)
                 + " remoteGpsSource=" + (remoteGpsReport == null ? "none" : safe(remoteGpsReport.sourcePlayerId))
-                + " gpsLocalProvider=" + safe(localGpsLocation == null ? "" : localGpsLocation.getProvider())
-                + " gpsLocalCluster=" + gpsCluster(localGpsLocation)
+                + " gpsLocalProvider=" + safe(rawLocalGpsLocation == null ? "" : rawLocalGpsLocation.getProvider())
+                + " gpsLocalCluster=" + gpsCluster(rawLocalGpsLocation)
+                + " gpsLocalLatE7=" + gpsLatE7(rawLocalGpsLocation)
+                + " gpsLocalLonE7=" + gpsLonE7(rawLocalGpsLocation)
+                + " gpsLocalAgeMs=" + gpsAgeMs(rawLocalGpsLocation)
+                + " gpsLocalAccuracyM=" + gpsAccuracyM(rawLocalGpsLocation)
                 + " gpsRemoteCluster=" + gpsCluster(remoteGpsReport)
+                + " gpsRemoteLatE7=" + gpsLatE7(remoteGpsReport)
+                + " gpsRemoteLonE7=" + gpsLonE7(remoteGpsReport)
+                + " gpsRemoteAgeMs=" + gpsAgeMs(remoteGpsReport)
+                + " gpsRemoteAccuracyM=" + gpsAccuracyM(remoteGpsReport)
+                + " gpsRawDistanceM=" + gpsRawDistanceM(localGpsLocation, remoteGpsReport)
+                + " gpsRawBearingDeg=" + gpsRawBearingDeg(localGpsLocation, remoteGpsReport)
                 + " fieldRadioStatus=\"" + clean(IffBleFieldRadio.compactStatus()) + "\""
                 + " fieldRadioPolicy=\"" + clean(IffBleFieldRadio.lifecycleStatus()) + "\""
                 + " fieldLocatorStatus=\"" + clean(locatorSnapshot.compact()) + "\""
+                + " operatorFieldMapStatus=\"" + clean(operatorFieldMapStatus(operatorFieldMapSnapshot)) + "\""
+                + " participantMapStatus=\"" + clean(participantMapStatus(participantMap)) + "\""
                 + " wifiDirectStatus=\"" + clean(IffWifiDirectDiscoveryTransport.compactStatus()) + "\""
-                + " wifiTargetStatus=\"" + clean(IffWifiTargetObservationStore.compactStatus()) + "\""
+                + " wifiTargetStatus=\"" + clean(wifiTargetStatus) + "\""
                 + " wifiFingerprintStatus=" + safe(wifiSnapshot.status)
                 + " wifiRefreshRequested=" + wifiSnapshot.refreshRequested
                 + " wifiRefreshAccepted=" + wifiSnapshot.refreshAccepted
@@ -244,6 +383,58 @@ public final class IffForegroundRadioService extends Service {
                 + " wifiFreshAgeMs=" + wifiSnapshot.freshAgeMs
                 + " wifiFingerprint=\"" + clean(wifiSnapshot.fingerprint) + "\""
                 + " transportStatus=\"" + clean(IffUdpWitnessTransport.compactStatus()) + "\"");
+    }
+
+    private static String operatorFieldMapStatus(IffFieldMapSnapshot snapshot) {
+        if (snapshot == null) {
+            return "source=NONE readiness=NO_ANCHORS distance=na clock=na visible=false directionKnown=false";
+        }
+        return "source=" + safe(snapshot.source)
+                + " readiness=" + safe(snapshot.readiness)
+                + " distance=" + (snapshot.distanceBucketM > 0 ? snapshot.distanceBucketM + "m" : "na")
+                + " clock=" + safe(snapshot.clockDirection)
+                + " visible=" + snapshot.targetVisible
+                + " directionKnown=" + snapshot.directionKnown
+                + " statusLine=" + clean(snapshot.statusLine);
+    }
+
+    private static String participantMapStatus(IffParticipantMapModel.Snapshot snapshot) {
+        if (snapshot == null) {
+            return "mode=NONE visibleCount=0 hiddenCount=0 reason=missing points=[]";
+        }
+        StringBuilder status = new StringBuilder();
+        status.append("mode=").append(safe(snapshot.mode))
+                .append(" visibleCount=").append(snapshot.points == null ? 0 : snapshot.points.size())
+                .append(" hiddenCount=").append(snapshot.hiddenCount)
+                .append(" reason=").append(clean(snapshot.reason))
+                .append(" points=[");
+        if (snapshot.points != null) {
+            for (int i = 0; i < snapshot.points.size(); i++) {
+                if (i > 0) {
+                    status.append("; ");
+                }
+                IffParticipantMapModel.Point point = snapshot.points.get(i);
+                status.append("playerId=").append(safe(point.playerId))
+                        .append(" displayName=").append(clean(point.displayName))
+                        .append(" distanceM=").append(point.distanceM)
+                        .append(" bearingDeg=").append(point.bearingDeg)
+                        .append(" ageMs=").append(point.ageMs)
+                        .append(" accuracyMeters=").append(participantAccuracy(point.accuracyMeters))
+                        .append(" sourcePlayerId=").append(safe(point.sourcePlayerId))
+                        .append(" hopCount=").append(point.hopCount)
+                        .append(" rssiDbm=").append(point.rssiDbm)
+                        .append(" approachActive=").append(point.approachActive);
+            }
+        }
+        status.append("]");
+        return status.toString();
+    }
+
+    private static String participantAccuracy(float accuracyMeters) {
+        if (Float.isNaN(accuracyMeters) || Float.isInfinite(accuracyMeters)) {
+            return "na";
+        }
+        return String.valueOf(Math.round(accuracyMeters));
     }
 
     private DistanceTargetSnapshot officeDistanceTrend() {
@@ -356,11 +547,18 @@ public final class IffForegroundRadioService extends Service {
         synchronized (LOCK) {
             latest = latestLocation == null ? null : new Location(latestLocation);
         }
-        if (latest != null && Math.max(0L, System.currentTimeMillis() - latest.getTime()) <= ACCEPTED_LOCATION_FRESH_MS) {
+        long nowWallMs = System.currentTimeMillis();
+        if (latest != null
+                && IffLocationFreshness.usableAgeMs(nowWallMs, latest.getTime(), ACCEPTED_LOCATION_STALE_MS) >= 0L) {
             return latest;
         }
+        latest = null;
+        if (best != null
+                && IffLocationFreshness.usableAgeMs(nowWallMs, best.getTime(), ACCEPTED_LOCATION_STALE_MS) < 0L) {
+            best = null;
+        }
         if (best == null) {
-            return latest;
+            return null;
         }
         if (latest == null) {
             return best;
@@ -385,7 +583,13 @@ public final class IffForegroundRadioService extends Service {
         if (requestLocationProvider(locationManager, LocationManager.GPS_PROVIDER)) {
             requested++;
         }
+        if (requestLocationProvider(locationManager, FUSED_PROVIDER)) {
+            requested++;
+        }
         if (requestLocationProvider(locationManager, LocationManager.NETWORK_PROVIDER)) {
+            requested++;
+        }
+        if (requestLocationProvider(locationManager, LocationManager.PASSIVE_PROVIDER)) {
             requested++;
         }
         FieldDiagnosticLog.event("IFF_DIAG", "event=gps_updates_start requested=true providers=" + requested);
@@ -397,6 +601,9 @@ public final class IffForegroundRadioService extends Service {
                 return false;
             }
             locationManager.requestLocationUpdates(provider, 1000L, 0.0f, locationListener);
+            boolean singleRequested = requestSingleLocationUpdate(locationManager, provider);
+            FieldDiagnosticLog.event("IFF_DIAG", "event=gps_provider_request provider="
+                    + safe(provider) + " accepted=true single=" + singleRequested);
             return true;
         } catch (SecurityException e) {
             FieldDiagnosticLog.event("IFF_DIAG", "event=gps_provider_request provider="
@@ -409,6 +616,17 @@ public final class IffForegroundRadioService extends Service {
         }
     }
 
+    private boolean requestSingleLocationUpdate(LocationManager locationManager, String provider) {
+        try {
+            locationManager.requestSingleUpdate(provider, singleLocationListener, getMainLooper());
+            return true;
+        } catch (SecurityException e) {
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     private void stopLocationUpdates(String reason) {
         LocationManager locationManager = activeLocationManager;
         activeLocationManager = null;
@@ -417,6 +635,7 @@ public final class IffForegroundRadioService extends Service {
         }
         try {
             locationManager.removeUpdates(locationListener);
+            locationManager.removeUpdates(singleLocationListener);
             FieldDiagnosticLog.event("IFF_DIAG", "event=gps_updates_stop reason=" + safe(reason));
         } catch (Exception e) {
             FieldDiagnosticLog.event("IFF_DIAG", "event=gps_updates_stop reason=" + safe(reason)
@@ -424,10 +643,116 @@ public final class IffForegroundRadioService extends Service {
         }
     }
 
+    private static void mergeLocalParticipantState(
+            Location location,
+            String currentLocalPlayerId,
+            long receivedTimeMillis) {
+        if (location == null || safe(currentLocalPlayerId).length() == 0) {
+            return;
+        }
+        String currentLocalDisplayName;
+        synchronized (LOCK) {
+            currentLocalDisplayName = localDisplayName;
+        }
+        long wallAgeMs = IffLocationFreshness.usableAgeMs(
+                System.currentTimeMillis(),
+                location.getTime(),
+                ACCEPTED_LOCATION_STALE_MS);
+        if (wallAgeMs < 0L) {
+            return;
+        }
+        long stateReceivedTimeMillis = Math.max(0L, receivedTimeMillis - wallAgeMs);
+        float accuracyMeters = normalizedAccuracyMeters(location.hasAccuracy() ? location.getAccuracy() : 100.0f);
+        PARTICIPANTS.merge(
+                IffParticipantState.create(
+                        currentLocalPlayerId,
+                        currentLocalPlayerId,
+                        normalizedDisplayName(currentLocalDisplayName, currentLocalPlayerId),
+                        location.getLatitude(),
+                        location.getLongitude(),
+                        accuracyMeters,
+                        location.getTime(),
+                        stateReceivedTimeMillis,
+                        0,
+                        Integer.MIN_VALUE,
+                        APPROACH.isActive(receivedTimeMillis)),
+                receivedTimeMillis);
+    }
+
+    private static void mergeFreshRemoteGpsReports(String currentLocalPlayerId, long receivedTimeMillis) {
+        for (int i = 0; i < FIELD_PLAYER_IDS.length; i++) {
+            String playerId = FIELD_PLAYER_IDS[i];
+            if (playerId.equals(safe(currentLocalPlayerId))) {
+                continue;
+            }
+            IffRemoteWitnessReport report = IffRemoteWitnessStore.getFreshGpsReportFor(playerId);
+            if (report == null || !report.hasGpsFix()) {
+                continue;
+            }
+            if (!IffGpsSanity.isPlausibleCoordinate(report.gpsLatitude(), report.gpsLongitude())) {
+                FieldDiagnosticLog.event("IFF_DIAG", "event=remote_gps_rejected"
+                        + " playerId=" + safe(playerId)
+                        + " sourcePlayerId=" + safe(report.sourcePlayerId)
+                        + " reason=gps_outlier"
+                        + " latE7=" + report.gpsLatE7
+                        + " lonE7=" + report.gpsLonE7
+                        + " accuracyM=" + report.gpsAccuracyM);
+                continue;
+            }
+            int hopCount = report.sourcePlayerId.endsWith(report.targetPlayerId) ? 0 : 1;
+            PARTICIPANTS.merge(
+                    IffParticipantState.create(
+                            report.targetPlayerId,
+                            report.sourcePlayerId,
+                            report.targetPlayerId,
+                            report.gpsLatitude(),
+                            report.gpsLongitude(),
+                            normalizedAccuracyMeters(report.gpsAccuracyM),
+                            report.gpsObservedElapsedMs,
+                            receivedTimeMillis,
+                            hopCount,
+                            report.rssi,
+                            false),
+                    receivedTimeMillis);
+        }
+    }
+
+    private static float normalizedAccuracyMeters(float accuracyMeters) {
+        if (Float.isNaN(accuracyMeters) || Float.isInfinite(accuracyMeters) || accuracyMeters <= 0.0f) {
+            return 100.0f;
+        }
+        return Math.max(1.0f, accuracyMeters);
+    }
+
     private void rememberLocation(Location location, String source) {
         if (location == null) {
             return;
         }
+        long wallAgeMs = IffLocationFreshness.usableAgeMs(
+                System.currentTimeMillis(),
+                location.getTime(),
+                ACCEPTED_LOCATION_STALE_MS);
+        if (wallAgeMs < 0L) {
+            FieldDiagnosticLog.event("IFF_DIAG", "event=gps_location_rejected"
+                    + " source=" + safe(source)
+                    + " provider=" + safe(location.getProvider())
+                    + " reason=rejected_stale"
+                    + " ageMs=na"
+                    + " accuracyM=" + (location.hasAccuracy() ? Math.round(location.getAccuracy()) : "na")
+                    + " latE7=" + gpsLatE7(location)
+                    + " lonE7=" + gpsLonE7(location)
+                    + " cluster=" + gpsCluster(location));
+            return;
+        }
+        if (isGpsOutlier(location)) {
+            String acceptedLocalPlayerId;
+            synchronized (LOCK) {
+                acceptedLocalPlayerId = localPlayerId;
+            }
+            quarantineLocalGps(location, acceptedLocalPlayerId, source);
+            return;
+        }
+        String acceptedLocalPlayerId;
         synchronized (LOCK) {
             if (latestLocation != null && latestLocation.getTime() > location.getTime()) {
                 return;
@@ -448,35 +773,81 @@ public final class IffForegroundRadioService extends Service {
                         + " jumpDistanceM=" + decision.jumpDistanceM
                         + " ageMs=" + rejectedAgeMs
                         + " accuracyM=" + (location.hasAccuracy() ? Math.round(location.getAccuracy()) : "na")
+                        + " latE7=" + gpsLatE7(location)
+                        + " lonE7=" + gpsLonE7(location)
                         + " cluster=" + gpsCluster(location));
                 return;
             }
             latestLocation = new Location(location);
+            acceptedLocalPlayerId = localPlayerId;
         }
+        long receivedTimeMillis = SystemClock.elapsedRealtime();
+        mergeLocalParticipantState(location, acceptedLocalPlayerId, receivedTimeMillis);
         IffBleFieldRadio.updateLocalGps(location);
+        IffWifiDirectDiscoveryTransport.updateLocalGps(location);
         long ageMs = Math.max(0L, System.currentTimeMillis() - location.getTime());
         FieldDiagnosticLog.event("IFF_DIAG", "event=gps_location_update"
                 + " source=" + safe(source)
                 + " provider=" + safe(location.getProvider())
                 + " ageMs=" + ageMs
                 + " accuracyM=" + (location.hasAccuracy() ? Math.round(location.getAccuracy()) : "na")
-                + " bearingDeg=" + (location.hasBearing() ? Math.round(location.getBearing()) : "na"));
+                + " bearingDeg=" + (location.hasBearing() ? Math.round(location.getBearing()) : "na")
+                + " latE7=" + gpsLatE7(location)
+                + " lonE7=" + gpsLonE7(location)
+                + " cluster=" + gpsCluster(location));
+    }
+
+    private static boolean isGpsOutlier(@Nullable Location location) {
+        return location != null
+                && !IffGpsSanity.isPlausibleCoordinate(location.getLatitude(), location.getLongitude());
+    }
+
+    private void quarantineLocalGps(Location location, String currentLocalPlayerId, String source) {
+        synchronized (LOCK) {
+            latestLocation = null;
+            lastStatus = "GPS OUTLIER radio-only";
+        }
+        PARTICIPANTS.remove(currentLocalPlayerId);
+        IffBleFieldRadio.updateLocalGps(null);
+        IffWifiDirectDiscoveryTransport.updateLocalGps(null);
+        startForegroundNotification(currentLocalPlayerId);
+        FieldDiagnosticLog.event("IFF_DIAG", "event=gps_location_rejected"
+                + " source=" + safe(source)
+                + " provider=" + safe(location == null ? "" : location.getProvider())
+                + " reason=gps_outlier_null_island"
+                + " ageMs=" + gpsAgeMs(location)
+                + " accuracyM=" + gpsAccuracyM(location)
+                + " latE7=" + gpsLatE7(location)
+                + " lonE7=" + gpsLonE7(location)
+                + " cluster=" + gpsCluster(location)
+                + " action=radio_only_no_gps_payload");
+    }
+
+    private static int gpsAccuracyValue(Location location) {
+        if (location == null || !location.hasAccuracy()) {
+            return -1;
+        }
+        return Math.round(location.getAccuracy());
     }
 
     @Nullable
     private Location bestLastKnownLocation(LocationManager locationManager) {
+        Location fused = lastKnown(locationManager, FUSED_PROVIDER);
         Location gps = lastKnown(locationManager, LocationManager.GPS_PROVIDER);
         Location network = lastKnown(locationManager, LocationManager.NETWORK_PROVIDER);
-        if (gps == null) {
-            return network;
+        Location passive = lastKnown(locationManager, LocationManager.PASSIVE_PROVIDER);
+        return newest(newest(fused, gps), newest(network, passive));
+    }
+
+    @Nullable
+    private Location newest(@Nullable Location first, @Nullable Location second) {
+        if (first == null) {
+            return second;
         }
-        if (network == null) {
-            return gps;
+        if (second == null) {
+            return first;
         }
-        if (gps.getTime() >= network.getTime()) {
-            return gps;
-        }
-        return network;
+        return first.getTime() >= second.getTime() ? first : second;
     }
 
     @Nullable
@@ -731,6 +1102,100 @@ public final class IffForegroundRadioService extends Service {
         return coordinateCluster(report.gpsLatitude(), report.gpsLongitude());
     }
 
+    private static String gpsLatE7(Location location) {
+        if (location == null) {
+            return "na";
+        }
+        return String.valueOf(coordinateE7(location.getLatitude()));
+    }
+
+    private static String gpsLonE7(Location location) {
+        if (location == null) {
+            return "na";
+        }
+        return String.valueOf(coordinateE7(location.getLongitude()));
+    }
+
+    private static String gpsLatE7(IffRemoteWitnessReport report) {
+        if (report == null || !report.hasGpsFix()) {
+            return "na";
+        }
+        return String.valueOf(report.gpsLatE7);
+    }
+
+    private static String gpsLonE7(IffRemoteWitnessReport report) {
+        if (report == null || !report.hasGpsFix()) {
+            return "na";
+        }
+        return String.valueOf(report.gpsLonE7);
+    }
+
+    private static String gpsAgeMs(Location location) {
+        if (location == null) {
+            return "na";
+        }
+        return String.valueOf(Math.max(0L, System.currentTimeMillis() - location.getTime()));
+    }
+
+    private static String gpsAgeMs(IffRemoteWitnessReport report) {
+        if (report == null || !report.hasGpsFix()) {
+            return "na";
+        }
+        return String.valueOf(report.gpsAgeMs());
+    }
+
+    private static String gpsAccuracyM(Location location) {
+        if (location == null || !location.hasAccuracy()) {
+            return "na";
+        }
+        return String.valueOf(Math.round(location.getAccuracy()));
+    }
+
+    private static String gpsAccuracyM(IffRemoteWitnessReport report) {
+        if (report == null || !report.hasGpsFix()) {
+            return "na";
+        }
+        return String.valueOf(report.gpsAccuracyM);
+    }
+
+    private static String gpsRawDistanceM(Location local, IffRemoteWitnessReport remote) {
+        float[] pair = gpsRawPair(local, remote);
+        if (pair == null) {
+            return "na";
+        }
+        return String.valueOf(Math.round(pair[0]));
+    }
+
+    private static String gpsRawBearingDeg(Location local, IffRemoteWitnessReport remote) {
+        float[] pair = gpsRawPair(local, remote);
+        if (pair == null) {
+            return "na";
+        }
+        float bearing = pair[1];
+        if (bearing < 0.0f) {
+            bearing += 360.0f;
+        }
+        return String.valueOf(Math.round(bearing));
+    }
+
+    private static float[] gpsRawPair(Location local, IffRemoteWitnessReport remote) {
+        if (local == null || remote == null || !remote.hasGpsFix()) {
+            return null;
+        }
+        float[] results = new float[2];
+        Location.distanceBetween(
+                local.getLatitude(),
+                local.getLongitude(),
+                remote.gpsLatitude(),
+                remote.gpsLongitude(),
+                results);
+        return results;
+    }
+
+    private static int coordinateE7(double coordinate) {
+        return (int) Math.round(coordinate * 10000000.0d);
+    }
+
     private static String coordinateCluster(double lat, double lon) {
         return Math.round(lat * 1000.0d) + "," + Math.round(lon * 1000.0d);
     }
@@ -752,10 +1217,14 @@ public final class IffForegroundRadioService extends Service {
                 stopIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
+        String status;
+        synchronized (LOCK) {
+            status = lastStatus;
+        }
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle("Compass IFF radio")
-                .setContentText("BLE IFF foreground radio: " + safe(playerId))
+                .setContentText(safe(playerId) + " / " + safe(status))
                 .setContentIntent(openPendingIntent)
                 .setOngoing(true)
                 .addAction(R.mipmap.ic_launcher, "STOP IFF", stopPendingIntent)
@@ -788,6 +1257,11 @@ public final class IffForegroundRadioService extends Service {
 
     private static String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private static String normalizedDisplayName(String displayName, String fallbackPlayerId) {
+        String trimmed = safe(displayName).trim();
+        return trimmed.length() == 0 ? safe(fallbackPlayerId) : trimmed;
     }
 
     private static String clean(String value) {

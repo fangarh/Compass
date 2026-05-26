@@ -312,24 +312,28 @@ public final class IffUdpWitnessTransport {
     }
 
     private static int gpsLatE7(Location location) {
-        return location == null ? IffRemoteWitnessFrame.GPS_UNAVAILABLE_INT
+        return location == null || !IffGpsSanity.isPlausibleCoordinate(location.getLatitude(), location.getLongitude())
+                ? IffRemoteWitnessFrame.GPS_UNAVAILABLE_INT
                 : IffRemoteWitnessFrame.coordinateE7(location.getLatitude());
     }
 
     private static int gpsLonE7(Location location) {
-        return location == null ? IffRemoteWitnessFrame.GPS_UNAVAILABLE_INT
+        return location == null || !IffGpsSanity.isPlausibleCoordinate(location.getLatitude(), location.getLongitude())
+                ? IffRemoteWitnessFrame.GPS_UNAVAILABLE_INT
                 : IffRemoteWitnessFrame.coordinateE7(location.getLongitude());
     }
 
     private static int gpsAccuracyM(Location location) {
-        if (location == null || !location.hasAccuracy()) {
+        if (location == null
+                || !IffGpsSanity.isPlausibleCoordinate(location.getLatitude(), location.getLongitude())
+                || !location.hasAccuracy()) {
             return IffRemoteWitnessFrame.GPS_UNAVAILABLE_INT;
         }
         return Math.round(location.getAccuracy());
     }
 
     private static long gpsAgeMs(Location location) {
-        if (location == null) {
+        if (location == null || !IffGpsSanity.isPlausibleCoordinate(location.getLatitude(), location.getLongitude())) {
             return IffRemoteWitnessFrame.GPS_UNAVAILABLE_AGE_MS;
         }
         return Math.max(0L, System.currentTimeMillis() - location.getTime());

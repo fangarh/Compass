@@ -30,6 +30,18 @@ public final class IffFieldLocatorSnapshot {
             IffWifiTargetLocator.Snapshot wifiTarget,
             IffDistanceTrend.Snapshot radioDistance,
             IffGpsSnapshot gps) {
+        if (gps != null
+                && "GPS_OK".equals(gps.status)
+                && gps.distanceM >= 0) {
+            return new IffFieldLocatorSnapshot(
+                    "OK",
+                    "GPS_ASSISTED",
+                    metricDistanceBucket(gps.distanceM),
+                    "na",
+                    gpsConfidence(gps),
+                    gps.bearingDeg,
+                    "gps " + gps.status + " accuracy=" + gps.fieldValue(gps.accuracyM) + "m");
+        }
         if (wifiTarget != null && "OK".equals(wifiTarget.status)) {
             return new IffFieldLocatorSnapshot(
                     "OK",
@@ -59,18 +71,6 @@ public final class IffFieldLocatorSnapshot {
                             + " delta="
                             + radioDistance.movementRssiDeltaDb
                             + "dB");
-        }
-        if (gps != null
-                && "GPS_OK".equals(gps.status)
-                && gps.distanceM >= 0) {
-            return new IffFieldLocatorSnapshot(
-                    "OK",
-                    "GPS_ASSISTED",
-                    metricDistanceBucket(gps.distanceM),
-                    "na",
-                    gpsConfidence(gps),
-                    gps.bearingDeg,
-                    "gps " + gps.status + " accuracy=" + gps.fieldValue(gps.accuracyM) + "m");
         }
         return new IffFieldLocatorSnapshot(
                 "INSUFFICIENT_DATA",

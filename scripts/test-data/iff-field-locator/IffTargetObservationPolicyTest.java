@@ -8,22 +8,22 @@ public final class IffTargetObservationPolicyTest {
     }
 
     private static void recordsAnchorObservationForTarget() {
-        if (!IffTargetObservationPolicy.shouldRecordAnchorObservation("vasya", "zhenya")) {
-            throw new AssertionError("vasya should record zhenya target RSSI");
+        if (!IffTargetObservationPolicy.shouldRecordAnchorObservation("vasya", "petya")) {
+            throw new AssertionError("vasya should record petya target RSSI");
         }
-        if (!IffTargetObservationPolicy.shouldRecordAnchorObservation("petya", "zhenya")) {
-            throw new AssertionError("petya should record zhenya target RSSI");
+        if (!IffTargetObservationPolicy.shouldRecordAnchorObservation("zhenya", "petya")) {
+            throw new AssertionError("zhenya should record petya target RSSI");
         }
     }
 
     private static void rejectsTargetPhoneAsAnchor() {
-        if (IffTargetObservationPolicy.shouldRecordAnchorObservation("zhenya", "zhenya")) {
+        if (IffTargetObservationPolicy.shouldRecordAnchorObservation("petya", "petya")) {
             throw new AssertionError("target phone must not act as its own anchor");
         }
     }
 
     private static void rejectsNonTargetObservation() {
-        if (IffTargetObservationPolicy.shouldRecordAnchorObservation("vasya", "petya")) {
+        if (IffTargetObservationPolicy.shouldRecordAnchorObservation("vasya", "zhenya")) {
             throw new AssertionError("non-target RSSI must not update target locator");
         }
     }

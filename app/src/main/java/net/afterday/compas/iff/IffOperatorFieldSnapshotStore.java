@@ -2,7 +2,7 @@ package net.afterday.compas.iff;
 
 public final class IffOperatorFieldSnapshotStore {
     private static final int MAX_SAMPLES = 8;
-    private static final long HOLD_MS = 8000L;
+    private static final long HOLD_MS = 10000L;
 
     private final Sample[] samples = new Sample[MAX_SAMPLES];
     private int count;
@@ -16,6 +16,10 @@ public final class IffOperatorFieldSnapshotStore {
         if (raw == null) {
             trim(nowMs);
             return fallback(null, nowMs);
+        }
+        if ("GPS_ASSISTED".equals(raw.source)) {
+            trim(nowMs);
+            return raw;
         }
         if (isTwoAnchorFix(raw)) {
             samples[nextIndex] = new Sample(raw.distanceBucketM, raw.clockDirection, nowMs);

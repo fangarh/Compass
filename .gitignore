@@ -51,3 +51,6 @@ desktop.ini
 
 # Accidental UI dump files from emulator QA
 docs/user-guide/images/*.xml
+
+# Local Superpowers runtime state
+.superpowers/

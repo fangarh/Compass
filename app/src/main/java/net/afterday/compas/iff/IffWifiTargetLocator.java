@@ -2,6 +2,8 @@ package net.afterday.compas.iff;
 
 public final class IffWifiTargetLocator {
     private static final int MIN_SAMPLES_PER_ANCHOR = 1;
+    private static final int SHADOWED_ANCHOR_RSSI_DBM = -88;
+    private static final int SHADOWED_ANCHOR_DELTA_DB = 16;
 
     private IffWifiTargetLocator() {
     }
@@ -12,6 +14,11 @@ public final class IffWifiTargetLocator {
                     leftRssi, rightRssi, 0);
         }
         int deltaRightMinusLeft = rightRssi - leftRssi;
+        if (Math.min(leftRssi, rightRssi) <= SHADOWED_ANCHOR_RSSI_DBM
+                && Math.abs(deltaRightMinusLeft) >= SHADOWED_ANCHOR_DELTA_DB) {
+            return new Snapshot("INSUFFICIENT_DATA", -1, "na", deltaRightMinusLeft, "LOW",
+                    leftRssi, rightRssi, Math.round((leftRssi + rightRssi) / 2.0f));
+        }
         int meanRssi = Math.round((leftRssi + rightRssi) / 2.0f);
         String clock = clockDirection(deltaRightMinusLeft);
         int distanceBucketM = distanceBucket(meanRssi);

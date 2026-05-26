@@ -7,6 +7,7 @@ public final class IffFieldMapSnapshot {
     public final String clockDirection;
     public final boolean targetVisible;
     public final boolean directionKnown;
+    public final int bearingDeg;
     public final float targetX;
     public final float targetY;
     public final String statusLine;
@@ -18,6 +19,7 @@ public final class IffFieldMapSnapshot {
             String clockDirection,
             boolean targetVisible,
             boolean directionKnown,
+            int bearingDeg,
             float targetX,
             float targetY,
             String statusLine) {
@@ -27,6 +29,7 @@ public final class IffFieldMapSnapshot {
         this.clockDirection = safe(clockDirection);
         this.targetVisible = targetVisible;
         this.directionKnown = directionKnown;
+        this.bearingDeg = bearingDeg;
         this.targetX = targetX;
         this.targetY = targetY;
         this.statusLine = safe(statusLine);
@@ -44,26 +47,34 @@ public final class IffFieldMapSnapshot {
                     "na",
                     false,
                     false,
+                    -1,
                     0.5f,
                     0.42f,
                     readiness + " / no field fix");
         }
 
-        boolean directionKnown = "WIFI_TARGET".equals(locator.source)
+        boolean gpsDirectionKnown = "GPS_ASSISTED".equals(locator.source)
+                && locator.bearingDeg >= 0;
+        boolean wifiDirectionKnown = "WIFI_TARGET".equals(locator.source)
                 && "TWO_ANCHORS".equals(readiness)
                 && !"na".equals(locator.clockDirection);
-        float[] target = targetPosition(locator.distanceBucketM, locator.clockDirection, directionKnown);
+        boolean directionKnown = gpsDirectionKnown || wifiDirectionKnown;
+        float[] target = gpsDirectionKnown
+                ? targetPositionForBearing(locator.distanceBucketM, locator.bearingDeg)
+                : targetPosition(locator.distanceBucketM, locator.clockDirection, wifiDirectionKnown);
         String status = locator.source
                 + " " + locator.distanceBucketM + "m"
-                + " clock=" + (directionKnown ? locator.clockDirection : "na")
+                + " clock=" + (wifiDirectionKnown ? locator.clockDirection : "na")
+                + (gpsDirectionKnown ? " bearing=" + locator.bearingDeg + "deg" : "")
                 + " " + readiness;
         return new IffFieldMapSnapshot(
                 readiness,
                 locator.source,
                 locator.distanceBucketM,
-                directionKnown ? locator.clockDirection : "na",
+                wifiDirectionKnown ? locator.clockDirection : "na",
                 true,
                 directionKnown,
+                gpsDirectionKnown ? locator.bearingDeg : -1,
                 target[0],
                 target[1],
                 status);
@@ -87,6 +98,7 @@ public final class IffFieldMapSnapshot {
                 directionKnown ? clockDirection : "na",
                 distanceBucketM > 0,
                 directionKnown,
+                -1,
                 target[0],
                 target[1],
                 statusLine);
@@ -97,7 +109,7 @@ public final class IffFieldMapSnapshot {
             return "MISSING_STATUS";
         }
         boolean leftReady = wifiTargetStatus.matches(".*left=vasya:-\\d+.*");
-        boolean rightReady = wifiTargetStatus.matches(".*right=petya:-\\d+.*");
+        boolean rightReady = wifiTargetStatus.matches(".*right=zhenya:-\\d+.*");
         if (leftReady && rightReady) {
             return "TWO_ANCHORS";
         }
@@ -114,6 +126,14 @@ public final class IffFieldMapSnapshot {
         }
         float angleDeg = angleForClock(clockDirection);
         double angleRad = Math.toRadians(angleDeg);
+        float x = 0.5f + (float) Math.sin(angleRad) * radius;
+        float y = 0.64f - (float) Math.cos(angleRad) * radius;
+        return new float[] {clamp(x, 0.12f, 0.88f), clamp(y, 0.16f, 0.82f)};
+    }
+
+    private static float[] targetPositionForBearing(int distanceBucketM, int bearingDeg) {
+        float radius = radiusFor(distanceBucketM);
+        double angleRad = Math.toRadians(bearingDeg);
         float x = 0.5f + (float) Math.sin(angleRad) * radius;
         float y = 0.64f - (float) Math.cos(angleRad) * radius;
         return new float[] {clamp(x, 0.12f, 0.88f), clamp(y, 0.16f, 0.82f)};

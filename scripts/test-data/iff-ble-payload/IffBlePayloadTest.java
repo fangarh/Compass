@@ -1,14 +1,18 @@
 import net.afterday.compas.iff.IffBlePayload;
 import net.afterday.compas.iff.IffBleAdvertiseRestartPolicy;
+import net.afterday.compas.iff.IffBleGpsAgeTracker;
+import net.afterday.compas.iff.IffBleScanRetryPolicy;
 
 public final class IffBlePayloadTest {
     public static void main(String[] args) {
         parsesLegacyPlayerPayload();
         roundTripsGpsPayload();
         treatsGpsAgeOnlyChangeAsSameAdvertiseContent();
+        growsBleGpsAgeForRepeatedAdvertiseContent();
         restartsAdvertiserWhenItIsNotAdvertising();
         throttlesAdvertiseRestartWhileStartIsPending();
         throttlesGpsContentAdvertiseRestarts();
+        backsOffBleScanRetryAfterRegistrationFailure();
         rejectsInvalidPayloads();
     }
 
@@ -73,6 +77,27 @@ public final class IffBlePayloadTest {
                 "coordinate change should force BLE advertiser restart");
     }
 
+    private static void growsBleGpsAgeForRepeatedAdvertiseContent() {
+        IffBleGpsAgeTracker tracker = new IffBleGpsAgeTracker();
+        byte[] payload = IffBlePayload.forPlayerWithGps(
+                1,
+                557558000,
+                376173000,
+                12,
+                1000L);
+
+        assertEquals(1000L, tracker.effectiveGpsAgeMs("zhenya/aa", payload, 5000L));
+        assertEquals(4000L, tracker.effectiveGpsAgeMs("zhenya/aa", payload, 8000L));
+
+        byte[] moved = IffBlePayload.forPlayerWithGps(
+                1,
+                557558500,
+                376173000,
+                12,
+                1200L);
+        assertEquals(1200L, tracker.effectiveGpsAgeMs("zhenya/aa", moved, 9000L));
+    }
+
     private static void restartsAdvertiserWhenItIsNotAdvertising() {
         byte[] first = IffBlePayload.forPlayerWithGps(
                 1,
@@ -111,11 +136,11 @@ public final class IffBlePayloadTest {
 
         assertFalse(
                 IffBleAdvertiseRestartPolicy.shouldRestart(
-                        true, true, false, true, 1000L, 3000L, first, moved),
+                        true, true, false, true, 1000L, 5000L, first, moved),
                 "pending advertiser start should not be restarted inside the grace window");
         assertTrue(
                 IffBleAdvertiseRestartPolicy.shouldRestart(
-                        true, true, false, true, 1000L, 7000L, first, moved),
+                        true, true, false, true, 1000L, 6000L, first, moved),
                 "stale pending advertiser start can be retried after the grace window");
     }
 
@@ -136,11 +161,18 @@ public final class IffBlePayloadTest {
         assertFalse(
                 IffBleAdvertiseRestartPolicy.shouldRestart(
                         true, true, true, false, 1000L, 5000L, first, moved),
-                "GPS content changes should not restart BLE advertising too frequently");
+                "GPS content changes should not restart BLE advertising inside throttle");
         assertTrue(
                 IffBleAdvertiseRestartPolicy.shouldRestart(
-                        true, true, true, false, 1000L, 17000L, first, moved),
+                        true, true, true, false, 1000L, 6000L, first, moved),
                 "GPS content changes can restart BLE advertising after the throttle interval");
+    }
+
+    private static void backsOffBleScanRetryAfterRegistrationFailure() {
+        assertEquals(2000L, IffBleScanRetryPolicy.delayMs(1));
+        assertEquals(5000L, IffBleScanRetryPolicy.delayMs(2));
+        assertEquals(10000L, IffBleScanRetryPolicy.delayMs(3));
+        assertEquals(10000L, IffBleScanRetryPolicy.delayMs(7));
     }
 
     private static void rejectsInvalidPayloads() {

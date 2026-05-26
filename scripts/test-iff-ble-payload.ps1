@@ -22,9 +22,11 @@ New-Item -ItemType Directory -Force $outDir | Out-Null
 
 $payloadSource = Join-Path $root "app\src\main\java\net\afterday\compas\iff\IffBlePayload.java"
 $restartPolicySource = Join-Path $root "app\src\main\java\net\afterday\compas\iff\IffBleAdvertiseRestartPolicy.java"
+$ageTrackerSource = Join-Path $root "app\src\main\java\net\afterday\compas\iff\IffBleGpsAgeTracker.java"
+$scanRetryPolicySource = Join-Path $root "app\src\main\java\net\afterday\compas\iff\IffBleScanRetryPolicy.java"
 $test = Join-Path $root "scripts\test-data\iff-ble-payload\IffBlePayloadTest.java"
 
-& $javac -encoding UTF-8 -d $outDir $payloadSource $restartPolicySource $test
+& $javac -encoding UTF-8 -d $outDir $payloadSource $restartPolicySource $ageTrackerSource $scanRetryPolicySource $test
 if ($LASTEXITCODE -ne 0) {
     throw "javac failed with exit code $LASTEXITCODE"
 }

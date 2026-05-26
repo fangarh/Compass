@@ -4,6 +4,7 @@ import android.Manifest;
 import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.location.Location;
 import android.net.wifi.p2p.WifiP2pDevice;
 import android.net.wifi.p2p.WifiP2pDeviceList;
 import android.net.wifi.p2p.WifiP2pManager;
@@ -13,13 +14,14 @@ import android.net.wifi.p2p.nsd.WifiP2pServiceRequest;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import java.util.Map;
 import net.afterday.compas.logging.FieldDiagnosticLog;
 
 @TargetApi(16)
 public final class IffWifiDirectDiscoveryTransport {
     private static final Object LOCK = new Object();
-    private static final long REFRESH_MS = 15000L;
+    private static final long REFRESH_MS = 1000L;
     private static WifiP2pManager manager;
     private static WifiP2pManager.Channel channel;
     private static WifiP2pServiceRequest serviceRequest;
@@ -29,6 +31,7 @@ public final class IffWifiDirectDiscoveryTransport {
     private static String localPlayerId = "";
     private static String targetPlayerId = "";
     private static int targetRssi;
+    private static Location latestLocalGps;
     private static String lastStatus = "idle";
     private static long sequence;
 
@@ -155,6 +158,12 @@ public final class IffWifiDirectDiscoveryTransport {
         }
     }
 
+    public static void updateLocalGps(Location location) {
+        synchronized (LOCK) {
+            latestLocalGps = location == null ? null : new Location(location);
+        }
+    }
+
     private static void installListeners(WifiP2pManager nextManager, WifiP2pManager.Channel nextChannel) {
         nextManager.setDnsSdResponseListeners(
                 nextChannel,
@@ -205,6 +214,8 @@ public final class IffWifiDirectDiscoveryTransport {
                                 + " domain=" + clean(fullDomainName)
                                 + " deviceName=\"" + clean(srcDevice == null ? "" : srcDevice.deviceName) + "\""
                                 + " address=" + clean(srcDevice == null ? "" : srcDevice.deviceAddress));
+                        recordCoordinateMessage(parsed);
+                        recordGpsReports(parsed, srcDevice);
                         recordTargetObservation(parsed);
                     }
                 });
@@ -216,6 +227,7 @@ public final class IffWifiDirectDiscoveryTransport {
         String playerId;
         String currentTargetPlayerId;
         int currentTargetRssi;
+        Location localGps;
         long nextSequence;
         synchronized (LOCK) {
             if (!running || manager == null || channel == null) {
@@ -226,9 +238,21 @@ public final class IffWifiDirectDiscoveryTransport {
             playerId = localPlayerId;
             currentTargetPlayerId = targetPlayerId;
             currentTargetRssi = targetRssi;
+            localGps = latestLocalGps == null ? null : new Location(latestLocalGps);
             sequence++;
             nextSequence = sequence;
         }
+        IffRemoteWitnessReport targetGpsReport = currentTargetPlayerId.length() == 0
+                ? null
+                : IffRemoteWitnessStore.getFreshGpsReportFor(currentTargetPlayerId);
+        Map<String, String> txt = txtPayload(
+                playerId,
+                nextSequence,
+                System.currentTimeMillis(),
+                localGps,
+                currentTargetPlayerId,
+                currentTargetRssi,
+                targetGpsReport);
         final WifiP2pDnsSdServiceInfo serviceInfo = WifiP2pDnsSdServiceInfo.newInstance(
                 IffWifiDirectPayload.buildInstanceName(
                         playerId,
@@ -236,7 +260,7 @@ public final class IffWifiDirectDiscoveryTransport {
                         currentTargetPlayerId,
                         currentTargetRssi),
                 IffWifiDirectPayload.SERVICE_TYPE,
-                IffWifiDirectPayload.build(playerId, nextSequence, System.currentTimeMillis()));
+                txt);
         try {
             currentManager.clearLocalServices(currentChannel, new WifiP2pManager.ActionListener() {
                 @Override
@@ -513,6 +537,157 @@ public final class IffWifiDirectDiscoveryTransport {
                 + " targetPlayerId=" + clean(parsed.targetPlayerId)
                 + " rssi=" + parsed.targetRssi
                 + " sequence=" + parsed.sequence);
+    }
+
+    private static void recordCoordinateMessage(IffWifiDirectPayload.Parsed parsed) {
+        if (parsed == null || parsed.coordinateMessage.length() == 0) {
+            return;
+        }
+        IffCoordinateMessage.Parsed coordinates =
+                IffCoordinateMessage.parse(parsed.coordinateMessage, SystemClock.elapsedRealtime());
+        if (coordinates == null) {
+            FieldDiagnosticLog.event("IFF_DIAG", "event=wifi_direct_coordinates_rx"
+                    + " accepted=false"
+                    + " playerId=" + clean(parsed.playerId)
+                    + " sequence=" + parsed.sequence
+                    + " stateCount=0");
+            return;
+        }
+        for (int i = 0; i < coordinates.states.size(); i++) {
+            IffForegroundRadioService.mergeParticipantState(coordinates.states.get(i));
+        }
+        FieldDiagnosticLog.event("IFF_DIAG", "event=wifi_direct_coordinates_rx"
+                + " accepted=true"
+                + " senderPlayerId=" + clean(coordinates.senderPlayerId)
+                + " payloadPlayerId=" + clean(parsed.playerId)
+                + " sequence=" + coordinates.sequence
+                + " stateCount=" + coordinates.states.size());
+    }
+
+    private static void recordGpsReports(IffWifiDirectPayload.Parsed parsed, WifiP2pDevice srcDevice) {
+        if (parsed == null) {
+            return;
+        }
+        String address = srcDevice == null ? "" : srcDevice.deviceAddress;
+        if (parsed.hasGps) {
+            receiveGpsReport(
+                    "wfd-" + parsed.playerId,
+                    parsed.playerId,
+                    -1,
+                    parsed.gpsLatE7,
+                    parsed.gpsLonE7,
+                    parsed.gpsAccuracyM,
+                    parsed.gpsAgeMs,
+                    address,
+                    "wifi_direct_gps_rx");
+        }
+        if (parsed.hasTargetGps && parsed.targetPlayerId.length() > 0) {
+            receiveGpsReport(
+                    "wfd-relay-" + parsed.playerId,
+                    parsed.targetPlayerId,
+                    parsed.targetRssi,
+                    parsed.targetGpsLatE7,
+                    parsed.targetGpsLonE7,
+                    parsed.targetGpsAccuracyM,
+                    parsed.targetGpsAgeMs,
+                    address,
+                    "wifi_direct_target_gps_rx");
+        }
+    }
+
+    private static void receiveGpsReport(
+            String sourcePlayerId,
+            String targetPlayerId,
+            int rssi,
+            int gpsLatE7,
+            int gpsLonE7,
+            int gpsAccuracyM,
+            long gpsAgeMs,
+            String address,
+            String event) {
+        long now = SystemClock.elapsedRealtime();
+        long observedElapsedMs = now - Math.max(0L, gpsAgeMs);
+        boolean accepted = IffRemoteWitnessStore.receiveReport(new IffRemoteWitnessReport(
+                sourcePlayerId,
+                targetPlayerId,
+                IffRadioWitnessStore.expectedBeaconSsid(targetPlayerId),
+                "wfd:" + safe(address),
+                rssi,
+                0,
+                observedElapsedMs,
+                now,
+                IffRemoteWitnessReport.SIGNATURE_PENDING,
+                gpsLatE7,
+                gpsLonE7,
+                gpsAccuracyM,
+                observedElapsedMs));
+        FieldDiagnosticLog.event("IFF_DIAG", "event=" + event
+                + " accepted=" + accepted
+                + " sourcePlayerId=" + clean(sourcePlayerId)
+                + " targetPlayerId=" + clean(targetPlayerId)
+                + " gpsAgeMs=" + gpsAgeMs
+                + " gpsAccuracyM=" + gpsAccuracyM);
+    }
+
+    private static Map<String, String> txtPayload(
+            String playerId,
+            long sequence,
+            long timestampMs,
+            Location localGps,
+            String currentTargetPlayerId,
+            int currentTargetRssi,
+            IffRemoteWitnessReport targetGpsReport) {
+        boolean hasLocalGps = hasFreshGps(localGps);
+        boolean hasTargetGps = targetGpsReport != null && targetGpsReport.hasGpsFix();
+        Map<String, String> txt;
+        if (hasLocalGps && hasTargetGps) {
+            txt = IffWifiDirectPayload.build(
+                    playerId,
+                    sequence,
+                    timestampMs,
+                    IffRemoteWitnessFrame.coordinateE7(localGps.getLatitude()),
+                    IffRemoteWitnessFrame.coordinateE7(localGps.getLongitude()),
+                    localGps.hasAccuracy() ? Math.round(localGps.getAccuracy()) : 0,
+                    Math.max(0L, System.currentTimeMillis() - localGps.getTime()),
+                    currentTargetPlayerId,
+                    currentTargetRssi,
+                    targetGpsReport.gpsLatE7,
+                    targetGpsReport.gpsLonE7,
+                    targetGpsReport.gpsAccuracyM,
+                    targetGpsReport.gpsAgeMs());
+        } else if (hasLocalGps) {
+            txt = IffWifiDirectPayload.build(
+                    playerId,
+                    sequence,
+                    timestampMs,
+                    IffRemoteWitnessFrame.coordinateE7(localGps.getLatitude()),
+                    IffRemoteWitnessFrame.coordinateE7(localGps.getLongitude()),
+                    localGps.hasAccuracy() ? Math.round(localGps.getAccuracy()) : 0,
+                    Math.max(0L, System.currentTimeMillis() - localGps.getTime()));
+        } else if (hasTargetGps) {
+            txt = IffWifiDirectPayload.build(
+                    playerId,
+                    sequence,
+                    timestampMs,
+                    currentTargetPlayerId,
+                    currentTargetRssi,
+                    targetGpsReport.gpsLatE7,
+                    targetGpsReport.gpsLonE7,
+                    targetGpsReport.gpsAccuracyM,
+                    targetGpsReport.gpsAgeMs());
+        } else {
+            txt = IffWifiDirectPayload.build(playerId, sequence, timestampMs);
+        }
+        IffWifiDirectPayload.putCoordinateMessage(
+                txt,
+                IffForegroundRadioService.coordinateMessageForBroadcast(playerId, sequence));
+        return txt;
+    }
+
+    private static boolean hasFreshGps(Location location) {
+        return location != null
+                && IffGpsSanity.isPlausibleCoordinate(location.getLatitude(), location.getLongitude())
+                && System.currentTimeMillis() - location.getTime() <= 15000L;
     }
 
     private static String safe(String value) {

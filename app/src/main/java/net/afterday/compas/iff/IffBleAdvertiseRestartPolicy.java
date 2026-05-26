@@ -2,7 +2,7 @@ package net.afterday.compas.iff;
 
 public final class IffBleAdvertiseRestartPolicy {
     public static final long START_GRACE_MS = 5000L;
-    public static final long CONTENT_RESTART_THROTTLE_MS = 15000L;
+    public static final long CONTENT_RESTART_THROTTLE_MS = 5000L;
 
     private IffBleAdvertiseRestartPolicy() {
     }

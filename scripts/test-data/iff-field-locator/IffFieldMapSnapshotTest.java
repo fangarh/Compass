@@ -5,9 +5,39 @@ public final class IffFieldMapSnapshotTest {
     }
 
     public static void run() {
+        usesGpsBearingWithoutTwoAnchors();
         showsTwoAnchorClockPosition();
         fallsBackToRingWithoutDirectionForOneAnchor();
         treatsRssi127AsMissingAnchor();
+    }
+
+    private static void usesGpsBearingWithoutTwoAnchors() {
+        IffGpsSnapshot gps = IffGpsSnapshot.fromPair(
+                1000L,
+                true,
+                4.0f,
+                55.0,
+                37.0,
+                1000L,
+                true,
+                5.0f,
+                55.0,
+                37.00018);
+        IffFieldLocatorSnapshot locator = IffFieldLocatorSnapshot.from(
+                IffWifiTargetLocator.estimate(0, 0, 0, 0),
+                IffDistanceTrend.evaluate(null, null),
+                gps);
+
+        IffFieldMapSnapshot map = IffFieldMapSnapshot.from(
+                locator,
+                "target=petya left=vasya:missing right=zhenya:missing locator=INSUFFICIENT_DATA");
+
+        assertEquals("NO_ANCHORS", map.readiness, "gps readiness");
+        assertEquals("GPS_ASSISTED", map.source, "gps source");
+        assertEquals("na", map.clockDirection, "gps clock");
+        assertTrue(map.directionKnown, "gps bearing gives direction");
+        assertTrue(map.targetVisible, "gps target visible");
+        assertTrue(map.targetX > 0.5f, "east bearing is right of center");
     }
 
     private static void showsTwoAnchorClockPosition() {
@@ -19,7 +49,7 @@ public final class IffFieldMapSnapshotTest {
 
         IffFieldMapSnapshot map = IffFieldMapSnapshot.from(
                 locator,
-                "target=zhenya left=vasya:-66 ageMs=1000 right=petya:-54 ageMs=1000 locator=15m clock=2");
+                "target=petya left=vasya:-66 ageMs=1000 right=zhenya:-54 ageMs=1000 locator=15m clock=2");
 
         assertEquals("TWO_ANCHORS", map.readiness, "readiness");
         assertEquals("WIFI_TARGET", map.source, "source");
@@ -41,7 +71,7 @@ public final class IffFieldMapSnapshotTest {
 
         IffFieldMapSnapshot map = IffFieldMapSnapshot.from(
                 locator,
-                "target=zhenya left=vasya:-55 ageMs=1000 right=petya:missing locator=INSUFFICIENT_DATA");
+                "target=petya left=vasya:-55 ageMs=1000 right=zhenya:missing locator=INSUFFICIENT_DATA");
 
         assertEquals("ONE_ANCHOR", map.readiness, "readiness");
         assertEquals("FIELD_RADIO_RSSI", map.source, "source");
@@ -57,7 +87,7 @@ public final class IffFieldMapSnapshotTest {
                         IffWifiTargetLocator.estimate(0, 0, 0, 0),
                         IffDistanceTrend.evaluate(null, null),
                         IffGpsSnapshot.unavailable()),
-                "target=zhenya left=vasya:-55 ageMs=1000 right=petya:127 ageMs=20 locator=INSUFFICIENT_DATA");
+                "target=petya left=vasya:-55 ageMs=1000 right=zhenya:127 ageMs=20 locator=INSUFFICIENT_DATA");
 
         assertEquals("ONE_ANCHOR", map.readiness, "127 readiness");
         assertTrue(!map.directionKnown, "127 cannot create direction");

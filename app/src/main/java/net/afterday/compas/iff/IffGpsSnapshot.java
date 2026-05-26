@@ -4,6 +4,7 @@ public final class IffGpsSnapshot {
     private static final double EARTH_RADIUS_M = 6371000.0;
     private static final long STALE_AGE_MS = 15000L;
     private static final int NEARBY_RADIO_GPS_OUTLIER_M = 500;
+    private static final int DIRECT_RADIO_GPS_OUTLIER_M = 2000;
 
     public final String status;
     public final int accuracyM;
@@ -19,6 +20,10 @@ public final class IffGpsSnapshot {
 
     public static IffGpsSnapshot unavailable() {
         return new IffGpsSnapshot("GPS_UNAVAILABLE", -1, -1, -1);
+    }
+
+    public static IffGpsSnapshot outlier(int accuracyM) {
+        return new IffGpsSnapshot("GPS_OUTLIER", accuracyM, -1, -1);
     }
 
     public static IffGpsSnapshot from(
@@ -61,8 +66,8 @@ public final class IffGpsSnapshot {
             double remoteLat,
             double remoteLon) {
         if (localAgeMs < 0L || remoteAgeMs < 0L
-                || !validCoordinate(localLat, localLon)
-                || !validCoordinate(remoteLat, remoteLon)) {
+                || !IffGpsSanity.isPlausibleCoordinate(localLat, localLon)
+                || !IffGpsSanity.isPlausibleCoordinate(remoteLat, remoteLon)) {
             return unavailable();
         }
         int combinedAccuracyM = combinedAccuracy(
@@ -112,6 +117,9 @@ public final class IffGpsSnapshot {
         if (snapshot.distanceM > NEARBY_RADIO_GPS_OUTLIER_M && nearbyRadioClass(radioDistanceClass)) {
             return new IffGpsSnapshot("GPS_OUTLIER", snapshot.accuracyM, -1, -1);
         }
+        if (snapshot.distanceM > DIRECT_RADIO_GPS_OUTLIER_M && directRadioVisibleClass(radioDistanceClass)) {
+            return new IffGpsSnapshot("GPS_OUTLIER", snapshot.accuracyM, -1, -1);
+        }
         return snapshot;
     }
 
@@ -147,18 +155,14 @@ public final class IffGpsSnapshot {
         return Math.round(Math.max(localAccuracyM, remoteAccuracyM));
     }
 
-    private static boolean validCoordinate(double lat, double lon) {
-        return !Double.isNaN(lat)
-                && !Double.isNaN(lon)
-                && lat >= -90.0
-                && lat <= 90.0
-                && lon >= -180.0
-                && lon <= 180.0;
-    }
-
     private static boolean nearbyRadioClass(String radioDistanceClass) {
         String value = safe(radioDistanceClass);
         return "VERY_NEAR".equals(value) || "NEAR".equals(value) || "MID".equals(value);
+    }
+
+    private static boolean directRadioVisibleClass(String radioDistanceClass) {
+        String value = safe(radioDistanceClass);
+        return nearbyRadioClass(value) || "FAR".equals(value) || "EDGE".equals(value);
     }
 
     private static double distanceMeters(double lat1, double lon1, double lat2, double lon2) {

@@ -2,10 +2,16 @@ package net.afterday.compas;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Typeface;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.location.Location;
 import android.location.LocationManager;
 import android.os.Build;
@@ -13,10 +19,13 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.support.annotation.Nullable;
+import android.text.InputType;
+import android.util.DisplayMetrics;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import java.util.ArrayList;
@@ -32,6 +41,7 @@ import net.afterday.compas.iff.IffForegroundRadioService;
 import net.afterday.compas.iff.IffGpsSnapshot;
 import net.afterday.compas.iff.IffOfficeProximityVerdict;
 import net.afterday.compas.iff.IffOperatorFieldSnapshotStore;
+import net.afterday.compas.iff.IffParticipantMapModel;
 import net.afterday.compas.iff.IffRemoteWitnessReport;
 import net.afterday.compas.iff.IffRemoteWitnessStore;
 import net.afterday.compas.iff.IffRadioWitnessStore;
@@ -43,17 +53,18 @@ import net.afterday.compas.iff.IffWitnessQuorum;
 import net.afterday.compas.iff.IffWifiTargetObservationStore;
 import net.afterday.compas.logging.FieldDiagnosticLog;
 
-public class IffActivity extends Activity {
+public class IffActivity extends Activity implements SensorEventListener {
     private static final int TAB_CONTACT = 0;
     private static final int TAB_TEAM = 1;
     private static final int TAB_MAP = 2;
     private static final int TAB_LOG = 3;
     private static final int LOCAL_PLAYER_INDEX = 0;
     private static final long APPROACH_DURATION_MS = 120000L;
-    private static final long RADIO_REFRESH_MS = 2000L;
+    private static final long RADIO_REFRESH_MS = 1000L;
     private static final long DISTANCE_WINDOW_MS = 6000L;
     private static final String PREFS_NAME = "iff";
     private static final String PREF_LOCAL_DEVICE_PLAYER_ID = "local_device_player_id";
+    private static final String PREF_PLAYER_DISPLAY_NAME_PREFIX = "player_display_name_";
     private static final String PREF_FIELD_RADIO_ENABLED = "field_radio_enabled";
     private static final String PREF_TRUSTED_PLAYER_PREFIX = "trusted_player_";
 
@@ -72,6 +83,19 @@ public class IffActivity extends Activity {
     private String localDevicePlayerId = "local-you";
     private boolean approachActive;
     private long approachUntilMs;
+    private SensorManager sensorManager;
+    private Sensor rotationSensor;
+    private Sensor accelerometerSensor;
+    private Sensor magneticSensor;
+    private final float[] rotationMatrix = new float[9];
+    private final float[] orientation = new float[3];
+    private final float[] accelValues = new float[3];
+    private final float[] magneticValues = new float[3];
+    private boolean hasAccelValues;
+    private boolean hasMagneticValues;
+    private boolean headingAvailable;
+    private float phoneHeadingDeg;
+    private long lastHeadingRenderElapsedMs;
 
     private Button contactTab;
     private Button teamTab;
@@ -93,6 +117,7 @@ public class IffActivity extends Activity {
         @Override
         public void run() {
             approachActive = false;
+            IffForegroundRadioService.clearApproach();
             render();
         }
     };
@@ -111,12 +136,15 @@ public class IffActivity extends Activity {
         FieldDiagnosticLog.start(this);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.iff_activity);
         loadLocalDeviceIdentity();
+        loadPlayerDisplayNames();
         loadFieldRadioPreference();
         bindViews();
         setTypeface();
         setListeners();
+        setupHeadingSensors();
         render();
     }
 
@@ -125,6 +153,7 @@ public class IffActivity extends Activity {
         super.onResume();
         IffUdpWitnessTransport.ensureStarted();
         ensureFieldRadioService();
+        startHeadingSensors();
         render();
         if (approachActive) {
             scheduleApproachExpire();
@@ -137,8 +166,33 @@ public class IffActivity extends Activity {
     protected void onPause() {
         handler.removeCallbacks(expireApproach);
         handler.removeCallbacks(refreshRadioState);
+        stopHeadingSensors();
         IffUdpWitnessTransport.stop();
         super.onPause();
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+        if (event == null || event.sensor == null) {
+            return;
+        }
+        int type = event.sensor.getType();
+        if (type == Sensor.TYPE_ROTATION_VECTOR) {
+            SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values);
+            updateHeadingFromMatrix();
+        } else if (type == Sensor.TYPE_ACCELEROMETER) {
+            System.arraycopy(event.values, 0, accelValues, 0, Math.min(event.values.length, accelValues.length));
+            hasAccelValues = true;
+            updateHeadingFromAccelMag();
+        } else if (type == Sensor.TYPE_MAGNETIC_FIELD) {
+            System.arraycopy(event.values, 0, magneticValues, 0, Math.min(event.values.length, magneticValues.length));
+            hasMagneticValues = true;
+            updateHeadingFromAccelMag();
+        }
+    }
+
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
     }
 
     private void bindViews() {
@@ -227,9 +281,69 @@ public class IffActivity extends Activity {
         radioServiceButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                if (activeTab == TAB_MAP) {
+                    return;
+                }
                 toggleFieldRadioService();
             }
         });
+    }
+
+    private void setupHeadingSensors() {
+        sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        if (sensorManager == null) {
+            return;
+        }
+        rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR);
+        accelerometerSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        magneticSensor = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
+    }
+
+    private void startHeadingSensors() {
+        if (sensorManager == null) {
+            return;
+        }
+        if (rotationSensor != null) {
+            sensorManager.registerListener(this, rotationSensor, SensorManager.SENSOR_DELAY_GAME);
+            return;
+        }
+        if (accelerometerSensor != null) {
+            sensorManager.registerListener(this, accelerometerSensor, SensorManager.SENSOR_DELAY_GAME);
+        }
+        if (magneticSensor != null) {
+            sensorManager.registerListener(this, magneticSensor, SensorManager.SENSOR_DELAY_GAME);
+        }
+    }
+
+    private void stopHeadingSensors() {
+        if (sensorManager != null) {
+            sensorManager.unregisterListener(this);
+        }
+    }
+
+    private void updateHeadingFromAccelMag() {
+        if (!hasAccelValues || !hasMagneticValues) {
+            return;
+        }
+        if (SensorManager.getRotationMatrix(rotationMatrix, null, accelValues, magneticValues)) {
+            updateHeadingFromMatrix();
+        }
+    }
+
+    private void updateHeadingFromMatrix() {
+        SensorManager.getOrientation(rotationMatrix, orientation);
+        phoneHeadingDeg = normalizeDegrees((float) Math.toDegrees(orientation[0]));
+        headingAvailable = true;
+        long now = SystemClock.elapsedRealtime();
+        if (activeTab == TAB_MAP && now - lastHeadingRenderElapsedMs >= 250L) {
+            lastHeadingRenderElapsedMs = now;
+            render();
+        }
+    }
+
+    private float normalizeDegrees(float degrees) {
+        float value = degrees % 360.0f;
+        return value < 0.0f ? value + 360.0f : value;
     }
 
     private void toggleApproach() {
@@ -238,8 +352,13 @@ public class IffActivity extends Activity {
             approachUntilMs = System.currentTimeMillis() + APPROACH_DURATION_MS;
             selectedPlayerIndex = localDevicePlayerIndex();
             activeTab = TAB_CONTACT;
+            IffForegroundRadioService.activateApproach();
+            if (fieldRadioEnabled) {
+                IffForegroundRadioService.start(this, localDevicePlayerId, localDevicePlayer().displayName);
+            }
             scheduleApproachExpire();
         } else {
+            IffForegroundRadioService.clearApproach();
             handler.removeCallbacks(expireApproach);
         }
         render();
@@ -258,8 +377,15 @@ public class IffActivity extends Activity {
             approachButton.setText(approachActive ? "ОТМЕНИТЬ ПОДХОД" : "Я ПОДХОЖУ");
         }
         renderTrustButton(selected);
-        radioServiceButton.setText(fieldRadioEnabled ? "RADIO ON" : "RADIO OFF");
-        radioServiceButton.setTextColor(fieldRadioEnabled ? 0xff7dff73 : 0xffffd16a);
+        if (activeTab == TAB_MAP) {
+            radioServiceButton.setText("RADIO LOCK");
+            radioServiceButton.setEnabled(false);
+            radioServiceButton.setTextColor(0xffb8c49a);
+        } else {
+            radioServiceButton.setText(fieldRadioEnabled ? "RADIO ON" : "RADIO OFF");
+            radioServiceButton.setEnabled(true);
+            radioServiceButton.setTextColor(fieldRadioEnabled ? 0xff7dff73 : 0xffffd16a);
+        }
         renderTabs();
         if (activeTab == TAB_CONTACT) {
             renderContact();
@@ -411,6 +537,7 @@ public class IffActivity extends Activity {
                 + " / unknown " + combatStateCount("UNKNOWN") + "\n"
                 + "RADIO: " + (fieldRadioEnabled ? "ON" : "OFF"));
         bodyContainer.removeAllViews();
+        bodyContainer.addView(createLocalNameButton());
         for (int i = 0; i < roster.length; i++) {
             bodyContainer.addView(createRosterButton(i));
         }
@@ -423,49 +550,38 @@ public class IffActivity extends Activity {
             return;
         }
         title.setText("КАРТА");
-        subtitle.setText("field contacts");
-        status.setText("POSITION/DIRECTION: UNKNOWN 0%\n"
-                + "OFFICE ROLE: " + officeTestRole(localDevicePlayer()) + "\n"
-                + "RADIO: local " + freshWitnessCount() + " fresh / remote " + remoteReportCount() + "\n"
-                + "RADIO CONTROL: " + (fieldRadioEnabled ? "ON" : "OFF") + "\n"
-                + "FIELD RADIO: " + IffBleFieldRadio.compactStatus() + "\n"
-                + "RADIO SERVICE: " + IffForegroundRadioService.compactStatus() + "\n"
-                + "BLE POLICY: " + IffBleFieldRadio.lifecycleStatus() + "\n"
-                + "UDP DEBUG: " + IffUdpWitnessTransport.compactStatus());
+        setHeaderVisible(false);
+        subtitle.setText("distance map");
+        status.setText("");
         bodyContainer.removeAllViews();
         IffTacticalMapView mapView = new IffTacticalMapView(this);
         LinearLayout.LayoutParams mapParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(220));
-        mapParams.setMargins(0, 0, 0, dp(8));
+                mapHeightPx());
+        mapParams.setMargins(0, 0, 0, 0);
         mapView.setLayoutParams(mapParams);
         mapView.setState(localDevicePlayer().displayName, mapPoints());
-        mapView.setFieldState(fieldMapSnapshot());
+        mapView.setParticipantState(participantMapSnapshot());
+        mapView.setPhoneHeading(headingAvailable, phoneHeadingDeg);
         bodyContainer.addView(mapView);
-        bodyContainer.addView(body);
-        body.setText(mapWitnessList());
     }
 
     private void renderMapGame() {
+        setHeaderVisible(false);
         title.setText("MAP");
-        subtitle.setText("field contacts");
-        status.setText("POSITION: UNKNOWN\n"
-                + "OFFICE: " + officeProximityLine() + "\n"
-                + "DISTANCE: " + officeDistanceTrendLine() + "\n"
-                + "GPS: " + gpsUiStatus() + "\n"
-                + "RADIO: " + freshWitnessCount() + " current / " + staleWitnessEvidenceCount() + " stale");
+        subtitle.setText("distance map");
+        status.setText("");
         bodyContainer.removeAllViews();
         IffTacticalMapView mapView = new IffTacticalMapView(this);
         LinearLayout.LayoutParams mapParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(260));
-        mapParams.setMargins(0, 0, 0, dp(8));
+                mapHeightPx());
+        mapParams.setMargins(0, 0, 0, 0);
         mapView.setLayoutParams(mapParams);
         mapView.setState(localDevicePlayer().displayName, mapPoints());
-        mapView.setFieldState(fieldMapSnapshot());
+        mapView.setParticipantState(participantMapSnapshot());
+        mapView.setPhoneHeading(headingAvailable, phoneHeadingDeg);
         bodyContainer.addView(mapView);
-        bodyContainer.addView(body);
-        body.setText(fieldMapSummary());
     }
 
     private void renderLog() {
@@ -501,6 +617,9 @@ public class IffActivity extends Activity {
                 + "FIELD LOCATOR\n"
                 + "- service: " + IffForegroundRadioService.compactStatus() + "\n"
                 + "- two-anchor: " + IffWifiTargetObservationStore.compactStatus() + "\n\n"
+                + "MAP\n"
+                + fieldMapSummary() + "\n\n"
+                + participantMapDetails(participantMapSnapshot()) + "\n\n"
                 + "FIELD RUN\n"
                 + IffFieldRunSummary.details() + "\n\n"
                 + "QUORUM\n"
@@ -600,14 +719,99 @@ public class IffActivity extends Activity {
     }
 
     private void resetBody() {
+        setHeaderVisible(true);
         bodyContainer.removeAllViews();
         bodyContainer.addView(body);
+    }
+
+    private void setHeaderVisible(boolean visible) {
+        int visibility = visible ? View.VISIBLE : View.GONE;
+        title.setVisibility(visibility);
+        subtitle.setVisibility(visibility);
+        status.setVisibility(visibility);
+    }
+
+    private int mapHeightPx() {
+        DisplayMetrics metrics = getResources().getDisplayMetrics();
+        int availableWidth = Math.max(dp(320), metrics.widthPixels - dp(20));
+        int desiredHeight = Math.max(dp(180), Math.round(availableWidth * 9.0f / 16.0f));
+        int reservedHeight = dp(10 + 38 + 8 + 8 + 44 + 10);
+        int availableHeight = Math.max(dp(180), metrics.heightPixels - reservedHeight);
+        return Math.min(desiredHeight, availableHeight);
     }
 
     private void loadLocalDeviceIdentity() {
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         String saved = prefs.getString(PREF_LOCAL_DEVICE_PLAYER_ID, "local-you");
         localDevicePlayerId = playerIndexForId(saved) >= 0 ? saved : "local-you";
+    }
+
+    private void loadPlayerDisplayNames() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        for (int i = 0; i < roster.length; i++) {
+            IffPlayer player = roster[i];
+            String saved = prefs.getString(displayNamePreferenceKey(player), player.displayName);
+            String normalized = normalizeDisplayName(saved, player.displayName);
+            player.displayName = normalized;
+        }
+    }
+
+    private void showRenameDialog(final int playerIndex) {
+        if (playerIndex < 0 || playerIndex >= roster.length) {
+            return;
+        }
+        final IffPlayer player = roster[playerIndex];
+        final EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
+        input.setText(player.displayName);
+        input.setSelectAllOnFocus(true);
+        new AlertDialog.Builder(this)
+                .setTitle("Phone name")
+                .setView(input)
+                .setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        setPlayerDisplayName(playerIndex, input.getText() == null ? "" : input.getText().toString());
+                    }
+                })
+                .setNegativeButton("CANCEL", null)
+                .show();
+    }
+
+    private void setPlayerDisplayName(int playerIndex, String displayName) {
+        if (playerIndex < 0 || playerIndex >= roster.length) {
+            return;
+        }
+        IffPlayer player = roster[playerIndex];
+        player.displayName = normalizeDisplayName(displayName, player.playerId);
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .putString(displayNamePreferenceKey(player), player.displayName)
+                .apply();
+        if (isLocalDevice(player)) {
+            ensureFieldRadioService();
+        }
+        FieldDiagnosticLog.event("IFF_DIAG", "event=device_display_name_set"
+                + " playerId=" + player.playerId
+                + " displayName=\"" + safe(player.displayName) + "\""
+                + " localDevicePlayerId=" + localDevicePlayerId);
+        render();
+    }
+
+    private String displayNamePreferenceKey(IffPlayer player) {
+        return PREF_PLAYER_DISPLAY_NAME_PREFIX + player.playerId;
+    }
+
+    private String normalizeDisplayName(String value, String fallback) {
+        String trimmed = value == null ? "" : value.trim();
+        if (trimmed.length() == 0) {
+            return fallback == null || fallback.length() == 0 ? "phone" : fallback;
+        }
+        if (trimmed.length() > 18) {
+            return trimmed.substring(0, 18);
+        }
+        return trimmed;
     }
 
     private void setLocalDevicePlayer(int playerIndex) {
@@ -620,6 +824,7 @@ public class IffActivity extends Activity {
         selectedPlayerIndex = playerIndex;
         activeTab = TAB_CONTACT;
         approachActive = false;
+        IffForegroundRadioService.clearApproach();
         handler.removeCallbacks(expireApproach);
         lastFieldCheckSummary = player.displayName + ": this device identity selected";
         FieldDiagnosticLog.event("IFF_DIAG", "event=device_identity_selected"
@@ -646,7 +851,7 @@ public class IffActivity extends Activity {
     private void toggleFieldRadioService() {
         setFieldRadioEnabled(!fieldRadioEnabled);
         if (fieldRadioEnabled) {
-            IffForegroundRadioService.start(this, localDevicePlayerId);
+            IffForegroundRadioService.start(this, localDevicePlayerId, localDevicePlayer().displayName);
         } else {
             IffForegroundRadioService.stop(this);
             IffBleFieldRadio.stop("operator_disabled");
@@ -661,7 +866,7 @@ public class IffActivity extends Activity {
 
     private void ensureFieldRadioService() {
         if (fieldRadioEnabled) {
-            IffForegroundRadioService.start(this, localDevicePlayerId);
+            IffForegroundRadioService.start(this, localDevicePlayerId, localDevicePlayer().displayName);
         } else {
             IffForegroundRadioService.stop(this);
         }
@@ -758,6 +963,27 @@ public class IffActivity extends Activity {
         return -1;
     }
 
+    private Button createLocalNameButton() {
+        Button button = new Button(this);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(44));
+        params.setMargins(0, 0, 0, dp(4));
+        button.setLayoutParams(params);
+        button.setBackgroundResource(R.drawable.popup_button);
+        button.setTextColor(0xff7dff73);
+        button.setText("NAME: " + localDevicePlayer().displayName + "  [EDIT]");
+        button.setTextSize(12);
+        button.setTransformationMethod(null);
+        button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showRenameDialog(localDevicePlayerIndex());
+            }
+        });
+        return button;
+    }
+
     private Button createRosterButton(final int playerIndex) {
         IffPlayer player = roster[playerIndex];
         Button button = new Button(this);
@@ -788,7 +1014,11 @@ public class IffActivity extends Activity {
         button.setOnLongClickListener(new View.OnLongClickListener() {
             @Override
             public boolean onLongClick(View v) {
-                setLocalDevicePlayer(playerIndex);
+                if (isLocalDevice(roster[playerIndex])) {
+                    showRenameDialog(playerIndex);
+                } else {
+                    setLocalDevicePlayer(playerIndex);
+                }
                 return true;
             }
         });
@@ -1320,11 +1550,64 @@ public class IffActivity extends Activity {
 
     private String fieldMapSummary() {
         IffFieldMapSnapshot map = fieldMapSnapshot();
+        IffParticipantMapModel.Snapshot participants = participantMapSnapshot();
         return "FIELD MAP\n"
                 + "- " + map.statusLine + "\n"
-                + "- anchors: " + IffWifiTargetObservationStore.compactStatus() + "\n"
+                + "- participants: " + participantMapSummary(participants) + "\n"
+                + "- legacy anchors: " + IffWifiTargetObservationStore.compactStatus() + "\n"
                 + "- radio fallback: " + mapRadioDistanceTrend().compact() + "\n\n"
                 + simpleMapWitnessList();
+    }
+
+    private IffParticipantMapModel.Snapshot participantMapSnapshot() {
+        return IffForegroundRadioService.participantMapSnapshot(localDevicePlayerId);
+    }
+
+    private String participantMapSummary(IffParticipantMapModel.Snapshot snapshot) {
+        if (snapshot == null) {
+            return "NONE visible=0 hidden=0";
+        }
+        return snapshot.mode
+                + " visible=" + (snapshot.points == null ? 0 : snapshot.points.size())
+                + " hidden=" + snapshot.hiddenCount
+                + " reason=" + safe(snapshot.reason);
+    }
+
+    private String participantMapDetails(IffParticipantMapModel.Snapshot snapshot) {
+        if (snapshot == null) {
+            return "PARTICIPANT MAP\n- none";
+        }
+        StringBuilder builder = new StringBuilder();
+        builder.append("PARTICIPANT MAP\n")
+                .append("- ").append(participantMapSummary(snapshot)).append("\n");
+        if (snapshot.points == null || snapshot.points.size() == 0) {
+            return builder.append("- points: none").toString();
+        }
+        for (int i = 0; i < snapshot.points.size(); i++) {
+            IffParticipantMapModel.Point point = snapshot.points.get(i);
+            builder.append("- ")
+                    .append(point.displayName)
+                    .append(": ")
+                    .append(point.distanceM)
+                    .append("m +/-")
+                    .append(Math.round(point.distanceAccuracyMeters))
+                    .append("m ")
+                    .append(point.ageMs <= 2500L ? "CURRENT" : "STALE")
+                    .append(" bearing=")
+                    .append(point.bearingDeg)
+                    .append("deg acc=")
+                    .append(Math.round(point.accuracyMeters))
+                    .append("m source=")
+                    .append(safe(point.sourcePlayerId))
+                    .append(" hop=")
+                    .append(point.hopCount)
+                    .append(" rssi=")
+                    .append(point.rssiDbm)
+                    .append(" approach=")
+                    .append(point.approachActive)
+                    .append("\n");
+        }
+        return builder.toString();
     }
 
     private String mapWitnessList() {
@@ -1356,6 +1639,7 @@ public class IffActivity extends Activity {
             boolean current = quorum.freshSources > 0;
             boolean stale = !current && quorum.staleSources > 0;
             points.add(new IffTacticalMapView.MapPoint(
+                    player.playerId,
                     player.displayName + (isLocalDevice(player) ? " [THIS]" : ""),
                     mapRadioLabel(witness, quorum),
                     isLocalDevice(player),
@@ -1397,7 +1681,7 @@ public class IffActivity extends Activity {
 
     private static final class IffPlayer {
         final String playerId;
-        final String displayName;
+        String displayName;
         final boolean local;
 
         IffPlayer(String playerId, String displayName, boolean local) {

@@ -1,7 +1,7 @@
 package net.afterday.compas.iff;
 
 public final class IffAutoFieldCheckSnapshot {
-    public static final long INTERVAL_MS = 2000L;
+    public static final long INTERVAL_MS = 1000L;
 
     private IffAutoFieldCheckSnapshot() {
     }
