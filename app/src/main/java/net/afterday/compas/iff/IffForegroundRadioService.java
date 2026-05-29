@@ -43,6 +43,8 @@ public final class IffForegroundRadioService extends Service {
     private static final Object LOCK = new Object();
     private static final String[] FIELD_PLAYER_IDS = new String[] {"petya", "vasya", "zhenya"};
     private static final IffParticipantStore PARTICIPANTS = new IffParticipantStore("");
+    private static final IffParticipantDisplayNames PARTICIPANT_DISPLAY_NAMES =
+            new IffParticipantDisplayNames();
     private static final IffApproachState APPROACH = new IffApproachState(30000L);
 
     private static boolean running;
@@ -157,6 +159,10 @@ public final class IffForegroundRadioService extends Service {
                 SystemClock.elapsedRealtime());
     }
 
+    public static List<IffParticipantState> participantStatesSnapshot() {
+        return PARTICIPANTS.snapshotAll();
+    }
+
     public static void activateApproach() {
         APPROACH.activate(SystemClock.elapsedRealtime());
     }
@@ -169,6 +175,7 @@ public final class IffForegroundRadioService extends Service {
         if (state == null) {
             return;
         }
+        PARTICIPANT_DISPLAY_NAMES.remember(state.playerId, state.displayName);
         String currentLocalPlayerId;
         synchronized (LOCK) {
             currentLocalPlayerId = localPlayerId;
@@ -177,6 +184,14 @@ public final class IffForegroundRadioService extends Service {
             return;
         }
         PARTICIPANTS.merge(state, SystemClock.elapsedRealtime());
+    }
+
+    public static void rememberParticipantDisplayName(String playerId, String displayName) {
+        PARTICIPANT_DISPLAY_NAMES.remember(playerId, displayName);
+    }
+
+    public static String participantDisplayNameFor(String playerId) {
+        return PARTICIPANT_DISPLAY_NAMES.displayNameFor(playerId);
     }
 
     public static String coordinateMessageForBroadcast(String requestedLocalPlayerId, long sequence) {
@@ -256,6 +271,7 @@ public final class IffForegroundRadioService extends Service {
             localDisplayName = normalizedDisplayName(nextLocalDisplayName, localPlayerId);
             lastStatus = "foreground connectedDevice";
         }
+        PARTICIPANT_DISPLAY_NAMES.remember(localPlayerId, localDisplayName);
         FieldDiagnosticLog.event("IFF_DIAG", "event=iff_radio_service_start"
                 + " lifecycle=FOREGROUND_SERVICE_CONNECTED_DEVICE"
                 + " localPlayerId=" + localPlayerId
@@ -263,8 +279,8 @@ public final class IffForegroundRadioService extends Service {
                 + " policy=\"" + clean(IffRadioWitnessStore.freshnessPolicyLabel()) + "\"");
         IffFieldRunSummary.reset(localPlayerId);
         startLocationUpdates();
-        IffBleFieldRadio.startFromForegroundService(this, localPlayerId);
-        IffWifiDirectDiscoveryTransport.start(this, localPlayerId);
+        IffBleFieldRadio.startFromForegroundService(this, localPlayerId, localDisplayName);
+        IffWifiDirectDiscoveryTransport.start(this, localPlayerId, localDisplayName);
         lastAutoFieldCheckElapsedMs = 0L;
         handler.removeCallbacks(witnessTransitionLogger);
         handler.post(witnessTransitionLogger);
@@ -704,7 +720,7 @@ public final class IffForegroundRadioService extends Service {
                     IffParticipantState.create(
                             report.targetPlayerId,
                             report.sourcePlayerId,
-                            report.targetPlayerId,
+                            PARTICIPANT_DISPLAY_NAMES.displayNameFor(report.targetPlayerId),
                             report.gpsLatitude(),
                             report.gpsLongitude(),
                             normalizedAccuracyMeters(report.gpsAccuracyM),

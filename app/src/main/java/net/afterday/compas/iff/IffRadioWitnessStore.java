@@ -3,6 +3,7 @@ package net.afterday.compas.iff;
 import android.net.wifi.ScanResult;
 import android.os.SystemClock;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -88,6 +89,12 @@ public final class IffRadioWitnessStore {
     public static WitnessSnapshot getWitness(String playerId) {
         synchronized (LOCK) {
             return WITNESSES.get(playerId);
+        }
+    }
+
+    public static List<WitnessSnapshot> snapshot() {
+        synchronized (LOCK) {
+            return new ArrayList<WitnessSnapshot>(WITNESSES.values());
         }
     }
 

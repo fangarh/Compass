@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 public final class IffParticipantMapModel {
     public static final float MAP_MAX_ACCURACY_METERS = 500.0f;
@@ -196,6 +197,27 @@ public final class IffParticipantMapModel {
             this.points = Collections.unmodifiableList(new ArrayList<Point>(points));
             this.hiddenCount = hiddenCount;
             this.reason = reason;
+        }
+
+        public Snapshot filteredToPlayerIds(Set<String> allowedPlayerIds) {
+            if (allowedPlayerIds == null || allowedPlayerIds.isEmpty() || points.isEmpty()) {
+                return new Snapshot(mode, Collections.<Point>emptyList(), hiddenCount + points.size(),
+                        reason + " Team roster filter hid all remote participants.");
+            }
+            List<Point> filtered = new ArrayList<Point>();
+            int filteredOut = 0;
+            for (int i = 0; i < points.size(); i++) {
+                Point point = points.get(i);
+                if (allowedPlayerIds.contains(point.playerId)) {
+                    filtered.add(point);
+                } else {
+                    filteredOut++;
+                }
+            }
+            String filteredReason = filteredOut == 0
+                    ? reason
+                    : reason + " Team roster filter hid " + filteredOut + " non-team participants.";
+            return new Snapshot(mode, filtered, hiddenCount + filteredOut, filteredReason);
         }
     }
 

@@ -21,6 +21,7 @@ import android.os.SystemClock;
 import android.support.annotation.Nullable;
 import android.text.InputType;
 import android.util.DisplayMetrics;
+import android.view.Gravity;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
@@ -29,7 +30,11 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import net.afterday.compas.iff.IffBleFieldRadio;
 import net.afterday.compas.iff.IffConfidence;
 import net.afterday.compas.iff.IffConfidence.Snapshot;
@@ -39,15 +44,18 @@ import net.afterday.compas.iff.IffFieldMapSnapshot;
 import net.afterday.compas.iff.IffFieldRunSummary;
 import net.afterday.compas.iff.IffForegroundRadioService;
 import net.afterday.compas.iff.IffGpsSnapshot;
+import net.afterday.compas.iff.IffMapScale;
 import net.afterday.compas.iff.IffOfficeProximityVerdict;
 import net.afterday.compas.iff.IffOperatorFieldSnapshotStore;
 import net.afterday.compas.iff.IffParticipantMapModel;
+import net.afterday.compas.iff.IffParticipantState;
 import net.afterday.compas.iff.IffRemoteWitnessReport;
 import net.afterday.compas.iff.IffRemoteWitnessStore;
 import net.afterday.compas.iff.IffRadioWitnessStore;
 import net.afterday.compas.iff.IffRadioWitnessStore.RssiWindowSnapshot;
 import net.afterday.compas.iff.IffRadioWitnessStore.WitnessSnapshot;
 import net.afterday.compas.iff.IffTacticalMapView;
+import net.afterday.compas.iff.IffTeamRosterStore;
 import net.afterday.compas.iff.IffUdpWitnessTransport;
 import net.afterday.compas.iff.IffWitnessQuorum;
 import net.afterday.compas.iff.IffWifiTargetObservationStore;
@@ -66,14 +74,18 @@ public class IffActivity extends Activity implements SensorEventListener {
     private static final String PREF_LOCAL_DEVICE_PLAYER_ID = "local_device_player_id";
     private static final String PREF_PLAYER_DISPLAY_NAME_PREFIX = "player_display_name_";
     private static final String PREF_FIELD_RADIO_ENABLED = "field_radio_enabled";
+    private static final String PREF_MAP_SCALE_RANGE_METERS = "map_scale_range_meters";
     private static final String PREF_TRUSTED_PLAYER_PREFIX = "trusted_player_";
+    private static final String PREF_TEAM_ROSTER = "team_roster";
+    private static final String PREF_TEAM_REMOVED_PLAYERS = "team_removed_players";
 
-    private final IffPlayer[] roster = new IffPlayer[] {
+    private IffPlayer[] roster = new IffPlayer[] {
             new IffPlayer("local-you", "Вы", true),
             new IffPlayer("petya", "Петя", false),
             new IffPlayer("vasya", "Вася", false),
             new IffPlayer("zhenya", "Женя", false)
     };
+    private final List<String> removedPlayerIds = new ArrayList<String>();
 
     private final Handler handler = new Handler();
     private final IffOperatorFieldSnapshotStore operatorFieldSnapshotStore =
@@ -112,6 +124,8 @@ public class IffActivity extends Activity implements SensorEventListener {
     private LinearLayout bodyContainer;
     private String lastFieldCheckSummary = "нет записанных проверок";
     private boolean fieldRadioEnabled = true;
+    private int mapScaleRangeMeters = IffMapScale.defaultRangeMeters();
+    private boolean teamSearchActive;
 
     private final Runnable expireApproach = new Runnable() {
         @Override
@@ -138,9 +152,11 @@ public class IffActivity extends Activity implements SensorEventListener {
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.iff_activity);
+        loadTeamRoster();
         loadLocalDeviceIdentity();
         loadPlayerDisplayNames();
         loadFieldRadioPreference();
+        loadMapScalePreference();
         bindViews();
         setTypeface();
         setListeners();
@@ -370,6 +386,7 @@ public class IffActivity extends Activity implements SensorEventListener {
     }
 
     private void render() {
+        ensureValidRosterSelection();
         IffPlayer selected = roster[selectedPlayerIndex];
         if (activeTab == TAB_CONTACT && !isLocalDevice(selected)) {
             approachButton.setText("ЭТОТ ТЕЛ.");
@@ -422,14 +439,15 @@ public class IffActivity extends Activity implements SensorEventListener {
         }
         boolean selectedIsLocalDevice = isLocalDevice(selected);
         boolean localApproachSelected = approachActive && selectedIsLocalDevice;
-        title.setText(localApproachSelected ? "ВЫ ПОДХОДИТЕ" : selected.displayName);
+        String selectedDisplayName = displayNameFor(selected);
+        title.setText(localApproachSelected ? "ВЫ ПОДХОДИТЕ" : selectedDisplayName);
         subtitle.setText(selectedIsLocalDevice ? "этот телефон объявляет этого участника" : "локальный roster trust + radio witness");
         status.setText("COMBAT: " + combat.state + " / " + combat.action + "\n"
                 + "OPERATOR: " + operatorVerdictLabel(confidence, quorum) + "\n"
                 + "OFFICE ROLE: " + officeTestRole(localDevicePlayer()) + "\n"
                 + "CONFIDENCE\n" + confidence.compactStatus() + "\nWITNESSES: " + quorum.compact());
         body.setText("ИГРОК\n"
-                + "- имя: " + selected.displayName + "\n"
+                + "- имя: " + selectedDisplayName + "\n"
                 + "- id: " + selected.playerId + "\n"
                 + "- команда: локальная IFF группа\n"
                 + "- office role: " + officeTestRole(selected) + "\n"
@@ -507,7 +525,8 @@ public class IffActivity extends Activity implements SensorEventListener {
     private void renderContactGame(IffPlayer selected, WitnessSnapshot witness, Snapshot confidence,
                                    IffWitnessQuorum.Snapshot quorum, CombatSnapshot combat) {
         boolean selectedIsLocalDevice = isLocalDevice(selected);
-        title.setText(approachActive && selectedIsLocalDevice ? "APPROACHING" : selected.displayName);
+        String selectedDisplayName = displayNameFor(selected);
+        title.setText(approachActive && selectedIsLocalDevice ? "APPROACHING" : selectedDisplayName);
         subtitle.setText(selectedIsLocalDevice ? "this phone identity" : "field contact");
         status.setText("COMBAT: " + combat.state + " / " + combat.action + "\n"
                 + "OPERATOR: " + operatorVerdictLabel(confidence, quorum) + "\n"
@@ -515,7 +534,7 @@ public class IffActivity extends Activity implements SensorEventListener {
                 + "DISTANCE: " + distanceTrendFor(selected).compact() + "\n"
                 + "WITNESS: " + quorum.compact());
         body.setText("PLAYER\n"
-                + "- name: " + selected.displayName + "\n"
+                + "- name: " + selectedDisplayName + "\n"
                 + "- id: " + selected.playerId + "\n"
                 + "- trust: " + trustLabel(selected) + "\n"
                 + "- radio: " + rosterRadioLabel(selected, witness) + "\n"
@@ -524,6 +543,9 @@ public class IffActivity extends Activity implements SensorEventListener {
                 + "ACTION\n"
                 + "- " + combat.action + "\n"
                 + "- last check: " + lastFieldCheckSummary);
+        if (!selectedIsLocalDevice) {
+            bodyContainer.addView(createRemoveTeamMemberButton(selected));
+        }
     }
 
     private void renderTeamGame() {
@@ -538,8 +560,20 @@ public class IffActivity extends Activity implements SensorEventListener {
                 + "RADIO: " + (fieldRadioEnabled ? "ON" : "OFF"));
         bodyContainer.removeAllViews();
         bodyContainer.addView(createLocalNameButton());
+        bodyContainer.addView(createTeamSearchButton());
         for (int i = 0; i < roster.length; i++) {
             bodyContainer.addView(createRosterButton(i));
+        }
+        if (teamSearchActive) {
+            List<IffPlayer> candidates = discoveredTeamCandidates();
+            if (candidates.isEmpty()) {
+                body.setText("SEARCH\nNo non-team phones heard recently.");
+                bodyContainer.addView(body);
+            } else {
+                for (int i = 0; i < candidates.size(); i++) {
+                    bodyContainer.addView(createDiscoveredPlayerButton(candidates.get(i)));
+                }
+            }
         }
     }
 
@@ -562,8 +596,10 @@ public class IffActivity extends Activity implements SensorEventListener {
         mapView.setLayoutParams(mapParams);
         mapView.setState(localDevicePlayer().displayName, mapPoints());
         mapView.setParticipantState(participantMapSnapshot());
+        mapView.setMapRangeMeters(mapScaleRangeMeters);
         mapView.setPhoneHeading(headingAvailable, phoneHeadingDeg);
         bodyContainer.addView(mapView);
+        bodyContainer.addView(createMapScaleControls());
     }
 
     private void renderMapGame() {
@@ -580,8 +616,10 @@ public class IffActivity extends Activity implements SensorEventListener {
         mapView.setLayoutParams(mapParams);
         mapView.setState(localDevicePlayer().displayName, mapPoints());
         mapView.setParticipantState(participantMapSnapshot());
+        mapView.setMapRangeMeters(mapScaleRangeMeters);
         mapView.setPhoneHeading(headingAvailable, phoneHeadingDeg);
         bodyContainer.addView(mapView);
+        bodyContainer.addView(createMapScaleControls());
     }
 
     private void renderLog() {
@@ -686,7 +724,7 @@ public class IffActivity extends Activity implements SensorEventListener {
                 + " transportStatus=\"" + safe(IffUdpWitnessTransport.compactStatus()) + "\""
                 + " witness=" + witnessState
                 + " localApproach=" + approachActive);
-        lastFieldCheckSummary = selected.displayName + ": identity " + confidence.identity.score
+        lastFieldCheckSummary = displayNameFor(selected) + ": identity " + confidence.identity.score
                 + "% / proximity " + confidence.proximity.score + "% / trust " + trustLabel
                 + " / combat " + combat.state
                 + " / witness " + (witness == null ? "none" : witness.freshnessLabel());
@@ -697,7 +735,7 @@ public class IffActivity extends Activity implements SensorEventListener {
     private void toggleSelectedTrust() {
         IffPlayer selected = roster[selectedPlayerIndex];
         if (isLocalDevice(selected)) {
-            lastFieldCheckSummary = selected.displayName + ": trust is LOCAL_SELF";
+            lastFieldCheckSummary = displayNameFor(selected) + ": trust is LOCAL_SELF";
             activeTab = TAB_CONTACT;
             render();
             return;
@@ -707,10 +745,10 @@ public class IffActivity extends Activity implements SensorEventListener {
                 .edit()
                 .putBoolean(trustPreferenceKey(selected), trusted)
                 .apply();
-        lastFieldCheckSummary = selected.displayName + ": trust " + trustLabel(selected);
+        lastFieldCheckSummary = displayNameFor(selected) + ": trust " + trustLabel(selected);
         FieldDiagnosticLog.event("IFF_DIAG", "event=iff_trust_toggle"
                 + " playerId=" + selected.playerId
-                + " displayName=\"" + safe(selected.displayName) + "\""
+                + " displayName=\"" + safe(displayNameFor(selected)) + "\""
                 + " trustedPlayer=" + isTrustedPlayer(selected)
                 + " trustLabel=" + trustLabel(selected)
                 + " localDevicePlayerId=" + localDevicePlayerId);
@@ -735,15 +773,71 @@ public class IffActivity extends Activity implements SensorEventListener {
         DisplayMetrics metrics = getResources().getDisplayMetrics();
         int availableWidth = Math.max(dp(320), metrics.widthPixels - dp(20));
         int desiredHeight = Math.max(dp(180), Math.round(availableWidth * 9.0f / 16.0f));
-        int reservedHeight = dp(10 + 38 + 8 + 8 + 44 + 10);
+        int reservedHeight = dp(10 + 38 + 8 + 8 + 44 + 10 + 52);
         int availableHeight = Math.max(dp(180), metrics.heightPixels - reservedHeight);
         return Math.min(desiredHeight, availableHeight);
     }
 
+    private void ensureValidRosterSelection() {
+        if (roster.length == 0) {
+            roster = rosterFromEntries(IffTeamRosterStore.defaultEntries());
+            saveTeamRoster();
+        }
+        if (playerIndexForId(localDevicePlayerId) < 0) {
+            localDevicePlayerId = roster[LOCAL_PLAYER_INDEX].playerId;
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                    .edit()
+                    .putString(PREF_LOCAL_DEVICE_PLAYER_ID, localDevicePlayerId)
+                    .apply();
+        }
+        if (selectedPlayerIndex < 0 || selectedPlayerIndex >= roster.length) {
+            selectedPlayerIndex = localDevicePlayerIndex();
+        }
+    }
+
     private void loadLocalDeviceIdentity() {
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-        String saved = prefs.getString(PREF_LOCAL_DEVICE_PLAYER_ID, "local-you");
-        localDevicePlayerId = playerIndexForId(saved) >= 0 ? saved : "local-you";
+        String fallbackPlayerId = roster.length == 0 ? "local-you" : roster[LOCAL_PLAYER_INDEX].playerId;
+        String saved = prefs.getString(PREF_LOCAL_DEVICE_PLAYER_ID, fallbackPlayerId);
+        localDevicePlayerId = playerIndexForId(saved) >= 0 ? saved : fallbackPlayerId;
+    }
+
+    private void loadTeamRoster() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        List<IffTeamRosterStore.Entry> entries =
+                IffTeamRosterStore.deserializeTeam(prefs.getString(PREF_TEAM_ROSTER, ""));
+        roster = rosterFromEntries(entries);
+        removedPlayerIds.clear();
+        removedPlayerIds.addAll(IffTeamRosterStore.deserializeRemoved(
+                prefs.getString(PREF_TEAM_REMOVED_PLAYERS, "")));
+    }
+
+    private void saveTeamRoster() {
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .putString(PREF_TEAM_ROSTER, IffTeamRosterStore.serializeTeam(teamEntries()))
+                .putString(PREF_TEAM_REMOVED_PLAYERS, IffTeamRosterStore.serializeRemoved(removedPlayerIds))
+                .apply();
+    }
+
+    private List<IffTeamRosterStore.Entry> teamEntries() {
+        List<IffTeamRosterStore.Entry> entries = new ArrayList<IffTeamRosterStore.Entry>();
+        for (int i = 0; i < roster.length; i++) {
+            entries.add(new IffTeamRosterStore.Entry(roster[i].playerId, roster[i].displayName));
+        }
+        return entries;
+    }
+
+    private IffPlayer[] rosterFromEntries(List<IffTeamRosterStore.Entry> entries) {
+        List<IffTeamRosterStore.Entry> safeEntries = entries == null || entries.isEmpty()
+                ? IffTeamRosterStore.defaultEntries()
+                : entries;
+        IffPlayer[] players = new IffPlayer[safeEntries.size()];
+        for (int i = 0; i < safeEntries.size(); i++) {
+            IffTeamRosterStore.Entry entry = safeEntries.get(i);
+            players[i] = new IffPlayer(entry.playerId, entry.displayName, "local-you".equals(entry.playerId));
+        }
+        return players;
     }
 
     private void loadPlayerDisplayNames() {
@@ -754,6 +848,7 @@ public class IffActivity extends Activity implements SensorEventListener {
             String normalized = normalizeDisplayName(saved, player.displayName);
             player.displayName = normalized;
         }
+        saveTeamRoster();
     }
 
     private void showRenameDialog(final int playerIndex) {
@@ -789,6 +884,7 @@ public class IffActivity extends Activity implements SensorEventListener {
                 .edit()
                 .putString(displayNamePreferenceKey(player), player.displayName)
                 .apply();
+        saveTeamRoster();
         if (isLocalDevice(player)) {
             ensureFieldRadioService();
         }
@@ -804,17 +900,13 @@ public class IffActivity extends Activity implements SensorEventListener {
     }
 
     private String normalizeDisplayName(String value, String fallback) {
-        String trimmed = value == null ? "" : value.trim();
-        if (trimmed.length() == 0) {
-            return fallback == null || fallback.length() == 0 ? "phone" : fallback;
-        }
-        if (trimmed.length() > 18) {
-            return trimmed.substring(0, 18);
-        }
-        return trimmed;
+        return IffTeamRosterStore.normalizeDisplayName(value, fallback);
     }
 
     private void setLocalDevicePlayer(int playerIndex) {
+        if (playerIndex < 0 || playerIndex >= roster.length) {
+            return;
+        }
         IffPlayer player = roster[playerIndex];
         localDevicePlayerId = player.playerId;
         getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
@@ -835,9 +927,91 @@ public class IffActivity extends Activity implements SensorEventListener {
         render();
     }
 
+    private void addTeamMember(String playerId, String displayName) {
+        List<IffTeamRosterStore.Entry> entries = teamEntries();
+        if (!IffTeamRosterStore.addOrRestore(entries, removedPlayerIds, playerId, displayName)) {
+            lastFieldCheckSummary = "team add rejected: " + safe(playerId);
+            render();
+            return;
+        }
+        roster = rosterFromEntries(entries);
+        saveTeamRoster();
+        selectedPlayerIndex = Math.max(0, playerIndexForId(playerId));
+        activeTab = TAB_CONTACT;
+        teamSearchActive = false;
+        lastFieldCheckSummary = safe(displayName) + ": added to team";
+        FieldDiagnosticLog.event("IFF_DIAG", "event=team_member_added"
+                + " playerId=" + safe(playerId)
+                + " displayName=\"" + safe(displayName) + "\""
+                + " teamSize=" + roster.length);
+        render();
+    }
+
+    private void removeTeamMember(final int playerIndex) {
+        if (playerIndex < 0 || playerIndex >= roster.length) {
+            return;
+        }
+        final IffPlayer player = roster[playerIndex];
+        if (isLocalDevice(player)) {
+            lastFieldCheckSummary = player.displayName + ": cannot remove THIS DEVICE";
+            render();
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Remove from team")
+                .setMessage(player.displayName + " will disappear until SEARCH adds this phone again.")
+                .setPositiveButton("REMOVE", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        removeTeamMemberConfirmed(player);
+                    }
+                })
+                .setNegativeButton("CANCEL", null)
+                .show();
+    }
+
+    private void removeTeamMemberConfirmed(IffPlayer player) {
+        List<IffTeamRosterStore.Entry> entries = teamEntries();
+        if (!IffTeamRosterStore.remove(entries, removedPlayerIds, player.playerId, localDevicePlayerId)) {
+            lastFieldCheckSummary = player.displayName + ": remove rejected";
+            render();
+            return;
+        }
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .remove(trustPreferenceKey(player))
+                .remove(displayNamePreferenceKey(player))
+                .apply();
+        roster = rosterFromEntries(entries);
+        saveTeamRoster();
+        selectedPlayerIndex = Math.max(0, localDevicePlayerIndex());
+        activeTab = TAB_TEAM;
+        lastFieldCheckSummary = player.displayName + ": removed from team";
+        FieldDiagnosticLog.event("IFF_DIAG", "event=team_member_removed"
+                + " playerId=" + safe(player.playerId)
+                + " displayName=\"" + safe(player.displayName) + "\""
+                + " teamSize=" + roster.length);
+        render();
+    }
+
     private void loadFieldRadioPreference() {
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         fieldRadioEnabled = prefs.getBoolean(PREF_FIELD_RADIO_ENABLED, true);
+    }
+
+    private void loadMapScalePreference() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        mapScaleRangeMeters = IffMapScale.normalizeRangeMeters(
+                prefs.getInt(PREF_MAP_SCALE_RANGE_METERS, IffMapScale.defaultRangeMeters()));
+    }
+
+    private void setMapScaleRangeMeters(int rangeMeters) {
+        mapScaleRangeMeters = IffMapScale.normalizeRangeMeters(rangeMeters);
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .putInt(PREF_MAP_SCALE_RANGE_METERS, mapScaleRangeMeters)
+                .apply();
+        render();
     }
 
     private void setFieldRadioEnabled(boolean enabled) {
@@ -984,8 +1158,74 @@ public class IffActivity extends Activity implements SensorEventListener {
         return button;
     }
 
+    private Button createTeamSearchButton() {
+        Button button = new Button(this);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(44));
+        params.setMargins(0, dp(4), 0, dp(4));
+        button.setLayoutParams(params);
+        button.setBackgroundResource(R.drawable.popup_button);
+        button.setTextColor(teamSearchActive ? 0xffffd16a : 0xffb8c49a);
+        button.setText(teamSearchActive ? "SEARCH: ON" : "SEARCH");
+        button.setTextSize(12);
+        button.setTransformationMethod(null);
+        button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                teamSearchActive = !teamSearchActive;
+                render();
+            }
+        });
+        return button;
+    }
+
+    private Button createDiscoveredPlayerButton(final IffPlayer player) {
+        Button button = new Button(this);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(52));
+        params.setMargins(0, dp(4), 0, 0);
+        button.setLayoutParams(params);
+        button.setBackgroundResource(R.drawable.popup_button);
+        button.setTextColor(0xff7dff73);
+        button.setText(player.displayName + "  [ADD]\n"
+                + "id=" + player.playerId + " / " + discoveryLine(player.playerId));
+        button.setTextSize(12);
+        button.setTransformationMethod(null);
+        button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                addTeamMember(player.playerId, player.displayName);
+            }
+        });
+        return button;
+    }
+
+    private Button createRemoveTeamMemberButton(final IffPlayer player) {
+        Button button = new Button(this);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(44));
+        params.setMargins(0, dp(8), 0, dp(4));
+        button.setLayoutParams(params);
+        button.setBackgroundResource(R.drawable.popup_button);
+        button.setTextColor(0xffff7a7a);
+        button.setText("REMOVE FROM TEAM");
+        button.setTextSize(12);
+        button.setTransformationMethod(null);
+        button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                removeTeamMember(playerIndexForId(player.playerId));
+            }
+        });
+        return button;
+    }
+
     private Button createRosterButton(final int playerIndex) {
         IffPlayer player = roster[playerIndex];
+        String displayName = displayNameFor(player);
         Button button = new Button(this);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -998,7 +1238,7 @@ public class IffActivity extends Activity implements SensorEventListener {
         IffWitnessQuorum.Snapshot quorum = witnessQuorumFor(player, witness);
         CombatSnapshot combat = combatFor(player, confidence, quorum);
         button.setTextColor(playerIndex == selectedPlayerIndex ? 0xffffd16a : combatTextColor(combat));
-        button.setText(player.displayName + (isLocalDevice(player) ? "  [THIS DEVICE]" : "")
+        button.setText(displayName + (isLocalDevice(player) ? "  [THIS DEVICE]" : "")
                 + (!isLocalDevice(player) && hasLocalTrust(player) ? "  [TRUSTED]" : "")
                 + "\n" + operatorRosterLine(player, confidence, quorum, witness, combat));
         button.setTextSize(12);
@@ -1022,6 +1262,68 @@ public class IffActivity extends Activity implements SensorEventListener {
                 return true;
             }
         });
+        return button;
+    }
+
+    private LinearLayout createMapScaleControls() {
+        LinearLayout controls = new LinearLayout(this);
+        controls.setOrientation(LinearLayout.HORIZONTAL);
+        controls.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams controlsParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(44));
+        controlsParams.setMargins(0, dp(8), 0, 0);
+        controls.setLayoutParams(controlsParams);
+
+        Button zoomOut = createMapScaleButton("-");
+        zoomOut.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                setMapScaleRangeMeters(IffMapScale.zoomOutRangeMeters(mapScaleRangeMeters));
+            }
+        });
+
+        TextView scaleLabel = new TextView(this);
+        LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                1.4f);
+        labelParams.setMargins(dp(6), 0, dp(6), 0);
+        scaleLabel.setLayoutParams(labelParams);
+        scaleLabel.setGravity(Gravity.CENTER);
+        scaleLabel.setBackgroundColor(0xff182015);
+        scaleLabel.setTextColor(0xffffd16a);
+        scaleLabel.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        scaleLabel.setTextSize(16);
+        scaleLabel.setText(IffMapScale.label(mapScaleRangeMeters));
+
+        Button zoomIn = createMapScaleButton("+");
+        zoomIn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                setMapScaleRangeMeters(IffMapScale.zoomInRangeMeters(mapScaleRangeMeters));
+            }
+        });
+
+        controls.addView(zoomOut);
+        controls.addView(scaleLabel);
+        controls.addView(zoomIn);
+        return controls;
+    }
+
+    private Button createMapScaleButton(String text) {
+        Button button = new Button(this);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                1.0f);
+        button.setLayoutParams(params);
+        button.setBackgroundResource(R.drawable.popup_button);
+        button.setTextColor(0xffffffff);
+        button.setText(text);
+        button.setTextSize(18);
+        button.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        button.setTransformationMethod(null);
         return button;
     }
 
@@ -1207,7 +1509,7 @@ public class IffActivity extends Activity implements SensorEventListener {
 
     private String witnessQuorumDetails(IffPlayer selected, IffWitnessQuorum.Snapshot quorum) {
         StringBuilder builder = new StringBuilder();
-        builder.append("- target: ").append(selected.displayName).append("\n")
+        builder.append("- target: ").append(displayNameFor(selected)).append("\n")
                 .append("- state: ").append(quorum.compact()).append("\n")
                 .append("- local-device: ");
         if (quorum.localWitness == null) {
@@ -1506,7 +1808,7 @@ public class IffActivity extends Activity implements SensorEventListener {
         for (int i = 0; i < roster.length; i++) {
             IffPlayer player = roster[i];
             WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
-            builder.append(player.displayName)
+            builder.append(displayNameFor(player))
                     .append(": ")
                     .append(mapRadioLabel(witness, witnessQuorumFor(player, witness)))
                     .append("\n");
@@ -1548,6 +1850,87 @@ public class IffActivity extends Activity implements SensorEventListener {
         return null;
     }
 
+    private String displayNameFor(IffPlayer player) {
+        if (player == null) {
+            return "phone";
+        }
+        if (isLocalDevice(player)) {
+            return player.displayName;
+        }
+        String learned = IffForegroundRadioService.participantDisplayNameFor(player.playerId);
+        if (learned != null && learned.length() > 0 && !learned.equals(player.playerId)) {
+            return learned;
+        }
+        IffParticipantState state = participantStateById(player.playerId);
+        if (state != null && state.displayName != null && state.displayName.length() > 0
+                && !state.displayName.equals(player.playerId)) {
+            return state.displayName;
+        }
+        return player.displayName;
+    }
+
+    private List<IffPlayer> discoveredTeamCandidates() {
+        LinkedHashMap<String, IffPlayer> candidates = new LinkedHashMap<String, IffPlayer>();
+        long now = SystemClock.elapsedRealtime();
+        List<IffParticipantState> states = IffForegroundRadioService.participantStatesSnapshot();
+        for (int i = 0; i < states.size(); i++) {
+            IffParticipantState state = states.get(i);
+            if (state == null || Math.max(0L, now - state.receivedTimeMillis) > 120000L) {
+                continue;
+            }
+            addDiscoveryCandidate(candidates, state.playerId, state.displayName);
+        }
+        List<WitnessSnapshot> witnesses = IffRadioWitnessStore.snapshot();
+        for (int i = 0; i < witnesses.size(); i++) {
+            WitnessSnapshot witness = witnesses.get(i);
+            if (witness == null || witness.ageMs() > IffRadioWitnessStore.STALE_MS) {
+                continue;
+            }
+            addDiscoveryCandidate(candidates, witness.playerId, IffTeamRosterStore.defaultDisplayNameFor(witness.playerId));
+        }
+        return new ArrayList<IffPlayer>(candidates.values());
+    }
+
+    private void addDiscoveryCandidate(Map<String, IffPlayer> candidates, String playerId, String displayName) {
+        String normalizedPlayerId = IffTeamRosterStore.normalizePlayerId(playerId);
+        if (normalizedPlayerId == null
+                || playerIndexForId(normalizedPlayerId) >= 0
+                || normalizedPlayerId.equals(localDevicePlayerId)) {
+            return;
+        }
+        if (!candidates.containsKey(normalizedPlayerId)) {
+            candidates.put(normalizedPlayerId, new IffPlayer(
+                    normalizedPlayerId,
+                    normalizeDisplayName(displayName, normalizedPlayerId),
+                    false));
+        }
+    }
+
+    private String discoveryLine(String playerId) {
+        WitnessSnapshot witness = IffRadioWitnessStore.getWitness(playerId);
+        if (witness != null && witness.ageMs() <= IffRadioWitnessStore.STALE_MS) {
+            return witness.sourceType() + " " + witness.freshnessLabel()
+                    + " " + witness.rssi + "dBm " + formatAge(witness.ageMs());
+        }
+        IffParticipantState state = participantStateById(playerId);
+        if (state != null) {
+            return "GPS age=" + formatAge(Math.max(0L, SystemClock.elapsedRealtime() - state.receivedTimeMillis))
+                    + " source=" + safe(state.sourcePlayerId);
+        }
+        return "heard recently";
+    }
+
+    private IffParticipantState participantStateById(String playerId) {
+        List<IffParticipantState> states = IffForegroundRadioService.participantStatesSnapshot();
+        for (int i = 0; i < states.size(); i++) {
+            IffParticipantState state = states.get(i);
+            if (state != null && state.playerId.equals(playerId)) {
+                return state;
+            }
+        }
+        return null;
+    }
+
     private String fieldMapSummary() {
         IffFieldMapSnapshot map = fieldMapSnapshot();
         IffParticipantMapModel.Snapshot participants = participantMapSnapshot();
@@ -1560,7 +1943,17 @@ public class IffActivity extends Activity implements SensorEventListener {
     }
 
     private IffParticipantMapModel.Snapshot participantMapSnapshot() {
-        return IffForegroundRadioService.participantMapSnapshot(localDevicePlayerId);
+        IffParticipantMapModel.Snapshot snapshot =
+                IffForegroundRadioService.participantMapSnapshot(localDevicePlayerId);
+        return snapshot == null ? null : snapshot.filteredToPlayerIds(teamPlayerIdSet());
+    }
+
+    private Set<String> teamPlayerIdSet() {
+        Set<String> ids = new LinkedHashSet<String>();
+        for (int i = 0; i < roster.length; i++) {
+            ids.add(roster[i].playerId);
+        }
+        return ids;
     }
 
     private String participantMapSummary(IffParticipantMapModel.Snapshot snapshot) {
@@ -1616,7 +2009,7 @@ public class IffActivity extends Activity implements SensorEventListener {
         for (int i = 0; i < roster.length; i++) {
             IffPlayer player = roster[i];
             WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
-            builder.append(player.displayName)
+            builder.append(displayNameFor(player))
                     .append(": ")
                     .append(witnessQuorumFor(player, witness).compact())
                     .append(" / ")
@@ -1640,7 +2033,7 @@ public class IffActivity extends Activity implements SensorEventListener {
             boolean stale = !current && quorum.staleSources > 0;
             points.add(new IffTacticalMapView.MapPoint(
                     player.playerId,
-                    player.displayName + (isLocalDevice(player) ? " [THIS]" : ""),
+                    displayNameFor(player) + (isLocalDevice(player) ? " [THIS]" : ""),
                     mapRadioLabel(witness, quorum),
                     isLocalDevice(player),
                     i == selectedPlayerIndex,

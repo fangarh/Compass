@@ -29,6 +29,7 @@ public final class IffWifiDirectDiscoveryTransport {
     private static Handler handler;
     private static boolean running;
     private static String localPlayerId = "";
+    private static String localDisplayName = "";
     private static String targetPlayerId = "";
     private static int targetRssi;
     private static Location latestLocalGps;
@@ -53,6 +54,10 @@ public final class IffWifiDirectDiscoveryTransport {
     }
 
     public static void start(Context context, String playerId) {
+        start(context, playerId, playerId);
+    }
+
+    public static void start(Context context, String playerId, String displayName) {
         if (context == null || Build.VERSION.SDK_INT < 16) {
             setStatus("unsupported");
             return;
@@ -96,10 +101,12 @@ public final class IffWifiDirectDiscoveryTransport {
             handler = new Handler(Looper.getMainLooper());
             running = true;
             localPlayerId = safe(playerId);
+            localDisplayName = normalizedDisplayName(displayName, playerId);
             lastStatus = "starting";
         }
         installListeners(nextManager, nextChannel);
         FieldDiagnosticLog.event("IFF_DIAG", "event=wifi_direct_start localPlayerId=" + safe(playerId)
+                + " displayName=\"" + clean(localDisplayName) + "\""
                 + " serviceType=" + IffWifiDirectPayload.SERVICE_TYPE);
         refreshLocalServiceAndDiscovery();
         synchronized (LOCK) {
@@ -126,6 +133,7 @@ public final class IffWifiDirectDiscoveryTransport {
             handler = null;
             appContext = null;
             running = false;
+            localDisplayName = "";
             lastStatus = "stopped";
         }
         if (currentHandler != null) {
@@ -146,6 +154,7 @@ public final class IffWifiDirectDiscoveryTransport {
         synchronized (LOCK) {
             return "wfd " + (running ? "on" : "off")
                     + " local=" + localPlayerId
+                    + " name=\"" + clean(localDisplayName) + "\""
                     + " seq=" + sequence
                     + " " + lastStatus;
         }
@@ -209,6 +218,7 @@ public final class IffWifiDirectDiscoveryTransport {
                         }
                         FieldDiagnosticLog.event("IFF_DIAG", "event=wifi_direct_txt_rx"
                                 + " playerId=" + clean(parsed.playerId)
+                                + " displayName=\"" + clean(parsed.displayName) + "\""
                                 + " sequence=" + parsed.sequence
                                 + " ageMs=" + Math.max(0L, System.currentTimeMillis() - parsed.timestampMs)
                                 + " domain=" + clean(fullDomainName)
@@ -225,6 +235,7 @@ public final class IffWifiDirectDiscoveryTransport {
         WifiP2pManager currentManager;
         WifiP2pManager.Channel currentChannel;
         String playerId;
+        String displayName;
         String currentTargetPlayerId;
         int currentTargetRssi;
         Location localGps;
@@ -236,6 +247,7 @@ public final class IffWifiDirectDiscoveryTransport {
             currentManager = manager;
             currentChannel = channel;
             playerId = localPlayerId;
+            displayName = localDisplayName;
             currentTargetPlayerId = targetPlayerId;
             currentTargetRssi = targetRssi;
             localGps = latestLocalGps == null ? null : new Location(latestLocalGps);
@@ -247,6 +259,7 @@ public final class IffWifiDirectDiscoveryTransport {
                 : IffRemoteWitnessStore.getFreshGpsReportFor(currentTargetPlayerId);
         Map<String, String> txt = txtPayload(
                 playerId,
+                displayName,
                 nextSequence,
                 System.currentTimeMillis(),
                 localGps,
@@ -570,6 +583,7 @@ public final class IffWifiDirectDiscoveryTransport {
         }
         String address = srcDevice == null ? "" : srcDevice.deviceAddress;
         if (parsed.hasGps) {
+            mergeDirectParticipantState(parsed);
             receiveGpsReport(
                     "wfd-" + parsed.playerId,
                     parsed.playerId,
@@ -593,6 +607,27 @@ public final class IffWifiDirectDiscoveryTransport {
                     address,
                     "wifi_direct_target_gps_rx");
         }
+    }
+
+    private static void mergeDirectParticipantState(IffWifiDirectPayload.Parsed parsed) {
+        if (parsed == null || !parsed.hasGps) {
+            return;
+        }
+        long now = SystemClock.elapsedRealtime();
+        long observedElapsedMs = now - Math.max(0L, parsed.gpsAgeMs);
+        IffForegroundRadioService.mergeParticipantState(
+                IffParticipantState.create(
+                        parsed.playerId,
+                        parsed.playerId,
+                        parsed.displayName,
+                        IffRemoteWitnessFrame.coordinateFromE7(parsed.gpsLatE7),
+                        IffRemoteWitnessFrame.coordinateFromE7(parsed.gpsLonE7),
+                        Math.max(1.0f, parsed.gpsAccuracyM),
+                        observedElapsedMs,
+                        now,
+                        0,
+                        Integer.MIN_VALUE,
+                        false));
     }
 
     private static void receiveGpsReport(
@@ -631,6 +666,7 @@ public final class IffWifiDirectDiscoveryTransport {
 
     private static Map<String, String> txtPayload(
             String playerId,
+            String displayName,
             long sequence,
             long timestampMs,
             Location localGps,
@@ -643,6 +679,7 @@ public final class IffWifiDirectDiscoveryTransport {
         if (hasLocalGps && hasTargetGps) {
             txt = IffWifiDirectPayload.build(
                     playerId,
+                    displayName,
                     sequence,
                     timestampMs,
                     IffRemoteWitnessFrame.coordinateE7(localGps.getLatitude()),
@@ -658,6 +695,7 @@ public final class IffWifiDirectDiscoveryTransport {
         } else if (hasLocalGps) {
             txt = IffWifiDirectPayload.build(
                     playerId,
+                    displayName,
                     sequence,
                     timestampMs,
                     IffRemoteWitnessFrame.coordinateE7(localGps.getLatitude()),
@@ -667,6 +705,7 @@ public final class IffWifiDirectDiscoveryTransport {
         } else if (hasTargetGps) {
             txt = IffWifiDirectPayload.build(
                     playerId,
+                    displayName,
                     sequence,
                     timestampMs,
                     currentTargetPlayerId,
@@ -676,7 +715,7 @@ public final class IffWifiDirectDiscoveryTransport {
                     targetGpsReport.gpsAccuracyM,
                     targetGpsReport.gpsAgeMs());
         } else {
-            txt = IffWifiDirectPayload.build(playerId, sequence, timestampMs);
+            txt = IffWifiDirectPayload.build(playerId, displayName, sequence, timestampMs);
         }
         IffWifiDirectPayload.putCoordinateMessage(
                 txt,
@@ -692,6 +731,17 @@ public final class IffWifiDirectDiscoveryTransport {
 
     private static String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private static String normalizedDisplayName(String displayName, String fallbackPlayerId) {
+        String normalized = safe(displayName).trim();
+        if (normalized.length() == 0) {
+            normalized = safe(fallbackPlayerId).trim();
+        }
+        if (normalized.length() == 0) {
+            return "phone";
+        }
+        return normalized.length() > 18 ? normalized.substring(0, 18) : normalized;
     }
 
     private static String clean(String value) {

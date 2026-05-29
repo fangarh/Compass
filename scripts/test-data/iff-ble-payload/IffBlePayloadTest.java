@@ -7,6 +7,7 @@ public final class IffBlePayloadTest {
     public static void main(String[] args) {
         parsesLegacyPlayerPayload();
         roundTripsGpsPayload();
+        roundTripsShortDisplayNamePayload();
         treatsGpsAgeOnlyChangeAsSameAdvertiseContent();
         growsBleGpsAgeForRepeatedAdvertiseContent();
         restartsAdvertiserWhenItIsNotAdvertising();
@@ -47,6 +48,25 @@ public final class IffBlePayloadTest {
         assertEquals(376173000, parsed.gpsLonE7);
         assertEquals(12, parsed.gpsAccuracyM);
         assertEquals(4200L, parsed.gpsAgeMs);
+    }
+
+    private static void roundTripsShortDisplayNamePayload() {
+        byte[] payload = IffBlePayload.forPlayerWithGpsAndDisplayName(
+                1,
+                557558000,
+                376173000,
+                12,
+                4200L,
+                "DDS");
+
+        assertEquals(23, payload.length);
+        IffBlePayload.Parsed parsed = IffBlePayload.parse(payload);
+
+        assertNotNull(parsed, "GPS display-name payload should parse");
+        assertEquals(3, parsed.contractVersion);
+        assertEquals(1, parsed.playerCode);
+        assertTrue(parsed.hasGps, "v3 payload should contain GPS");
+        assertEquals("DDS", parsed.displayName);
     }
 
     private static void treatsGpsAgeOnlyChangeAsSameAdvertiseContent() {
@@ -183,6 +203,12 @@ public final class IffBlePayloadTest {
 
     private static void assertEquals(long expected, long actual) {
         if (expected != actual) {
+            throw new AssertionError("Expected " + expected + " but got " + actual);
+        }
+    }
+
+    private static void assertEquals(Object expected, Object actual) {
+        if (expected == null ? actual != null : !expected.equals(actual)) {
             throw new AssertionError("Expected " + expected + " but got " + actual);
         }
     }

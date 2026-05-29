@@ -28,6 +28,9 @@ import net.afterday.compas.BuildConfig;
 public final class FieldDiagnosticLog {
     private static final String TAG = "FieldDiagnosticLog";
     private static final String DIR_NAME = "diagnostics";
+    private static final String FILE_PREFIX = "field-radio-";
+    private static final String FILE_SUFFIX = ".log";
+    private static final long LOG_RETENTION_MS = 7L * 24L * 60L * 60L * 1000L;
     private static final Object LOCK = new Object();
     private static final SimpleDateFormat FILE_DATE = new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US);
     private static final SimpleDateFormat LINE_DATE = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US);
@@ -54,7 +57,13 @@ public final class FieldDiagnosticLog {
                 Log.w(TAG, "Cannot create diagnostics directory: " + dir.getAbsolutePath());
                 return;
             }
-            logFile = new File(dir, "field-radio-" + FILE_DATE.format(new Date()) + ".log");
+            RetentionStats retentionStats = deleteOldLogFiles(dir, System.currentTimeMillis());
+            logFile = new File(dir, FILE_PREFIX + FILE_DATE.format(new Date()) + FILE_SUFFIX);
+            eventLocked("FIELD_DIAG", "event=logger_retention"
+                    + " retentionDays=7"
+                    + " scanned=" + retentionStats.scanned
+                    + " deleted=" + retentionStats.deleted
+                    + " failed=" + retentionStats.failed);
         }
         event("FIELD_DIAG", "event=logger_start path=" + logFile.getAbsolutePath() + " package=" + BuildConfig.APPLICATION_ID + " sdk=" + Build.VERSION.SDK_INT + " debug=" + BuildConfig.DEBUG);
         logDeviceContext(context.getApplicationContext());
@@ -96,15 +105,68 @@ public final class FieldDiagnosticLog {
         if (file == null) {
             return;
         }
-        String line = LINE_DATE.format(new Date()) + " elapsedMs=" + SystemClock.elapsedRealtime() + " " + tag + " " + safe(message) + "\n";
         synchronized (LOCK) {
-            try (FileWriter writer = new FileWriter(file, true)) {
-                writer.write(line);
-                writer.flush();
-            } catch (IOException e) {
-                Log.w(TAG, "Cannot write field diagnostic log", e);
+            eventLocked(tag, message);
+        }
+    }
+
+    private static void eventLocked(String tag, String message) {
+        if (logFile == null) {
+            return;
+        }
+        String line = LINE_DATE.format(new Date()) + " elapsedMs=" + SystemClock.elapsedRealtime() + " " + tag + " " + safe(message) + "\n";
+        try (FileWriter writer = new FileWriter(logFile, true)) {
+            writer.write(line);
+            writer.flush();
+        } catch (IOException e) {
+            Log.w(TAG, "Cannot write field diagnostic log", e);
+        }
+    }
+
+    private static RetentionStats deleteOldLogFiles(File dir, long nowMillis) {
+        RetentionStats stats = new RetentionStats();
+        File[] files = dir == null ? null : dir.listFiles();
+        if (files == null) {
+            return stats;
+        }
+        long cutoffMillis = nowMillis - LOG_RETENTION_MS;
+        for (int i = 0; i < files.length; i++) {
+            File file = files[i];
+            if (file == null || !file.isFile() || !isManagedLogFile(file)) {
+                continue;
+            }
+            stats.scanned++;
+            long lastModified = file.lastModified();
+            if (lastModified <= 0L || lastModified >= cutoffMillis) {
+                continue;
+            }
+            if (file.delete()) {
+                stats.deleted++;
+            } else {
+                stats.failed++;
+                Log.w(TAG, "Cannot delete old field diagnostic log: " + file.getAbsolutePath());
             }
         }
+        return stats;
+    }
+
+    private static boolean isManagedLogFile(File file) {
+        String name = file == null ? "" : file.getName();
+        return name.startsWith(FILE_PREFIX) && name.endsWith(FILE_SUFFIX);
+    }
+
+    static long retentionMillisForTests() {
+        return LOG_RETENTION_MS;
+    }
+
+    static boolean isManagedLogFileNameForTests(String name) {
+        return name != null && name.startsWith(FILE_PREFIX) && name.endsWith(FILE_SUFFIX);
+    }
+
+    private static final class RetentionStats {
+        int scanned;
+        int deleted;
+        int failed;
     }
 
     public static File getLogFile() {

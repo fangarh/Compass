@@ -52,6 +52,7 @@ public final class IffBleFieldRadio {
     private static int advertiseFailureCount;
     private static int scanFailureCount;
     private static String localPlayerId = "";
+    private static String localDisplayName = "";
     private static String lastStatus = "idle";
     private static String lifecycleStatus = "VISIBLE_SCREEN_ONLY";
     private static Location latestLocalGps;
@@ -62,20 +63,34 @@ public final class IffBleFieldRadio {
     }
 
     public static void start(Context context, String nextLocalPlayerId) {
-        start(context, nextLocalPlayerId, "VISIBLE_SCREEN_ONLY");
+        start(context, nextLocalPlayerId, nextLocalPlayerId, "VISIBLE_SCREEN_ONLY");
     }
 
     public static void startFromForegroundService(Context context, String nextLocalPlayerId) {
-        start(context, nextLocalPlayerId, "FOREGROUND_SERVICE_CONNECTED_DEVICE");
+        startFromForegroundService(context, nextLocalPlayerId, nextLocalPlayerId);
     }
 
-    private static void start(Context context, String nextLocalPlayerId, String lifecycle) {
+    public static void startFromForegroundService(
+            Context context,
+            String nextLocalPlayerId,
+            String nextLocalDisplayName) {
+        start(context, nextLocalPlayerId, nextLocalDisplayName, "FOREGROUND_SERVICE_CONNECTED_DEVICE");
+    }
+
+    private static void start(
+            Context context,
+            String nextLocalPlayerId,
+            String nextLocalDisplayName,
+            String lifecycle) {
         if (context == null || Build.VERSION.SDK_INT < 21) {
             setStatus("unsupported_api", false, false);
             return;
         }
         synchronized (LOCK) {
-            if (running && safe(nextLocalPlayerId).equals(localPlayerId) && safe(lifecycle).equals(lifecycleStatus)) {
+            if (running
+                    && safe(nextLocalPlayerId).equals(localPlayerId)
+                    && normalizedDisplayName(nextLocalDisplayName, nextLocalPlayerId).equals(localDisplayName)
+                    && safe(lifecycle).equals(lifecycleStatus)) {
                 return;
             }
         }
@@ -83,6 +98,7 @@ public final class IffBleFieldRadio {
         synchronized (LOCK) {
             running = true;
             localPlayerId = safe(nextLocalPlayerId);
+            localDisplayName = normalizedDisplayName(nextLocalDisplayName, nextLocalPlayerId);
             lifecycleStatus = safe(lifecycle);
             lastStatus = "starting " + localPlayerId;
         }
@@ -502,6 +518,9 @@ public final class IffBleFieldRadio {
         IffRadioWitnessStore.updateFromBleAdvert(playerId, address, result.getRssi());
         recordTargetObservationFromBle(currentLocalPlayerId, playerId, address, result.getRssi());
         if (parsed.hasGps) {
+            if (parsed.displayName.length() > 0) {
+                IffForegroundRadioService.rememberParticipantDisplayName(playerId, parsed.displayName);
+            }
             long now = SystemClock.elapsedRealtime();
             long gpsAgeMs = GPS_AGE_TRACKER.effectiveGpsAgeMs(playerId + "/" + address, payload, now);
             long gpsObservedElapsedMs = now - Math.max(0L, gpsAgeMs);
@@ -567,16 +586,19 @@ public final class IffBleFieldRadio {
             return IffBlePayload.forPlayer(playerCode);
         }
         Location gps;
+        String displayName;
         synchronized (LOCK) {
             gps = latestLocalGps == null ? null : new Location(latestLocalGps);
+            displayName = localDisplayName;
         }
         if (hasFreshGps(gps)) {
-            return IffBlePayload.forPlayerWithGps(
+            return IffBlePayload.forPlayerWithGpsAndDisplayName(
                     playerCode,
                     IffRemoteWitnessFrame.coordinateE7(gps.getLatitude()),
                     IffRemoteWitnessFrame.coordinateE7(gps.getLongitude()),
                     gps.hasAccuracy() ? Math.round(gps.getAccuracy()) : 0,
-                    Math.max(0L, System.currentTimeMillis() - gps.getTime()));
+                    Math.max(0L, System.currentTimeMillis() - gps.getTime()),
+                    displayName);
         }
         return IffBlePayload.forPlayer(playerCode);
     }
@@ -628,5 +650,16 @@ public final class IffBleFieldRadio {
 
     private static String clean(String value) {
         return value == null ? "" : value.replace('\n', ' ').replace('\r', ' ');
+    }
+
+    private static String normalizedDisplayName(String displayName, String fallbackPlayerId) {
+        String normalized = safe(displayName).trim();
+        if (normalized.length() == 0) {
+            normalized = safe(fallbackPlayerId).trim();
+        }
+        if (normalized.length() == 0) {
+            return "phone";
+        }
+        return normalized.length() > 18 ? normalized.substring(0, 18) : normalized;
     }
 }

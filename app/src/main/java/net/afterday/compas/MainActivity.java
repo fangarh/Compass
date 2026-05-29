@@ -445,10 +445,6 @@ public class MainActivity extends AppCompatActivity {
         if (Build.VERSION.SDK_INT >= 31) {
             addMissingPermission(permissions, Manifest.permission.BLUETOOTH_SCAN);
             addMissingPermission(permissions, Manifest.permission.BLUETOOTH_CONNECT);
-            addMissingPermission(permissions, Manifest.permission.BLUETOOTH_ADVERTISE);
-        }
-        if (Build.VERSION.SDK_INT >= 29) {
-            addMissingPermission(permissions, Manifest.permission.ACTIVITY_RECOGNITION);
         }
         if (Build.VERSION.SDK_INT >= 33) {
             addMissingPermission(permissions, Manifest.permission.NEARBY_WIFI_DEVICES);
@@ -555,9 +551,45 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setViewListeners() {
-        this.mStaminaBar.setOnTouchListener(new $$Lambda$MainActivity$VZ9qB0e2fUAruITEnkd9UBxI2_8(this));
-        this.mDeviceBar.setOnTouchListener(new $$Lambda$MainActivity$sVd1cedN8VFuoHGhnGmBJj7SZ5M(this));
-        this.mArmorBar.setOnTouchListener(new $$Lambda$MainActivity$xEvCYm98SWF5wyoXwHPpKT0iVPs(this));
+        this.mStaminaBar.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                openInventory(2);
+            }
+        });
+        this.mStaminaBar.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                openInventory(2);
+                return true;
+            }
+        });
+        this.mDeviceBar.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                openInventory(9);
+            }
+        });
+        this.mDeviceBar.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                openInventory(9);
+                return true;
+            }
+        });
+        this.mArmorBar.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                openInventory(3);
+            }
+        });
+        this.mArmorBar.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                openInventory(3);
+                return true;
+            }
+        });
         this.mIffButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -570,7 +602,19 @@ public class MainActivity extends AppCompatActivity {
                 openGameLog();
             }
         });
-        this.mQrButton.setOnTouchListener(new $$Lambda$MainActivity$6uO8oY_j9sXKnjCLwnBqutuFrs(this));
+        this.mQrButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                openScanner();
+            }
+        });
+        this.mQrButton.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                openScanner();
+                return true;
+            }
+        });
         this.mRadbar.setOnTouchListener(new AnonymousClass2());
         this.mHealthbar.setOnTouchListener(new AnonymousClass3());
         this.mTube.setOnTouchListener(new AnonymousClass4());
@@ -630,7 +674,7 @@ public class MainActivity extends AppCompatActivity {
             int action = event.getAction();
             if (action == 0) {
                 MainActivity.access$2102(MainActivity.this, System.currentTimeMillis());
-            } else if (action == 1 && System.currentTimeMillis() - MainActivity.access$2100(MainActivity.this) > 500 && MainActivity.access$2200(MainActivity.this)) {
+            } else if (action == 1 && System.currentTimeMillis() - MainActivity.access$2100(MainActivity.this) > 500) {
                 MainActivity.access$2300(MainActivity.this, 99);
             }
             return true;
@@ -647,7 +691,7 @@ public class MainActivity extends AppCompatActivity {
             int action = event.getAction();
             if (action == 0) {
                 MainActivity.access$2402(MainActivity.this, System.currentTimeMillis());
-            } else if (action == 1 && System.currentTimeMillis() - MainActivity.access$2400(MainActivity.this) > 500 && MainActivity.access$2200(MainActivity.this)) {
+            } else if (action == 1 && System.currentTimeMillis() - MainActivity.access$2400(MainActivity.this) > 500) {
                 MainActivity.access$2300(MainActivity.this, 99);
             }
             return true;
@@ -770,7 +814,7 @@ public class MainActivity extends AppCompatActivity {
         return orientation == 0 ? R.drawable.background_h_darken : R.drawable.background_v_darken;
     }
 
-    private void openInventory(int type) {
+    void openInventory(int type) {
         FragmentTransaction ft = getFragmentManager().beginTransaction();
         if (type == 99) {
             Fragment prev = getFragmentManager().findFragmentByTag("inventory");
@@ -801,7 +845,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void openScanner() {
+    void openScanner() {
         FragmentTransaction ft = getFragmentManager().beginTransaction();
         Fragment prev = getFragmentManager().findFragmentByTag("scanner");
         if (prev != null) {

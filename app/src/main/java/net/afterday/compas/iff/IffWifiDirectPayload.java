@@ -7,6 +7,7 @@ public final class IffWifiDirectPayload {
     public static final String SERVICE_TYPE = "_compassiff._tcp";
     public static final String KEY_CONTRACT = "c";
     public static final String KEY_PLAYER = "p";
+    public static final String KEY_DISPLAY_NAME = "dn";
     public static final String KEY_SEQUENCE = "s";
     public static final String KEY_TIMESTAMP = "t";
     public static final String KEY_COORDINATES = "coords";
@@ -27,9 +28,18 @@ public final class IffWifiDirectPayload {
     }
 
     public static Map<String, String> build(String playerId, long sequence, long timestampMs) {
+        return build(playerId, playerId, sequence, timestampMs);
+    }
+
+    public static Map<String, String> build(
+            String playerId,
+            String displayName,
+            long sequence,
+            long timestampMs) {
         Map<String, String> txt = new HashMap<>();
         txt.put(KEY_CONTRACT, CONTRACT);
         txt.put(KEY_PLAYER, safe(playerId));
+        txt.put(KEY_DISPLAY_NAME, normalizedDisplayName(displayName, playerId));
         txt.put(KEY_SEQUENCE, String.valueOf(Math.max(0L, sequence)));
         txt.put(KEY_TIMESTAMP, String.valueOf(Math.max(0L, timestampMs)));
         return txt;
@@ -50,7 +60,19 @@ public final class IffWifiDirectPayload {
             int gpsLonE7,
             int gpsAccuracyM,
             long gpsAgeMs) {
-        Map<String, String> txt = build(playerId, sequence, timestampMs);
+        return build(playerId, playerId, sequence, timestampMs, gpsLatE7, gpsLonE7, gpsAccuracyM, gpsAgeMs);
+    }
+
+    public static Map<String, String> build(
+            String playerId,
+            String displayName,
+            long sequence,
+            long timestampMs,
+            int gpsLatE7,
+            int gpsLonE7,
+            int gpsAccuracyM,
+            long gpsAgeMs) {
+        Map<String, String> txt = build(playerId, displayName, sequence, timestampMs);
         putGps(txt, KEY_GPS_LAT_E7, KEY_GPS_LON_E7, KEY_GPS_ACCURACY_M, KEY_GPS_AGE_MS,
                 gpsLatE7, gpsLonE7, gpsAccuracyM, gpsAgeMs);
         return txt;
@@ -66,7 +88,22 @@ public final class IffWifiDirectPayload {
             int targetGpsLonE7,
             int targetGpsAccuracyM,
             long targetGpsAgeMs) {
-        Map<String, String> txt = build(playerId, sequence, timestampMs);
+        return build(playerId, playerId, sequence, timestampMs, targetPlayerId, targetRssi,
+                targetGpsLatE7, targetGpsLonE7, targetGpsAccuracyM, targetGpsAgeMs);
+    }
+
+    public static Map<String, String> build(
+            String playerId,
+            String displayName,
+            long sequence,
+            long timestampMs,
+            String targetPlayerId,
+            int targetRssi,
+            int targetGpsLatE7,
+            int targetGpsLonE7,
+            int targetGpsAccuracyM,
+            long targetGpsAgeMs) {
+        Map<String, String> txt = build(playerId, displayName, sequence, timestampMs);
         putTarget(txt, targetPlayerId, targetRssi);
         putGps(txt, KEY_TARGET_GPS_LAT_E7, KEY_TARGET_GPS_LON_E7,
                 KEY_TARGET_GPS_ACCURACY_M, KEY_TARGET_GPS_AGE_MS,
@@ -88,7 +125,26 @@ public final class IffWifiDirectPayload {
             int targetGpsLonE7,
             int targetGpsAccuracyM,
             long targetGpsAgeMs) {
-        Map<String, String> txt = build(playerId, sequence, timestampMs,
+        return build(playerId, playerId, sequence, timestampMs, gpsLatE7, gpsLonE7, gpsAccuracyM, gpsAgeMs,
+                targetPlayerId, targetRssi, targetGpsLatE7, targetGpsLonE7, targetGpsAccuracyM, targetGpsAgeMs);
+    }
+
+    public static Map<String, String> build(
+            String playerId,
+            String displayName,
+            long sequence,
+            long timestampMs,
+            int gpsLatE7,
+            int gpsLonE7,
+            int gpsAccuracyM,
+            long gpsAgeMs,
+            String targetPlayerId,
+            int targetRssi,
+            int targetGpsLatE7,
+            int targetGpsLonE7,
+            int targetGpsAccuracyM,
+            long targetGpsAgeMs) {
+        Map<String, String> txt = build(playerId, displayName, sequence, timestampMs,
                 gpsLatE7, gpsLonE7, gpsAccuracyM, gpsAgeMs);
         putTarget(txt, targetPlayerId, targetRssi);
         putGps(txt, KEY_TARGET_GPS_LAT_E7, KEY_TARGET_GPS_LON_E7,
@@ -128,7 +184,7 @@ public final class IffWifiDirectPayload {
             targetPlayerId = parts[3];
             targetRssi = parseRssi(parts[4]);
         }
-        return new Parsed(parts[1], parseLong(parts[2]), -1L, targetPlayerId, targetRssi, "",
+        return new Parsed(parts[1], parts[1], parseLong(parts[2]), -1L, targetPlayerId, targetRssi, "",
                 false, 0, 0, -1, -1L,
                 false, 0, 0, -1, -1L);
     }
@@ -141,6 +197,7 @@ public final class IffWifiDirectPayload {
         if (playerId == null || playerId.length() == 0) {
             return null;
         }
+        String displayName = normalizedDisplayName(txt.get(KEY_DISPLAY_NAME), playerId);
         String targetPlayerId = txt.get(KEY_TARGET_PLAYER);
         int targetRssi = parseRssi(txt.get(KEY_TARGET_RSSI));
         String coordinateMessage = safe(txt.get(KEY_COORDINATES));
@@ -154,6 +211,7 @@ public final class IffWifiDirectPayload {
         long targetGpsAgeMs = parseLong(txt.get(KEY_TARGET_GPS_AGE_MS));
         return new Parsed(
                 playerId,
+                displayName,
                 parseLong(txt.get(KEY_SEQUENCE)),
                 parseLong(txt.get(KEY_TIMESTAMP)),
                 targetPlayerId,
@@ -195,6 +253,17 @@ public final class IffWifiDirectPayload {
 
     private static String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private static String normalizedDisplayName(String displayName, String fallbackPlayerId) {
+        String normalized = safe(displayName).trim();
+        if (normalized.length() == 0) {
+            normalized = safe(fallbackPlayerId).trim();
+        }
+        if (normalized.length() == 0) {
+            return "phone";
+        }
+        return normalized.length() > 18 ? normalized.substring(0, 18) : normalized;
     }
 
     private static void putTarget(Map<String, String> txt, String targetPlayerId, int targetRssi) {
@@ -250,6 +319,7 @@ public final class IffWifiDirectPayload {
 
     public static final class Parsed {
         public final String playerId;
+        public final String displayName;
         public final long sequence;
         public final long timestampMs;
         public final String targetPlayerId;
@@ -268,6 +338,7 @@ public final class IffWifiDirectPayload {
 
         private Parsed(
                 String playerId,
+                String displayName,
                 long sequence,
                 long timestampMs,
                 String targetPlayerId,
@@ -284,6 +355,7 @@ public final class IffWifiDirectPayload {
                 int targetGpsAccuracyM,
                 long targetGpsAgeMs) {
             this.playerId = playerId;
+            this.displayName = normalizedDisplayName(displayName, playerId);
             this.sequence = sequence;
             this.timestampMs = timestampMs;
             this.targetPlayerId = safe(targetPlayerId);

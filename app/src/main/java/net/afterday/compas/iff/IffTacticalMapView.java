@@ -17,6 +17,7 @@ public final class IffTacticalMapView extends View {
     private IffFieldMapSnapshot fieldState;
     private IffParticipantMapModel.Snapshot participantState;
     private int detailMode;
+    private int mapRangeMeters = IffMapScale.defaultRangeMeters();
     private boolean phoneHeadingAvailable;
     private float phoneHeadingDeg;
     private static final long CURRENT_POINT_MS = 2500L;
@@ -44,6 +45,11 @@ public final class IffTacticalMapView extends View {
 
     public void setParticipantState(IffParticipantMapModel.Snapshot nextParticipantState) {
         participantState = nextParticipantState;
+        invalidate();
+    }
+
+    public void setMapRangeMeters(int nextMapRangeMeters) {
+        mapRangeMeters = IffMapScale.normalizeRangeMeters(nextMapRangeMeters);
         invalidate();
     }
 
@@ -313,7 +319,8 @@ public final class IffTacticalMapView extends View {
         int y = dp(20);
         textPaint.setColor(0xffb8c49a);
         drawRight(canvas, safe(participantState == null ? "NO_MAP" : participantState.mode), width - dp(10), y);
-        drawRight(canvas, phoneHeadingAvailable ? "PHONE-UP " + Math.round(phoneHeadingDeg) : "N-UP",
+        drawRight(canvas, IffMapScale.label(mapRangeMeters) + " / "
+                        + (phoneHeadingAvailable ? "PHONE-UP " + Math.round(phoneHeadingDeg) : "N-UP"),
                 width - dp(10), y + dp(17));
         if (participantState == null || participantState.points == null || participantState.points.isEmpty()) {
             drawRight(canvas, "acc -- hidden="
@@ -380,13 +387,14 @@ public final class IffTacticalMapView extends View {
     }
 
     private float[] screenOffsetFor(IffParticipantMapModel.Point point) {
-        if (point == null || !phoneHeadingAvailable) {
-            return new float[] {point == null ? 0.0f : point.x - 0.5f, point == null ? 0.0f : point.y - 0.5f};
+        if (point == null) {
+            return new float[] {0.0f, 0.0f};
         }
-        float dx = point.x - 0.5f;
-        float dy = point.y - 0.5f;
-        float radius = (float) Math.sqrt((dx * dx) + (dy * dy));
-        double relativeBearing = Math.toRadians(normalizeDegrees(point.bearingDeg - phoneHeadingDeg));
+        float radius = IffMapScale.screenRadius(point.distanceM, mapRangeMeters);
+        float bearing = phoneHeadingAvailable
+                ? normalizeDegrees(point.bearingDeg - phoneHeadingDeg)
+                : point.bearingDeg;
+        double relativeBearing = Math.toRadians(bearing);
         return new float[] {
                 (float) (Math.sin(relativeBearing) * radius),
                 -(float) (Math.cos(relativeBearing) * radius)

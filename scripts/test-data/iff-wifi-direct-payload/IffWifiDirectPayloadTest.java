@@ -4,6 +4,8 @@ import net.afterday.compas.iff.IffWifiDirectPayload;
 public final class IffWifiDirectPayloadTest {
     public static void main(String[] args) {
         roundTripsWifiDirectTxtPayload();
+        roundTripsDisplayNameInWifiDirectTxtPayload();
+        defaultsDisplayNameToPlayerIdForLegacyPayload();
         roundTripsWifiDirectTxtPayloadWithOwnGps();
         roundTripsWifiDirectTxtPayloadWithRelayedTargetGps();
         carriesCoordinateMessage();
@@ -21,6 +23,26 @@ public final class IffWifiDirectPayloadTest {
         assertEquals("zhenya", parsed.playerId);
         assertEquals(7L, parsed.sequence);
         assertEquals(123456L, parsed.timestampMs);
+    }
+
+    private static void roundTripsDisplayNameInWifiDirectTxtPayload() {
+        Map<String, String> txt = IffWifiDirectPayload.build("petya", "Петя тест", 11L, 123456L);
+
+        IffWifiDirectPayload.Parsed parsed = IffWifiDirectPayload.parse(txt);
+
+        assertNotNull(parsed, "payload should parse");
+        assertEquals("petya", parsed.playerId);
+        assertEquals("Петя тест", parsed.displayName);
+        assertEquals(11L, parsed.sequence);
+    }
+
+    private static void defaultsDisplayNameToPlayerIdForLegacyPayload() {
+        Map<String, String> txt = IffWifiDirectPayload.build("vasya", 12L, 123456L);
+
+        IffWifiDirectPayload.Parsed parsed = IffWifiDirectPayload.parse(txt);
+
+        assertNotNull(parsed, "legacy payload should parse");
+        assertEquals("vasya", parsed.displayName);
     }
 
     private static void roundTripsWifiDirectTxtPayloadWithOwnGps() {
