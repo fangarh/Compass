@@ -1,3 +1,9 @@
+<#
+APK path examples:
+  Visible buttons: app\build\outputs\apk\standard\debug\app-standard-debug.apk
+  Hidden IFF/LOG buttons: app\build\outputs\apk\hiddenMainActions\debug\app-hiddenMainActions-debug.apk
+#>
+
 param(
     [Parameter(Mandatory = $true)]
     [string]$Serial,
@@ -6,7 +12,7 @@ param(
     [ValidateSet("A", "B", "C", "Operator")]
     [string]$Role,
 
-    [string]$ApkPath = "app\build\outputs\apk\debug\app-debug.apk",
+    [string]$ApkPath = "app\build\outputs\apk\standard\debug\app-standard-debug.apk",
 
     [switch]$SkipInstall
 )

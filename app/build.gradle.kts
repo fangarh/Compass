@@ -18,6 +18,19 @@ android {
         versionName = "1853-wifi-target-rssi-averaging"
     }
 
+    flavorDimensions += "mainActions"
+
+    productFlavors {
+        create("standard") {
+            dimension = "mainActions"
+            buildConfigField("boolean", "SHOW_MAIN_ACTION_BUTTONS", "true")
+        }
+        create("hiddenMainActions") {
+            dimension = "mainActions"
+            buildConfigField("boolean", "SHOW_MAIN_ACTION_BUTTONS", "false")
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8

@@ -1,7 +1,13 @@
+<#
+APK path examples:
+  Visible buttons: app\build\outputs\apk\standard\debug\app-standard-debug.apk
+  Hidden IFF/LOG buttons: app\build\outputs\apk\hiddenMainActions\debug\app-hiddenMainActions-debug.apk
+#>
+
 param(
     [string]$Serial = "emulator-5554",
     [string]$PackageName = "net.afterday.compas",
-    [string]$Apk = "app\build\outputs\apk\debug\app-debug.apk"
+    [string]$Apk = "app\build\outputs\apk\standard\debug\app-standard-debug.apk"
 )
 
 $ErrorActionPreference = "Stop"

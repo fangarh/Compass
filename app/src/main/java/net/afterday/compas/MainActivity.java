@@ -424,6 +424,7 @@ public class MainActivity extends AppCompatActivity {
         setOrientation(o);
         setContentView(R.layout.activity_main);
         bindViews();
+        configureMainActionButtons();
         setViewListeners();
         this.disposables.add(Observable.combineLatest(PlayerEventBus.instance().getPlayerFractionStream(), this.orientationChanges, $$Lambda$MainActivity$EnWNj7cHhbF7LzqAM_xMElgyM.INSTANCE).observeOn(AndroidSchedulers.mainThread()).subscribe(new $$Lambda$MainActivity$ef4UBKBpUoGe9qcyh46udKOCk(this)));
         startCompassServiceWhenReady();
@@ -591,18 +592,20 @@ public class MainActivity extends AppCompatActivity {
                 return true;
             }
         });
-        this.mIffButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                openIff();
-            }
-        });
-        this.mLogButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                openGameLog();
-            }
-        });
+        if (BuildConfig.SHOW_MAIN_ACTION_BUTTONS) {
+            this.mIffButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    openIff();
+                }
+            });
+            this.mLogButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    openGameLog();
+                }
+            });
+        }
         this.mQrButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -768,6 +771,20 @@ public class MainActivity extends AppCompatActivity {
         } else {
             this.mCompass.compassOff();
         }
+    }
+
+    private void configureMainActionButtons() {
+        if (BuildConfig.SHOW_MAIN_ACTION_BUTTONS) {
+            return;
+        }
+        this.mIffButton.setVisibility(View.GONE);
+        this.mIffButton.setEnabled(false);
+        this.mIffButton.setClickable(false);
+        this.mIffButton.setFocusable(false);
+        this.mLogButton.setVisibility(View.GONE);
+        this.mLogButton.setEnabled(false);
+        this.mLogButton.setClickable(false);
+        this.mLogButton.setFocusable(false);
     }
 
     private void setBackground(Player.FRACTION pf, int orientation) {

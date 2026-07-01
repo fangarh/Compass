@@ -17,7 +17,15 @@ This project currently expects a local Android SDK and Gradle installation.
 
 ```powershell
 $env:JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'
-gradle :app:assembleDebug
+gradle :app:assembleStandardDebug
+gradle :app:assembleHiddenMainActionsDebug
+```
+
+Debug APK outputs:
+
+```text
+app/build/outputs/apk/standard/debug/app-standard-debug.apk
+app/build/outputs/apk/hiddenMainActions/debug/app-hiddenMainActions-debug.apk
 ```
 
 Current target package:
