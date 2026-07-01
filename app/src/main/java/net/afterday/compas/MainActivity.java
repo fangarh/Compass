@@ -62,6 +62,7 @@ import net.afterday.compas.view.Healthbar;
 import net.afterday.compas.view.Indicator;
 import net.afterday.compas.view.LevelIndicator;
 import net.afterday.compas.view.LevelProgress;
+import net.afterday.compas.view.PdaSceneLayout;
 import net.afterday.compas.view.Radbar;
 import net.afterday.compas.view.SmallLogListAdapter;
 import net.afterday.compas.view.Tube;
@@ -83,7 +84,7 @@ public class MainActivity extends AppCompatActivity {
     private boolean hasActiveDevice;
     private Disposable impactsSubsciption;
     private Observable<ItemAdded> itemAddedStream;
-    private ViewGroup layout;
+    private PdaSceneLayout layout;
     private LevelProgress levelProgress;
     private SmallLogListAdapter logAdapter;
     private RecyclerView logList;
@@ -761,7 +762,7 @@ public class MainActivity extends AppCompatActivity {
         this.mIndicator = (Indicator) findViewById(R.id.indicator);
         this.countDownTimer = (CountDownTimer) findViewById(R.id.countdown);
         this.levelProgress = (LevelProgress) findViewById(R.id.levelProgress);
-        this.layout = (ViewGroup) findViewById(R.id.activity_main);
+        this.layout = (PdaSceneLayout) findViewById(R.id.activity_main);
         if (Settings.instance().getBoolSetting(net.afterday.compas.settings.Constants.COMPASS)) {
             this.mCompass.compassOn();
         } else {
@@ -770,7 +771,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void setBackground(Player.FRACTION pf, int orientation) {
-        this.layout.setBackground(ContextCompat.getDrawable(this, getBackground(pf, orientation)));
+        this.layout.setSceneBackgroundResource(getBackground(pf, orientation));
     }
 
     /* JADX INFO: renamed from: net.afterday.compas.MainActivity$5, reason: invalid class name */

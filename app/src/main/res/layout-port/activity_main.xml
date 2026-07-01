@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<android.support.percent.PercentRelativeLayout android:id="@id/activity_main" android:padding="0.0dp" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_margin="0.0dp" android:keepScreenOn="true"
+<net.afterday.compas.view.PdaSceneLayout android:id="@id/activity_main" android:padding="0.0dp" android:layout_width="match_parent" android:layout_height="match_parent" android:layout_margin="0.0dp" android:keepScreenOn="true"
   xmlns:android="http://schemas.android.com/apk/res/android" xmlns:app="http://schemas.android.com/apk/res-auto">
     <net.afterday.compas.view.Compass android:id="@id/compass" app:layout_heightPercent="52.812504%" app:layout_marginLeftPercent="3.0500054%" app:layout_marginTopPercent="1.0800004%" app:layout_widthPercent="93.88889%" />
     <net.afterday.compas.view.Geiger android:id="@id/geiger" app:layout_heightPercent="46.500004%" app:layout_marginLeftPercent="8.959997%" app:layout_marginTopPercent="4.4999957%" app:layout_widthPercent="83.24%" />
@@ -20,4 +20,4 @@
     <View android:id="@id/battery_background" android:background="@drawable/energy_v" app:layout_heightPercent="7.700002%" app:layout_marginLeftPercent="82.8%" app:layout_marginTopPercent="1.4999986%" app:layout_widthPercent="16.6%" />
     <net.afterday.compas.view.Battery android:id="@id/battery" app:layout_heightPercent="5.799997%" app:layout_marginLeftPercent="82.00001%" app:layout_marginTopPercent="0.34999847%" app:layout_widthPercent="19.000006%" />
     <Button android:id="@id/logbutton" android:text="LOG" android:textColor="#ffffff" android:textSize="13.0sp" android:background="@drawable/popup_button" android:padding="0.0dp" app:layout_heightPercent="7.200003%" app:layout_marginLeftPercent="20.000004%" app:layout_marginTopPercent="88.49999%" app:layout_widthPercent="16.8%" />
-</android.support.percent.PercentRelativeLayout>
+</net.afterday.compas.view.PdaSceneLayout>

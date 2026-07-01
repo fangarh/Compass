@@ -17,13 +17,9 @@ public class WifiInfluenceProviderImpl implements WiFiInfluenceProvider {
     private static final String TAG = "WifiInflProvider";
     private InfluenceExtractionStrategy<List<ScanResult>, InfluencesPack> ies;
     private InfluencesPersistency ip;
-    private double lastHealingStrength;
     private Observable<List<ScanResult>> scanResults;
     private WiFi wifi;
     private Observable<InfluencesPack> wifiInfluence = BehaviorSubject.createDefault(new InflPack());
-    private boolean wasHealing = false;
-    private int noHealing = 0;
-    private long lastHealingTime = 0;
 
     public WifiInfluenceProviderImpl(WiFi wifi, InfluencesPersistency ip) {
         this.wifi = wifi;
@@ -62,14 +58,6 @@ public class WifiInfluenceProviderImpl implements WiFiInfluenceProvider {
     }
 
     public InfluencesPack verifyHealing(InfluencesPack ip) {
-        if (ip.influencedBy(5)) {
-            this.lastHealingStrength = ip.getInfluence(5);
-            this.lastHealingTime = System.currentTimeMillis();
-        } else if (System.currentTimeMillis() - this.lastHealingTime < 5000) {
-            ip.addInfluence(5, this.lastHealingStrength);
-            this.lastHealingStrength = 0.0d;
-            this.lastHealingTime = 0L;
-        }
         return ip;
     }
 }

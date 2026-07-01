@@ -135,6 +135,11 @@ public class HInfluencesPersistency implements InfluencesPersistency {
         wifiInfls.add("8e:aa:b5:0c:58:0f");
         wifiInfls.add("4a:3f:da:60:48:a6");
         wifiInfls.add("4a:3f:da:6b:14:e4");
+        wifiInfls.add("8e:aa:b5:51:30:d3");
+        wifiInfls.add("ee:fa:bc:c8:f9:f6");
+        wifiInfls.add("4a:3f:da:68:cc:f5");
+        wifiInfls.add("ca:2b:96:20:06:b0");
+        wifiInfls.add("cc:50:e3:5b:5d:b3");
         return wifiInfls;
     }
 

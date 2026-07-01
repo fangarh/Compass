@@ -46,11 +46,18 @@ public abstract class AbstractView extends View {
         if (background != null) {
             this.backgroundWidth = background.getWidth();
             this.backgroundHeight = background.getHeight();
-            this.scaleX = this.width / this.backgroundWidth;
-            this.scaleY = this.height / this.backgroundHeight;
+            this.scaleX = scaleFactor(this.width, this.backgroundWidth);
+            this.scaleY = scaleFactor(this.height, this.backgroundHeight);
             this.matrix.postScale(this.scaleX, this.scaleY);
         }
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         init();
+    }
+
+    static float scaleFactor(int size, int backgroundSize) {
+        if (backgroundSize <= 0) {
+            return 0.0f;
+        }
+        return size / (float) backgroundSize;
     }
 }
