@@ -10,6 +10,7 @@ New-Item -ItemType Directory -Force $outDir | Out-Null
 $sources = @(
     "app\src\main\java\net\afterday\compas\iff\IffWifiTargetLocator.java",
     "app\src\main\java\net\afterday\compas\iff\IffDistanceTrend.java",
+    "app\src\main\java\net\afterday\compas\iff\IffGpsSanity.java",
     "app\src\main\java\net\afterday\compas\iff\IffGpsSnapshot.java",
     "app\src\main\java\net\afterday\compas\iff\IffFieldLocatorSnapshot.java",
     "app\src\main\java\net\afterday\compas\iff\IffFieldMapSnapshot.java",

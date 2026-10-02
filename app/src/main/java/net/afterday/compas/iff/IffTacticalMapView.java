@@ -176,7 +176,7 @@ public final class IffTacticalMapView extends View {
         paint.setColor(fieldState.directionKnown ? 0xff7dff73 : 0xffffd16a);
         canvas.drawCircle(tx, ty, dp(12), paint);
         textPaint.setColor(0xffffffff);
-        canvas.drawText("ZHENYA", tx + dp(16), ty - dp(4), textPaint);
+        canvas.drawText("ЦЕЛЬ", tx + dp(16), ty - dp(4), textPaint);
         textPaint.setColor(0xffb8c49a);
         canvas.drawText(fieldState.distanceBucketM + "m / " + fieldState.clockDirection, tx + dp(16), ty + dp(13), textPaint);
     }
@@ -291,7 +291,7 @@ public final class IffTacticalMapView extends View {
         int y = top + dp(10);
         if (!hasSpatialPoints) {
             textPaint.setColor(0xffffd16a);
-            canvas.drawText(fitText("RADIO ONLY / NO GPS POINT", right - left), left, y, textPaint);
+            canvas.drawText(fitText("ТОЛЬКО РАЦИЯ / НЕТ GPS", right - left), left, y, textPaint);
             y += rowHeight;
         }
 
@@ -305,7 +305,7 @@ public final class IffTacticalMapView extends View {
             paint.setColor(colorFor(point));
             canvas.drawCircle(left + dp(5), y - dp(4), dp(4), paint);
             textPaint.setColor(point.current ? 0xffd8dfca : 0xffb8c49a);
-            canvas.drawText(fitText(point.name + " RADIO ONLY " + point.radioLabel, right - left - dp(16)),
+            canvas.drawText(fitText(point.name + " ТОЛЬКО РАЦИЯ " + point.radioLabel, right - left - dp(16)),
                     left + dp(16), y, textPaint);
             y += rowHeight;
             drawn++;
@@ -318,12 +318,12 @@ public final class IffTacticalMapView extends View {
         textPaint.setTextSize(sp(12));
         int y = dp(20);
         textPaint.setColor(0xffb8c49a);
-        drawRight(canvas, safe(participantState == null ? "NO_MAP" : participantState.mode), width - dp(10), y);
+        drawRight(canvas, ruStatus(participantState == null ? "НЕТ КАРТЫ" : participantState.mode), width - dp(10), y);
         drawRight(canvas, IffMapScale.label(mapRangeMeters) + " / "
-                        + (phoneHeadingAvailable ? "PHONE-UP " + Math.round(phoneHeadingDeg) : "N-UP"),
+                        + (phoneHeadingAvailable ? "ВЕРХ ТЕЛ. " + Math.round(phoneHeadingDeg) : "СЕВЕР ВВЕРХ"),
                 width - dp(10), y + dp(17));
         if (participantState == null || participantState.points == null || participantState.points.isEmpty()) {
-            drawRight(canvas, "acc -- hidden="
+            drawRight(canvas, "точн. -- скрыто="
                             + (participantState == null ? 0 : participantState.hiddenCount),
                     width - dp(10), y + dp(34));
             textPaint.setTextSize(oldTextSize);
@@ -335,7 +335,7 @@ public final class IffTacticalMapView extends View {
             drawRight(canvas,
                     safe(point.displayName)
                             + " +/-" + Math.round(point.distanceAccuracyMeters) + "m "
-                            + freshnessLabel(point),
+                            + ruStatus(freshnessLabel(point)),
                     width - dp(10),
                     y + dp(17 * (i + 2)));
         }
@@ -384,6 +384,18 @@ public final class IffTacticalMapView extends View {
             end--;
         }
         return end <= 0 ? suffix : value.substring(0, end) + suffix;
+    }
+
+    private String ruStatus(String value) {
+        return safe(value)
+                .replace("UNKNOWN", "НЕТ ДАННЫХ")
+                .replace("CURRENT", "СВЕЖЕЕ")
+                .replace("STALE", "СТАРОЕ")
+                .replace("NO_MAP", "НЕТ КАРТЫ")
+                .replace("fresh", "свежее")
+                .replace("stale", "старое")
+                .replace("old", "старое")
+                .replace("hidden", "скрыто");
     }
 
     private float[] screenOffsetFor(IffParticipantMapModel.Point point) {

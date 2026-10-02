@@ -61,15 +61,14 @@ public class LevelIndicator extends AppCompatImageButton {
         int heightSize = View.MeasureSpec.getSize(heightMeasureSpec);
         this.mWidth = widthSize;
         this.mHeight = heightSize;
-        this.mScaleFactorX = this.mWidth / this.backgroundWidth;
-        this.mScaleFactorY = this.mHeight / this.backgroundHeight;
+        this.mScaleFactorX = this.mWidth / (float) this.backgroundWidth;
+        this.mScaleFactorY = this.mHeight / (float) this.backgroundHeight;
         this.paint.setTextSize(this.mScaleFactorY * 100.0f);
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
     }
 
     @Override // android.widget.ImageView, android.view.View
     public void onDraw(Canvas canvas) {
-        setAlpha(0);
         super.onDraw(canvas);
         Log.d("LevelIndicator", "draw   ---- " + this.level);
         convertRect(-1, -2, this.matrix);

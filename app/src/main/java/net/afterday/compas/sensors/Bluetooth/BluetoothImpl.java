@@ -99,6 +99,11 @@ public class BluetoothImpl implements Bluetooth {
     @Override // net.afterday.compas.sensors.Sensor
     public void start() {
         this.isRunning.set(true);
+        if (this.bla == null) {
+            Log.w(TAG, "Bluetooth adapter unavailable; emitting neutral sensor value");
+            ((Subject) this.resultStream).onNext(Double.valueOf(0.0d));
+            return;
+        }
         this.bla.startLeScan(this.callback);
     }
 
@@ -132,7 +137,9 @@ public class BluetoothImpl implements Bluetooth {
                 BluetoothImpl.access$302(BluetoothImpl.this, Observable.timer(3L, TimeUnit.SECONDS).subscribe(new $$Lambda$BluetoothImpl$LeScanCallback$m1bevS7FLoSbxDjges1RSiTEXMo(this)));
             }
             if (!BluetoothImpl.access$500(BluetoothImpl.this).get()) {
-                BluetoothImpl.access$700(BluetoothImpl.this).stopLeScan(BluetoothImpl.access$600(BluetoothImpl.this));
+                if (BluetoothImpl.access$700(BluetoothImpl.this) != null) {
+                    BluetoothImpl.access$700(BluetoothImpl.this).stopLeScan(BluetoothImpl.access$600(BluetoothImpl.this));
+                }
             }
         }
 
@@ -154,7 +161,7 @@ public class BluetoothImpl implements Bluetooth {
             if ("android.bluetooth.device.action.FOUND".equals(intent.getAction())) {
                 Log.d("BLUETOOTH RECEIVED!", "" + ((int) intent.getShortExtra("android.bluetooth.device.extra.RSSI", Short.MIN_VALUE)));
             }
-            if (BluetoothImpl.access$500(BluetoothImpl.this).get()) {
+            if (BluetoothImpl.access$500(BluetoothImpl.this).get() && BluetoothImpl.access$700(BluetoothImpl.this) != null) {
                 Log.e(BluetoothImpl.TAG, "START DISCOVERY");
                 BluetoothImpl.access$700(BluetoothImpl.this).startDiscovery();
             }

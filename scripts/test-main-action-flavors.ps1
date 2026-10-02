@@ -22,10 +22,7 @@ $prepareDevice = Get-Content -Path $prepareDevicePath -Raw
 Assert-Contains $gradle 'flavorDimensions\s*(\+=|\.add\()\s*"?mainActions"?' "Missing mainActions flavor dimension."
 Assert-Contains $gradle 'create\("standard"\)[\s\S]*dimension\s*=\s*"mainActions"[\s\S]*buildConfigField\("boolean",\s*"SHOW_MAIN_ACTION_BUTTONS",\s*"true"\)' "standard flavor must enable SHOW_MAIN_ACTION_BUTTONS."
 Assert-Contains $gradle 'create\("hiddenMainActions"\)[\s\S]*dimension\s*=\s*"mainActions"[\s\S]*buildConfigField\("boolean",\s*"SHOW_MAIN_ACTION_BUTTONS",\s*"false"\)' "hiddenMainActions flavor must disable SHOW_MAIN_ACTION_BUTTONS."
-
-if ($gradle -match 'applicationIdSuffix') {
-    throw "Main action flavors must not set applicationIdSuffix; hidden APK should replace the standard package."
-}
+Assert-Contains $gradle 'create\("hiddenMainActions"\)[\s\S]*applicationIdSuffix\s*=\s*"\.hidden"' "hiddenMainActions flavor must use a separate package so it installs independently."
 
 Assert-Contains $mainActivity 'BuildConfig\.SHOW_MAIN_ACTION_BUTTONS' "MainActivity must use the flavor BuildConfig flag."
 Assert-Contains $mainActivity 'mIffButton\.setVisibility\(View\.GONE\)' "Hidden flavor must remove the IFF button from layout/hit testing."

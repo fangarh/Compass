@@ -19,7 +19,7 @@
             android:layout_marginRight="4dp"
             android:layout_weight="1"
             android:background="@drawable/popup_button"
-            android:text="CONTACT"
+            android:text="КОНТАКТ"
             android:textColor="#ffd16a"
             android:textSize="12sp" />
 
@@ -31,7 +31,7 @@
             android:layout_marginRight="4dp"
             android:layout_weight="1"
             android:background="@drawable/popup_button"
-            android:text="TEAM"
+            android:text="КОМАНДА"
             android:textColor="#b8c49a"
             android:textSize="12sp" />
 
@@ -43,7 +43,7 @@
             android:layout_marginRight="4dp"
             android:layout_weight="1"
             android:background="@drawable/popup_button"
-            android:text="MAP"
+            android:text="КАРТА"
             android:textColor="#b8c49a"
             android:textSize="12sp" />
 
@@ -54,7 +54,7 @@
             android:layout_marginLeft="4dp"
             android:layout_weight="1"
             android:background="@drawable/popup_button"
-            android:text="LOG"
+            android:text="ЖУРНАЛ"
             android:textColor="#b8c49a"
             android:textSize="12sp" />
     </LinearLayout>
@@ -121,7 +121,7 @@
             android:layout_marginRight="4dp"
             android:layout_weight="1"
             android:background="@drawable/popup_button"
-            android:text="APPROACH"
+            android:text="ПОДХОД"
             android:textColor="#ffffff"
             android:textSize="8sp" />
 
@@ -133,7 +133,7 @@
             android:layout_marginRight="4dp"
             android:layout_weight="1"
             android:background="@drawable/popup_button"
-            android:text="TRUST"
+            android:text="ДОВЕР."
             android:textColor="#ffd16a"
             android:textSize="8sp" />
 
@@ -145,7 +145,7 @@
             android:layout_marginRight="4dp"
             android:layout_weight="1"
             android:background="@drawable/popup_button"
-            android:text="CHECK"
+            android:text="ПРОВЕР."
             android:textColor="#ffffff"
             android:textSize="8sp" />
 
@@ -156,7 +156,7 @@
             android:layout_marginLeft="4dp"
             android:layout_weight="1"
             android:background="@drawable/popup_button"
-            android:text="RADIO ON"
+            android:text="РАЦИЯ"
             android:textColor="#ffffff"
             android:textSize="8sp" />
     </LinearLayout>

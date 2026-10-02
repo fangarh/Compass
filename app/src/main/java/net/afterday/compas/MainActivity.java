@@ -49,6 +49,7 @@ import net.afterday.compas.fragment.InventoryFragment;
 import net.afterday.compas.fragment.ItemInfoFragment;
 import net.afterday.compas.fragment.ScannerFragment;
 import net.afterday.compas.fragment.SuicideConfirmationFragment;
+import net.afterday.compas.logging.LogLine;
 import net.afterday.compas.sensors.Battery.BatteryStatus;
 import net.afterday.compas.settings.Settings;
 import net.afterday.compas.settings.SettingsListener;
@@ -447,6 +448,7 @@ public class MainActivity extends AppCompatActivity {
         if (Build.VERSION.SDK_INT >= 31) {
             addMissingPermission(permissions, Manifest.permission.BLUETOOTH_SCAN);
             addMissingPermission(permissions, Manifest.permission.BLUETOOTH_CONNECT);
+            addMissingPermission(permissions, Manifest.permission.BLUETOOTH_ADVERTISE);
         }
         if (Build.VERSION.SDK_INT >= 33) {
             addMissingPermission(permissions, Manifest.permission.NEARBY_WIFI_DEVICES);
@@ -510,8 +512,50 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public /* synthetic */ void lambda$setupLog$3$MainActivity(RecyclerView.LayoutManager logListManager, List log) {
-        this.logAdapter.setDataset(log);
-        logListManager.scrollToPosition(log.size() - 1);
+        List<LogLine> gameLog = filterSmallLogGameMessages(log);
+        this.logAdapter.setDataset(gameLog);
+        if (!gameLog.isEmpty()) {
+            logListManager.scrollToPosition(gameLog.size() - 1);
+        }
+    }
+
+    private List<LogLine> filterSmallLogGameMessages(List log) {
+        ArrayList<LogLine> gameLog = new ArrayList<>();
+        if (log == null) {
+            return gameLog;
+        }
+        for (int i = 0; i < log.size(); i++) {
+            Object item = log.get(i);
+            if (!(item instanceof LogLine)) {
+                continue;
+            }
+            LogLine line = (LogLine) item;
+            if (isSmallLogGameMessage(line)) {
+                gameLog.add(line);
+            }
+        }
+        return gameLog;
+    }
+
+    private boolean isSmallLogGameMessage(LogLine line) {
+        if (line == null || line.getText() == null) {
+            return false;
+        }
+        String text = line.getText();
+        if (text.startsWith("WIFI_DIAG ")
+                || text.startsWith("IFF_DIAG ")
+                || text.startsWith("FIELD_DIAG ")
+                || text.startsWith("SENSOR_DIAG ")
+                || text.startsWith("LOCATION_DIAG ")) {
+            return false;
+        }
+        if (text.contains("event=")
+                || text.contains("mode=")
+                || text.contains("sdk=")
+                || text.startsWith("Fraction changed to ")) {
+            return false;
+        }
+        return true;
     }
 
     private void updateViews(Frame frame) {
@@ -774,6 +818,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void configureMainActionButtons() {
+        this.mQrButton.setVisibility(View.VISIBLE);
+        this.mQrButton.setEnabled(true);
+        this.mQrButton.setClickable(true);
+        this.mQrButton.setFocusable(true);
         if (BuildConfig.SHOW_MAIN_ACTION_BUTTONS) {
             return;
         }

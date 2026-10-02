@@ -39,6 +39,7 @@ import net.afterday.compas.iff.IffBleFieldRadio;
 import net.afterday.compas.iff.IffConfidence;
 import net.afterday.compas.iff.IffConfidence.Snapshot;
 import net.afterday.compas.iff.IffDistanceTrend;
+import net.afterday.compas.iff.IffFieldTeamProfile;
 import net.afterday.compas.iff.IffFieldLocatorSnapshot;
 import net.afterday.compas.iff.IffFieldMapSnapshot;
 import net.afterday.compas.iff.IffFieldRunSummary;
@@ -395,11 +396,11 @@ public class IffActivity extends Activity implements SensorEventListener {
         }
         renderTrustButton(selected);
         if (activeTab == TAB_MAP) {
-            radioServiceButton.setText("RADIO LOCK");
+            radioServiceButton.setText("РАЦИЯ КАРТЫ");
             radioServiceButton.setEnabled(false);
             radioServiceButton.setTextColor(0xffb8c49a);
         } else {
-            radioServiceButton.setText(fieldRadioEnabled ? "RADIO ON" : "RADIO OFF");
+            radioServiceButton.setText(fieldRadioEnabled ? "РАЦИЯ ВКЛ" : "РАЦИЯ ВЫКЛ");
             radioServiceButton.setEnabled(true);
             radioServiceButton.setTextColor(fieldRadioEnabled ? 0xff7dff73 : 0xffffd16a);
         }
@@ -441,34 +442,34 @@ public class IffActivity extends Activity implements SensorEventListener {
         boolean localApproachSelected = approachActive && selectedIsLocalDevice;
         String selectedDisplayName = displayNameFor(selected);
         title.setText(localApproachSelected ? "ВЫ ПОДХОДИТЕ" : selectedDisplayName);
-        subtitle.setText(selectedIsLocalDevice ? "этот телефон объявляет этого участника" : "локальный roster trust + radio witness");
-        status.setText("COMBAT: " + combat.state + " / " + combat.action + "\n"
-                + "OPERATOR: " + operatorVerdictLabel(confidence, quorum) + "\n"
-                + "OFFICE ROLE: " + officeTestRole(localDevicePlayer()) + "\n"
-                + "CONFIDENCE\n" + confidence.compactStatus() + "\nWITNESSES: " + quorum.compact());
+        subtitle.setText(selectedIsLocalDevice ? "этот телефон объявляет этого участника" : "локальный состав, доверие и радиосвидетель");
+        status.setText("БОЕВОЙ СТАТУС: " + combatStateDisplay(combat) + " / " + combatActionDisplay(combat) + "\n"
+                + "ОЦЕНКА: " + operatorVerdictDisplay(confidence, quorum) + "\n"
+                + "РОЛЬ ТЕСТА: " + officeTestRole(localDevicePlayer()) + "\n"
+                + "УВЕРЕННОСТЬ\n" + ruStatus(confidence.compactStatus()) + "\nСВИДЕТЕЛИ: " + ruStatus(quorum.compact()));
         body.setText("ИГРОК\n"
                 + "- имя: " + selectedDisplayName + "\n"
                 + "- id: " + selected.playerId + "\n"
                 + "- команда: локальная IFF группа\n"
-                + "- office role: " + officeTestRole(selected) + "\n"
-                + "- this device role: " + officeTestRole(localDevicePlayer()) + "\n"
-                + "- trust: " + trustLabel(selected) + "\n"
-                + "- ожидаемый beacon: " + IffRadioWitnessStore.expectedBeaconSsid(selected.playerId) + "\n\n"
+                + "- роль теста: " + officeTestRole(selected) + "\n"
+                + "- роль этого телефона: " + officeTestRole(localDevicePlayer()) + "\n"
+                + "- доверие: " + trustLabel(selected) + "\n"
+                + "- ожидаемый маяк: " + IffRadioWitnessStore.expectedBeaconSsid(selected.playerId) + "\n\n"
                 + "БОЕВОЙ ВИД\n"
                 + combatDetails(combat) + "\n\n"
-                + "OPERATOR VIEW\n"
+                + "ВИД ОПЕРАТОРА\n"
                 + operatorDetails(selected, confidence, quorum, combat) + "\n\n"
                 + "СЛОИ УВЕРЕННОСТИ\n"
                 + confidenceDetails(confidence) + "\n\n"
                 + "СВИДЕТЕЛИ\n"
                 + witnessDetails(witness) + "\n\n"
-                + "FIELD RADIO POLICY\n"
+                + "ПРАВИЛА ПОЛЕВОЙ РАЦИИ\n"
                 + fieldRadioPolicyDetails() + "\n\n"
-                + "WITNESS QUORUM\n"
+                + "КВОРУМ СВИДЕТЕЛЕЙ\n"
                 + witnessQuorumDetails(selected, quorum) + "\n\n"
                 + "РЕШЕНИЕ\n"
                 + decisionText(confidence, quorum) + "\n\n"
-                + "FIELD CHECK\n"
+                + "ПОЛЕВАЯ ПРОВЕРКА\n"
                 + "- последняя запись: " + lastFieldCheckSummary);
     }
 
@@ -479,41 +480,41 @@ public class IffActivity extends Activity implements SensorEventListener {
             return;
         }
         title.setText("КОМАНДА");
-        subtitle.setText("локальный roster + field radio identity");
+        subtitle.setText("локальный состав и личность полевой рации");
         status.setText((approachActive ? "ВЫ        ПОДХОДИТЕ   локально\n" : "")
-                + "THIS DEVICE: " + localDevicePlayer().displayName + "\n"
-                + "OFFICE ROLE: " + officeTestRole(localDevicePlayer()) + "\n"
-                + "OFFICE VERDICT: " + officeProximityLine() + "\n"
-                + "OPERATOR: " + teamOperatorSummaryLine()
-                + " / TRUSTED " + trustedRosterCount() + "/" + (roster.length - 1) + "\n"
-                + "COMBAT: current " + combatStateCount("CURRENT")
-                + " / stale " + combatStateCount("STALE")
-                + " / unknown " + combatStateCount("UNKNOWN") + "\n"
-                + "WITNESS: current " + currentWitnessEvidenceCount()
-                + " / stale " + staleWitnessEvidenceCount()
-                + " / radio " + freshWitnessCount() + "/" + strongProximityCount() + "\n"
-                + "FIELD RADIO: " + (fieldRadioEnabled ? "ON" : "OFF")
+                + "ЭТОТ ТЕЛЕФОН: " + localDevicePlayer().displayName + "\n"
+                + "РОЛЬ ТЕСТА: " + officeTestRole(localDevicePlayer()) + "\n"
+                + "ИТОГ ТЕСТА: " + officeProximityLine() + "\n"
+                + "ОПЕРАТОР: " + teamOperatorSummaryLine()
+                + " / ДОВЕРЕНЫ " + trustedRosterCount() + "/" + (roster.length - 1) + "\n"
+                + "БОЙ: свежие " + combatStateCount("CURRENT")
+                + " / старые " + combatStateCount("STALE")
+                + " / нет данных " + combatStateCount("UNKNOWN") + "\n"
+                + "СВИДЕТЕЛИ: свежие " + currentWitnessEvidenceCount()
+                + " / старые " + staleWitnessEvidenceCount()
+                + " / рация " + freshWitnessCount() + "/" + strongProximityCount() + "\n"
+                + "ПОЛЕВАЯ РАЦИЯ: " + radioEnabledLabel()
                 + " / " + IffBleFieldRadio.compactStatus() + "\n"
-                + "REMOTE REPORTS: " + remoteReportCount()
-                + " / DIRECTION: UNKNOWN");
+                + "УДАЛЕННЫЕ ОТЧЕТЫ: " + remoteReportCount()
+                + " / НАПРАВЛЕНИЕ: НЕТ ДАННЫХ");
         body.setText("Выберите участника, чтобы открыть карточку контакта.\n"
                 + "Долгое нажатие назначает, кем является этот телефон.\n"
-                + "TRUST помечает участника локально доверенным, но не доказывает proximity.\n"
-                + "Боевой статус показывает current/stale/unknown отдельно от identity.\n"
-                + "Operator summary отделяет current witness от stale evidence.\n"
+                + "Доверие помечает участника локально доверенным, но не доказывает близость.\n"
+                + "Боевой статус показывает свежие/старые/неизвестные данные отдельно от личности.\n"
+                + "Сводка оператора отделяет свежих свидетелей от старых свидетельств.\n"
                 + "Проценты - текущая уверенность слоя, а не финальное доказательство.\n"
-                + "Field radio не должен требовать общей Wi-Fi сети.\n"
-                + "Office proximity: " + officeProximityLine() + "\n"
-                + "Office samples: " + officeProximitySamplesLine() + "\n"
-                + "Radio control: " + (fieldRadioEnabled ? "ON" : "OFF") + "\n"
-                + "Radio service: " + IffForegroundRadioService.compactStatus() + "\n"
-                + "BLE lifecycle: " + IffBleFieldRadio.lifecycleStatus() + "\n"
-                + "BLE skeleton: " + IffBleFieldRadio.compactStatus() + "\n"
-                + "Trusted roster entries: " + trustedRosterCount() + "/" + (roster.length - 1) + "\n"
-                + "Remote witness contract: " + IffRemoteWitnessReport.CONTRACT_VERSION + "\n"
-                + "Signature status пока placeholder: " + IffRemoteWitnessReport.SIGNATURE_PENDING + "\n"
-                + "UDP debug: " + IffUdpWitnessTransport.compactStatus() + "\n"
-                + "Transport: UDP diagnostic channel.\n"
+                + "Полевая рация не должна требовать общей Wi-Fi сети.\n"
+                + "Тест близости: " + officeProximityLine() + "\n"
+                + "Замеры теста: " + officeProximitySamplesLine() + "\n"
+                + "Управление рацией: " + radioEnabledLabel() + "\n"
+                + "Сервис рации: " + IffForegroundRadioService.compactStatus() + "\n"
+                + "Состояние BLE: " + IffBleFieldRadio.lifecycleStatus() + "\n"
+                + "BLE-радио: " + IffBleFieldRadio.compactStatus() + "\n"
+                + "Доверенные участники: " + trustedRosterCount() + "/" + (roster.length - 1) + "\n"
+                + "Контракт удаленных свидетелей: " + IffRemoteWitnessReport.CONTRACT_VERSION + "\n"
+                + "Статус подписи пока заглушка: " + IffRemoteWitnessReport.SIGNATURE_PENDING + "\n"
+                + "Отладка UDP: " + IffUdpWitnessTransport.compactStatus() + "\n"
+                + "Транспорт: диагностический канал UDP.\n"
                 + "Последняя проверка: " + lastFieldCheckSummary);
         bodyContainer.removeAllViews();
         for (int i = 0; i < roster.length; i++) {
@@ -526,55 +527,50 @@ public class IffActivity extends Activity implements SensorEventListener {
                                    IffWitnessQuorum.Snapshot quorum, CombatSnapshot combat) {
         boolean selectedIsLocalDevice = isLocalDevice(selected);
         String selectedDisplayName = displayNameFor(selected);
-        title.setText(approachActive && selectedIsLocalDevice ? "APPROACHING" : selectedDisplayName);
-        subtitle.setText(selectedIsLocalDevice ? "this phone identity" : "field contact");
-        status.setText("COMBAT: " + combat.state + " / " + combat.action + "\n"
-                + "OPERATOR: " + operatorVerdictLabel(confidence, quorum) + "\n"
-                + "PROXIMITY: " + confidence.proximity.label + " " + confidence.proximity.score + "%\n"
-                + "DISTANCE: " + distanceTrendFor(selected).compact() + "\n"
-                + "WITNESS: " + quorum.compact());
-        body.setText("PLAYER\n"
-                + "- name: " + selectedDisplayName + "\n"
+        title.setText(approachActive && selectedIsLocalDevice ? "ПОДХОД" : selectedDisplayName);
+        subtitle.setText(selectedIsLocalDevice ? "личность этого телефона" : "полевой контакт");
+        status.setText("БОЕВОЙ СТАТУС: " + combatStateDisplay(combat) + " / " + combatActionDisplay(combat) + "\n"
+                + "ОЦЕНКА: " + operatorVerdictDisplay(confidence, quorum) + "\n"
+                + "БЛИЗОСТЬ: " + confidence.proximity.label + " " + confidence.proximity.score + "%\n"
+                + "ДИСТАНЦИЯ: " + ruStatus(distanceTrendFor(selected).compact()) + "\n"
+                + "СВИДЕТЕЛИ: " + ruStatus(quorum.compact()));
+        body.setText("ИГРОК\n"
+                + "- имя: " + selectedDisplayName + "\n"
                 + "- id: " + selected.playerId + "\n"
-                + "- trust: " + trustLabel(selected) + "\n"
-                + "- radio: " + rosterRadioLabel(selected, witness) + "\n"
-                + "- distance: " + distanceTrendFor(selected).compact() + "\n"
-                + "- office role: " + officeTestRole(selected) + "\n\n"
-                + "ACTION\n"
-                + "- " + combat.action + "\n"
-                + "- last check: " + lastFieldCheckSummary);
+                + "- доверие: " + trustLabel(selected) + "\n"
+                + "- рация: " + rosterRadioLabel(selected, witness) + "\n"
+                + "- дистанция: " + ruStatus(distanceTrendFor(selected).compact()) + "\n"
+                + "- роль теста: " + officeTestRole(selected) + "\n\n"
+                + "ДЕЙСТВИЕ\n"
+                + "- " + combatActionDisplay(combat) + "\n"
+                + "- последняя проверка: " + lastFieldCheckSummary);
         if (!selectedIsLocalDevice) {
             bodyContainer.addView(createRemoveTeamMemberButton(selected));
         }
     }
 
     private void renderTeamGame() {
-        title.setText("TEAM");
-        subtitle.setText("field roster");
-        status.setText((approachActive ? "APPROACHING locally\n" : "")
-                + "THIS DEVICE: " + localDevicePlayer().displayName + "\n"
-                + "OFFICE: " + officeProximityLine() + "\n"
-                + "CONTACTS: current " + currentWitnessEvidenceCount()
-                + " / stale " + staleWitnessEvidenceCount()
-                + " / unknown " + combatStateCount("UNKNOWN") + "\n"
-                + "RADIO: " + (fieldRadioEnabled ? "ON" : "OFF"));
+        title.setText("КОМАНДА");
+        subtitle.setText("полевой состав");
+        status.setText((approachActive ? "ЛОКАЛЬНО: ПОДХОД\n" : "")
+                + "ЭТОТ ТЕЛЕФОН: " + fieldRoleLabel(localDevicePlayerId) + " / "
+                + localDevicePlayer().displayName + "\n"
+                + "ПОЛЕВАЯ РАЦИЯ: " + radioEnabledLabel()
+                + " / " + ruStatus(IffBleFieldRadio.compactStatus()) + "\n"
+                + "КОНТАКТЫ: свежие " + currentWitnessEvidenceCount()
+                + " / старые " + staleWitnessEvidenceCount()
+                + " / нет данных " + combatStateCount("UNKNOWN") + "\n"
+                + "КАРТА: " + ruStatus(participantMapSummary(participantMapSnapshot())));
         bodyContainer.removeAllViews();
         bodyContainer.addView(createLocalNameButton());
-        bodyContainer.addView(createTeamSearchButton());
+        bodyContainer.addView(createFieldSetupSummary());
+        bodyContainer.addView(createFieldRoleControls());
+        bodyContainer.addView(createResetFieldTeamButton());
         for (int i = 0; i < roster.length; i++) {
             bodyContainer.addView(createRosterButton(i));
         }
-        if (teamSearchActive) {
-            List<IffPlayer> candidates = discoveredTeamCandidates();
-            if (candidates.isEmpty()) {
-                body.setText("SEARCH\nNo non-team phones heard recently.");
-                bodyContainer.addView(body);
-            } else {
-                for (int i = 0; i < candidates.size(); i++) {
-                    bodyContainer.addView(createDiscoveredPlayerButton(candidates.get(i)));
-                }
-            }
-        }
+        body.setText(fieldReadinessDetails());
+        bodyContainer.addView(body);
     }
 
     private void renderMap() {
@@ -585,7 +581,7 @@ public class IffActivity extends Activity implements SensorEventListener {
         }
         title.setText("КАРТА");
         setHeaderVisible(false);
-        subtitle.setText("distance map");
+        subtitle.setText("карта дистанции");
         status.setText("");
         bodyContainer.removeAllViews();
         IffTacticalMapView mapView = new IffTacticalMapView(this);
@@ -604,8 +600,8 @@ public class IffActivity extends Activity implements SensorEventListener {
 
     private void renderMapGame() {
         setHeaderVisible(false);
-        title.setText("MAP");
-        subtitle.setText("distance map");
+        title.setText("КАРТА");
+        subtitle.setText("карта дистанции");
         status.setText("");
         bodyContainer.removeAllViews();
         IffTacticalMapView mapView = new IffTacticalMapView(this);
@@ -624,43 +620,46 @@ public class IffActivity extends Activity implements SensorEventListener {
 
     private void renderLog() {
         resetBody();
-        title.setText("LOG");
-        subtitle.setText("field diagnostics");
-        status.setText("RADIO: " + (fieldRadioEnabled ? "ON" : "OFF") + "\n"
-                + "OFFICE: " + officeProximityLine() + "\n"
-                + "DISTANCE: " + distanceTrendFor(roster[selectedPlayerIndex]).compact() + "\n"
-                + "GPS: " + gpsUiStatus() + "\n"
-                + "RUN: " + fieldRunHeader() + "\n"
-                + "LAST CHECK: " + lastFieldCheckSummary);
+        title.setText("ЖУРНАЛ");
+        subtitle.setText("полевая диагностика");
+        status.setText("РАЦИЯ: " + radioEnabledLabel() + "\n"
+                + "ЭТОТ ТЕЛЕФОН: " + fieldRoleLabel(localDevicePlayerId) + " / "
+                + localDevicePlayer().displayName + "\n"
+                + "ДИСТАНЦИЯ: " + ruStatus(distanceTrendFor(roster[selectedPlayerIndex]).compact()) + "\n"
+                + "GPS: " + ruStatus(gpsUiStatus()) + "\n"
+                + "ЗАПУСК: " + fieldRunHeader() + "\n"
+                + "ПОСЛЕДНЯЯ ПРОВЕРКА: " + lastFieldCheckSummary);
         IffPlayer selected = roster[selectedPlayerIndex];
         WitnessSnapshot witness = IffRadioWitnessStore.getWitness(selected.playerId);
         Snapshot confidence = confidenceFor(selected, witness);
         IffWitnessQuorum.Snapshot quorum = witnessQuorumFor(selected, witness);
         CombatSnapshot combat = combatFor(selected, confidence, quorum);
-        body.setText("SELECTED\n"
+        body.setText("ВЫБРАНО\n"
                 + operatorDetails(selected, confidence, quorum, combat) + "\n\n"
-                + "CONFIDENCE\n"
+                + "УВЕРЕННОСТЬ\n"
                 + confidenceDetails(confidence) + "\n\n"
-                + "WITNESS\n"
+                + "СВИДЕТЕЛИ\n"
                 + witnessDetails(witness) + "\n\n"
-                + "FIELD RADIO\n"
+                + "ПОЛЕВАЯ РАЦИЯ\n"
                 + fieldRadioPolicyDetails() + "\n\n"
-                + "OFFICE\n"
-                + "- verdict: " + officeProximityLine() + "\n"
-                + "- samples: " + officeProximitySamplesLine() + "\n\n"
-                + "DISTANCE / MOVEMENT\n"
-                + "- selected: " + distanceTrendFor(selected).compact() + "\n"
-                + "- office: " + officeDistanceTrendLine() + "\n"
-                + "- gps: " + gpsUiStatus() + "\n\n"
-                + "FIELD LOCATOR\n"
-                + "- service: " + IffForegroundRadioService.compactStatus() + "\n"
-                + "- two-anchor: " + IffWifiTargetObservationStore.compactStatus() + "\n\n"
-                + "MAP\n"
+                + "ГОТОВНОСТЬ В ПОЛЕ\n"
+                + fieldReadinessDetails() + "\n\n"
+                + "ТЕСТОВАЯ СХЕМА\n"
+                + "- итог: " + officeProximityLine() + "\n"
+                + "- замеры: " + officeProximitySamplesLine() + "\n\n"
+                + "ДИСТАНЦИЯ / ДВИЖЕНИЕ\n"
+                + "- выбранный: " + ruStatus(distanceTrendFor(selected).compact()) + "\n"
+                + "- тестовая схема: " + ruStatus(officeDistanceTrendLine()) + "\n"
+                + "- gps: " + ruStatus(gpsUiStatus()) + "\n\n"
+                + "ПОЛЕВОЙ ЛОКАТОР\n"
+                + "- сервис: " + ruStatus(IffForegroundRadioService.compactStatus()) + "\n"
+                + "- две опоры: " + ruStatus(IffWifiTargetObservationStore.compactStatus()) + "\n\n"
+                + "КАРТА\n"
                 + fieldMapSummary() + "\n\n"
                 + participantMapDetails(participantMapSnapshot()) + "\n\n"
-                + "FIELD RUN\n"
+                + "ПОЛЕВОЙ ЗАПУСК\n"
                 + IffFieldRunSummary.details() + "\n\n"
-                + "QUORUM\n"
+                + "ПОДТВЕРЖДЕНИЯ\n"
                 + witnessQuorumDetails(selected, quorum));
     }
 
@@ -724,10 +723,10 @@ public class IffActivity extends Activity implements SensorEventListener {
                 + " transportStatus=\"" + safe(IffUdpWitnessTransport.compactStatus()) + "\""
                 + " witness=" + witnessState
                 + " localApproach=" + approachActive);
-        lastFieldCheckSummary = displayNameFor(selected) + ": identity " + confidence.identity.score
-                + "% / proximity " + confidence.proximity.score + "% / trust " + trustLabel
-                + " / combat " + combat.state
-                + " / witness " + (witness == null ? "none" : witness.freshnessLabel());
+        lastFieldCheckSummary = displayNameFor(selected) + ": личность " + confidence.identity.score
+                + "% / близость " + confidence.proximity.score + "% / доверие " + trustLabel
+                + " / бой " + combatStateDisplay(combat)
+                + " / свидетель " + (witness == null ? "нет" : witness.freshnessLabel());
         activeTab = TAB_CONTACT;
         render();
     }
@@ -735,7 +734,7 @@ public class IffActivity extends Activity implements SensorEventListener {
     private void toggleSelectedTrust() {
         IffPlayer selected = roster[selectedPlayerIndex];
         if (isLocalDevice(selected)) {
-            lastFieldCheckSummary = displayNameFor(selected) + ": trust is LOCAL_SELF";
+            lastFieldCheckSummary = displayNameFor(selected) + ": это текущий телефон";
             activeTab = TAB_CONTACT;
             render();
             return;
@@ -745,7 +744,7 @@ public class IffActivity extends Activity implements SensorEventListener {
                 .edit()
                 .putBoolean(trustPreferenceKey(selected), trusted)
                 .apply();
-        lastFieldCheckSummary = displayNameFor(selected) + ": trust " + trustLabel(selected);
+        lastFieldCheckSummary = displayNameFor(selected) + ": доверие " + trustLabel(selected);
         FieldDiagnosticLog.event("IFF_DIAG", "event=iff_trust_toggle"
                 + " playerId=" + selected.playerId
                 + " displayName=\"" + safe(displayNameFor(selected)) + "\""
@@ -780,7 +779,7 @@ public class IffActivity extends Activity implements SensorEventListener {
 
     private void ensureValidRosterSelection() {
         if (roster.length == 0) {
-            roster = rosterFromEntries(IffTeamRosterStore.defaultEntries());
+            roster = rosterFromEntries(IffFieldTeamProfile.defaultFieldEntries());
             saveTeamRoster();
         }
         if (playerIndexForId(localDevicePlayerId) < 0) {
@@ -806,10 +805,8 @@ public class IffActivity extends Activity implements SensorEventListener {
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         List<IffTeamRosterStore.Entry> entries =
                 IffTeamRosterStore.deserializeTeam(prefs.getString(PREF_TEAM_ROSTER, ""));
-        roster = rosterFromEntries(entries);
+        roster = rosterFromEntries(IffFieldTeamProfile.fieldEntriesPreservingNames(entries));
         removedPlayerIds.clear();
-        removedPlayerIds.addAll(IffTeamRosterStore.deserializeRemoved(
-                prefs.getString(PREF_TEAM_REMOVED_PLAYERS, "")));
     }
 
     private void saveTeamRoster() {
@@ -862,15 +859,15 @@ public class IffActivity extends Activity implements SensorEventListener {
         input.setText(player.displayName);
         input.setSelectAllOnFocus(true);
         new AlertDialog.Builder(this)
-                .setTitle("Phone name")
+                .setTitle("Имя телефона")
                 .setView(input)
-                .setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                .setPositiveButton("СОХРАНИТЬ", new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
                         setPlayerDisplayName(playerIndex, input.getText() == null ? "" : input.getText().toString());
                     }
                 })
-                .setNegativeButton("CANCEL", null)
+                .setNegativeButton("ОТМЕНА", null)
                 .show();
     }
 
@@ -918,7 +915,7 @@ public class IffActivity extends Activity implements SensorEventListener {
         approachActive = false;
         IffForegroundRadioService.clearApproach();
         handler.removeCallbacks(expireApproach);
-        lastFieldCheckSummary = player.displayName + ": this device identity selected";
+        lastFieldCheckSummary = player.displayName + ": выбран как этот телефон";
         FieldDiagnosticLog.event("IFF_DIAG", "event=device_identity_selected"
                 + " localDevicePlayerId=" + player.playerId
                 + " officeRole=" + officeTestRole(player)
@@ -927,10 +924,72 @@ public class IffActivity extends Activity implements SensorEventListener {
         render();
     }
 
+    private void selectFieldRole(String playerId) {
+        String normalizedPlayerId = IffTeamRosterStore.normalizePlayerId(playerId);
+        if (!IffFieldTeamProfile.isFieldPlayerId(normalizedPlayerId)) {
+            lastFieldCheckSummary = "роль отклонена: " + safe(playerId);
+            render();
+            return;
+        }
+        applyFieldRosterPreservingNames();
+        localDevicePlayerId = normalizedPlayerId;
+        setFieldRadioEnabled(true);
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .edit()
+                .putString(PREF_LOCAL_DEVICE_PLAYER_ID, localDevicePlayerId)
+                .apply();
+        selectedPlayerIndex = Math.max(0, playerIndexForId(localDevicePlayerId));
+        activeTab = TAB_TEAM;
+        teamSearchActive = false;
+        approachActive = false;
+        IffForegroundRadioService.clearApproach();
+        handler.removeCallbacks(expireApproach);
+        IffForegroundRadioService.start(this, localDevicePlayerId, localDevicePlayer().displayName);
+        lastFieldCheckSummary = fieldRoleLabel(localDevicePlayerId)
+                + " выбрана для " + localDevicePlayer().displayName;
+        FieldDiagnosticLog.event("IFF_DIAG", "event=field_role_selected"
+                + " localDevicePlayerId=" + safe(localDevicePlayerId)
+                + " role=" + safe(fieldRoleLabel(localDevicePlayerId))
+                + " displayName=\"" + safe(localDevicePlayer().displayName) + "\""
+                + " teamSize=" + roster.length);
+        render();
+    }
+
+    private void resetFieldTeam() {
+        applyFieldRosterPreservingNames();
+        if (!IffFieldTeamProfile.isFieldPlayerId(localDevicePlayerId)) {
+            localDevicePlayerId = roster[LOCAL_PLAYER_INDEX].playerId;
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                    .edit()
+                    .putString(PREF_LOCAL_DEVICE_PLAYER_ID, localDevicePlayerId)
+                    .apply();
+        }
+        selectedPlayerIndex = Math.max(0, playerIndexForId(localDevicePlayerId));
+        activeTab = TAB_TEAM;
+        teamSearchActive = false;
+        lastFieldCheckSummary = "команда сброшена до A/B/C";
+        FieldDiagnosticLog.event("IFF_DIAG", "event=field_team_reset"
+                + " localDevicePlayerId=" + safe(localDevicePlayerId)
+                + " teamSize=" + roster.length);
+        ensureFieldRadioService();
+        render();
+    }
+
+    private void applyFieldRosterPreservingNames() {
+        roster = rosterFromEntries(IffFieldTeamProfile.fieldEntriesPreservingNames(teamEntries()));
+        removedPlayerIds.clear();
+        saveTeamRoster();
+    }
+
     private void addTeamMember(String playerId, String displayName) {
+        if (!IffFieldTeamProfile.isFieldPlayerId(playerId)) {
+            lastFieldCheckSummary = "добавление отклонено: роль не A/B/C: " + safe(playerId);
+            render();
+            return;
+        }
         List<IffTeamRosterStore.Entry> entries = teamEntries();
         if (!IffTeamRosterStore.addOrRestore(entries, removedPlayerIds, playerId, displayName)) {
-            lastFieldCheckSummary = "team add rejected: " + safe(playerId);
+            lastFieldCheckSummary = "добавление отклонено: " + safe(playerId);
             render();
             return;
         }
@@ -939,7 +998,7 @@ public class IffActivity extends Activity implements SensorEventListener {
         selectedPlayerIndex = Math.max(0, playerIndexForId(playerId));
         activeTab = TAB_CONTACT;
         teamSearchActive = false;
-        lastFieldCheckSummary = safe(displayName) + ": added to team";
+        lastFieldCheckSummary = safe(displayName) + ": добавлен в команду";
         FieldDiagnosticLog.event("IFF_DIAG", "event=team_member_added"
                 + " playerId=" + safe(playerId)
                 + " displayName=\"" + safe(displayName) + "\""
@@ -953,27 +1012,27 @@ public class IffActivity extends Activity implements SensorEventListener {
         }
         final IffPlayer player = roster[playerIndex];
         if (isLocalDevice(player)) {
-            lastFieldCheckSummary = player.displayName + ": cannot remove THIS DEVICE";
+            lastFieldCheckSummary = player.displayName + ": нельзя убрать этот телефон";
             render();
             return;
         }
         new AlertDialog.Builder(this)
-                .setTitle("Remove from team")
-                .setMessage(player.displayName + " will disappear until SEARCH adds this phone again.")
-                .setPositiveButton("REMOVE", new DialogInterface.OnClickListener() {
+                .setTitle("Убрать из команды")
+                .setMessage(player.displayName + " исчезнет, пока поиск не добавит этот телефон снова.")
+                .setPositiveButton("УБРАТЬ", new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
                         removeTeamMemberConfirmed(player);
                     }
                 })
-                .setNegativeButton("CANCEL", null)
+                .setNegativeButton("ОТМЕНА", null)
                 .show();
     }
 
     private void removeTeamMemberConfirmed(IffPlayer player) {
         List<IffTeamRosterStore.Entry> entries = teamEntries();
         if (!IffTeamRosterStore.remove(entries, removedPlayerIds, player.playerId, localDevicePlayerId)) {
-            lastFieldCheckSummary = player.displayName + ": remove rejected";
+            lastFieldCheckSummary = player.displayName + ": удаление отклонено";
             render();
             return;
         }
@@ -986,7 +1045,7 @@ public class IffActivity extends Activity implements SensorEventListener {
         saveTeamRoster();
         selectedPlayerIndex = Math.max(0, localDevicePlayerIndex());
         activeTab = TAB_TEAM;
-        lastFieldCheckSummary = player.displayName + ": removed from team";
+        lastFieldCheckSummary = player.displayName + ": удален из команды";
         FieldDiagnosticLog.event("IFF_DIAG", "event=team_member_removed"
                 + " playerId=" + safe(player.playerId)
                 + " displayName=\"" + safe(player.displayName) + "\""
@@ -1068,29 +1127,29 @@ public class IffActivity extends Activity implements SensorEventListener {
 
     private String trustLabel(IffPlayer player) {
         if (isLocalDevice(player)) {
-            return "LOCAL_SELF";
+            return "ЭТОТ ТЕЛЕФОН";
         }
-        return hasLocalTrust(player) ? "LOCAL_TRUSTED" : "UNTRUSTED";
+        return hasLocalTrust(player) ? "ДОВЕРЕН ЛОКАЛЬНО" : "НЕТ ДОВЕРИЯ";
     }
 
     private String trustRosterBadge(IffPlayer player) {
         if (isLocalDevice(player)) {
-            return "SELF";
+            return "ЭТОТ";
         }
-        return hasLocalTrust(player) ? "TRUST" : "UNTRUST";
+        return hasLocalTrust(player) ? "ДОВЕРИЕ" : "НЕДОВЕРИЕ";
     }
 
     private void renderTrustButton(IffPlayer selected) {
         if (isLocalDevice(selected)) {
-            trustButton.setText("SELF");
+            trustButton.setText("ЭТОТ");
             trustButton.setEnabled(false);
             trustButton.setTextColor(0xffb8c49a);
         } else if (hasLocalTrust(selected)) {
-            trustButton.setText("UNTRUST");
+            trustButton.setText("СНЯТЬ ДОВ.");
             trustButton.setEnabled(true);
             trustButton.setTextColor(0xff7dff73);
         } else {
-            trustButton.setText("TRUST");
+            trustButton.setText("ДОВЕРЯТЬ");
             trustButton.setEnabled(true);
             trustButton.setTextColor(0xffffd16a);
         }
@@ -1103,21 +1162,21 @@ public class IffActivity extends Activity implements SensorEventListener {
 
     private String officeTestRole(IffPlayer player) {
         if (player == null) {
-            return "UNASSIGNED";
+            return "НЕ НАЗНАЧЕН";
         }
         if ("vasya".equals(player.playerId)) {
-            return "PHONE_A_WITNESS";
+            return "ТЕЛЕФОН A / СВИДЕТЕЛЬ";
         }
         if ("zhenya".equals(player.playerId)) {
-            return "PHONE_B_WITNESS";
+            return "ТЕЛЕФОН B / СВИДЕТЕЛЬ";
         }
         if ("petya".equals(player.playerId)) {
-            return "PHONE_C_MOVING_TARGET";
+            return "ТЕЛЕФОН C / ЦЕЛЬ";
         }
         if ("local-you".equals(player.playerId)) {
-            return "PHONE_OPERATOR";
+            return "ТЕЛЕФОН ОПЕРАТОРА";
         }
-        return "UNASSIGNED";
+        return "НЕ НАЗНАЧЕН";
     }
 
     private int localDevicePlayerIndex() {
@@ -1137,6 +1196,15 @@ public class IffActivity extends Activity implements SensorEventListener {
         return -1;
     }
 
+    private String fieldRoleLabel(String playerId) {
+        IffFieldTeamProfile.Role role = IffFieldTeamProfile.roleForPlayerId(playerId);
+        return role == null ? "ДРУГАЯ" : "РОЛЬ " + role.label;
+    }
+
+    private String radioEnabledLabel() {
+        return fieldRadioEnabled ? "ВКЛ" : "ВЫКЛ";
+    }
+
     private Button createLocalNameButton() {
         Button button = new Button(this);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
@@ -1146,13 +1214,91 @@ public class IffActivity extends Activity implements SensorEventListener {
         button.setLayoutParams(params);
         button.setBackgroundResource(R.drawable.popup_button);
         button.setTextColor(0xff7dff73);
-        button.setText("NAME: " + localDevicePlayer().displayName + "  [EDIT]");
+        button.setText("ИМЯ: " + localDevicePlayer().displayName + "  [ИЗМЕНИТЬ]");
         button.setTextSize(12);
         button.setTransformationMethod(null);
         button.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 showRenameDialog(localDevicePlayerIndex());
+            }
+        });
+        return button;
+    }
+
+    private TextView createFieldSetupSummary() {
+        TextView view = new TextView(this);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, dp(6), 0, dp(4));
+        view.setLayoutParams(params);
+        view.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        view.setTextColor(0xffffd16a);
+        view.setTextSize(12);
+        view.setText("НАСТРОЙКА КОМАНДЫ\n"
+                + "Роль этого телефона: " + fieldRoleLabel(localDevicePlayerId)
+                + " / имя: " + localDevicePlayer().displayName + "\n"
+                + "На каждом телефоне выберите A/B/C. В команде не больше 3 телефонов.");
+        return view;
+    }
+
+    private LinearLayout createFieldRoleControls() {
+        LinearLayout controls = new LinearLayout(this);
+        controls.setOrientation(LinearLayout.HORIZONTAL);
+        controls.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(44));
+        params.setMargins(0, dp(4), 0, dp(4));
+        controls.setLayoutParams(params);
+
+        List<IffFieldTeamProfile.Role> roles = IffFieldTeamProfile.roles();
+        for (int i = 0; i < roles.size(); i++) {
+            controls.addView(createFieldRoleButton(roles.get(i)));
+        }
+        return controls;
+    }
+
+    private Button createFieldRoleButton(final IffFieldTeamProfile.Role role) {
+        Button button = new Button(this);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                1.0f);
+        params.setMargins(dp(2), 0, dp(2), 0);
+        button.setLayoutParams(params);
+        button.setBackgroundResource(R.drawable.popup_button);
+        button.setTextColor(role.playerId.equals(localDevicePlayerId) ? 0xff7dff73 : 0xffffffff);
+        button.setText(role.label);
+        button.setTextSize(16);
+        button.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        button.setTransformationMethod(null);
+        button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                selectFieldRole(role.playerId);
+            }
+        });
+        return button;
+    }
+
+    private Button createResetFieldTeamButton() {
+        Button button = new Button(this);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(44));
+        params.setMargins(0, dp(4), 0, dp(6));
+        button.setLayoutParams(params);
+        button.setBackgroundResource(R.drawable.popup_button);
+        button.setTextColor(0xffb8c49a);
+        button.setText("СБРОСИТЬ КОМАНДУ A/B/C");
+        button.setTextSize(12);
+        button.setTransformationMethod(null);
+        button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                resetFieldTeam();
             }
         });
         return button;
@@ -1167,7 +1313,7 @@ public class IffActivity extends Activity implements SensorEventListener {
         button.setLayoutParams(params);
         button.setBackgroundResource(R.drawable.popup_button);
         button.setTextColor(teamSearchActive ? 0xffffd16a : 0xffb8c49a);
-        button.setText(teamSearchActive ? "SEARCH: ON" : "SEARCH");
+        button.setText(teamSearchActive ? "ПОИСК: ВКЛ" : "ПОИСК");
         button.setTextSize(12);
         button.setTransformationMethod(null);
         button.setOnClickListener(new View.OnClickListener() {
@@ -1189,7 +1335,7 @@ public class IffActivity extends Activity implements SensorEventListener {
         button.setLayoutParams(params);
         button.setBackgroundResource(R.drawable.popup_button);
         button.setTextColor(0xff7dff73);
-        button.setText(player.displayName + "  [ADD]\n"
+        button.setText(player.displayName + "  [ДОБАВИТЬ]\n"
                 + "id=" + player.playerId + " / " + discoveryLine(player.playerId));
         button.setTextSize(12);
         button.setTransformationMethod(null);
@@ -1211,7 +1357,7 @@ public class IffActivity extends Activity implements SensorEventListener {
         button.setLayoutParams(params);
         button.setBackgroundResource(R.drawable.popup_button);
         button.setTextColor(0xffff7a7a);
-        button.setText("REMOVE FROM TEAM");
+        button.setText("УБРАТЬ ИЗ КОМАНДЫ");
         button.setTextSize(12);
         button.setTransformationMethod(null);
         button.setOnClickListener(new View.OnClickListener() {
@@ -1238,8 +1384,8 @@ public class IffActivity extends Activity implements SensorEventListener {
         IffWitnessQuorum.Snapshot quorum = witnessQuorumFor(player, witness);
         CombatSnapshot combat = combatFor(player, confidence, quorum);
         button.setTextColor(playerIndex == selectedPlayerIndex ? 0xffffd16a : combatTextColor(combat));
-        button.setText(displayName + (isLocalDevice(player) ? "  [THIS DEVICE]" : "")
-                + (!isLocalDevice(player) && hasLocalTrust(player) ? "  [TRUSTED]" : "")
+        button.setText(displayName + (isLocalDevice(player) ? "  [ЭТОТ ТЕЛЕФОН]" : "")
+                + (!isLocalDevice(player) && hasLocalTrust(player) ? "  [ДОВЕРЕН]" : "")
                 + "\n" + operatorRosterLine(player, confidence, quorum, witness, combat));
         button.setTextSize(12);
         button.setTransformationMethod(null);
@@ -1329,10 +1475,10 @@ public class IffActivity extends Activity implements SensorEventListener {
 
     private String rosterRadioLabel(IffPlayer player, WitnessSnapshot witness) {
         if (isLocalDevice(player) && approachActive) {
-            return "LOCAL_ONLY";
+            return "только локально";
         }
         if (witness == null) {
-            return "UNKNOWN";
+            return "нет данных";
         }
         if (!witness.isFresh()) {
             return witness.freshnessLabel() + " " + formatAge(witness.ageMs());
@@ -1353,97 +1499,97 @@ public class IffActivity extends Activity implements SensorEventListener {
     private CombatSnapshot combatFor(IffPlayer selected, Snapshot confidence, IffWitnessQuorum.Snapshot quorum) {
         if (isLocalDevice(selected) && approachActive) {
             return new CombatSnapshot("LOCAL_DECLARED", "LOCAL_STATUS_ONLY",
-                    "локальная кнопка сообщает намерение игрока, но не radio proof");
+                    "локальная кнопка сообщает намерение игрока, но не радиодоказательство");
         }
         if (quorum.hasMultiWitness()) {
             return new CombatSnapshot("CURRENT_MULTI", "TRACK_CURRENT_CONTACT",
-                    "несколько fresh witness источников; crypto identity все еще отдельно");
+                    "несколько свежих свидетелей; криптоподтверждение личности все еще отдельно");
         }
         if (quorum.freshSources > 0) {
             return new CombatSnapshot("CURRENT_SINGLE", "WATCH_CURRENT_CONTACT",
-                    "есть fresh radio witness, но только один источник");
+                    "есть свежий радиосвидетель, но только один источник");
         }
         if (quorum.staleSources > 0 || "STALE_RADIO".equals(confidence.proximity.label)) {
             return new CombatSnapshot("STALE", "DO_NOT_TREAT_AS_NEAR",
-                    "есть только старое radio evidence; это не current proximity proof");
+                    "есть только старое радиосвидетельство; это не текущее доказательство близости");
         }
         return new CombatSnapshot("UNKNOWN", "NO_CURRENT_CONTACT",
-                "нет текущего radio witness; участник не считается обнаруженным рядом");
+                "нет текущего радиосвидетеля; участник не считается обнаруженным рядом");
     }
 
     private String combatDetails(CombatSnapshot combat) {
-        return "- state: " + combat.state + "\n"
-                + "- action: " + combat.action + "\n"
-                + "- reason: " + combat.reason;
+        return "- состояние: " + combatStateDisplay(combat) + "\n"
+                + "- действие: " + combatActionDisplay(combat) + "\n"
+                + "- причина: " + combat.reason;
     }
 
     private String confidenceDetails(Snapshot confidence) {
-        return confidence.identity.detailLine("identity") + "\n"
-                + confidence.proximity.detailLine("proximity") + "\n"
-                + confidence.position.detailLine("position") + "\n"
-                + confidence.direction.detailLine("direction");
+        return ruStatus(confidence.identity.detailLine("личность")) + "\n"
+                + ruStatus(confidence.proximity.detailLine("близость")) + "\n"
+                + ruStatus(confidence.position.detailLine("позиция")) + "\n"
+                + ruStatus(confidence.direction.detailLine("направление"));
     }
 
     private String decisionText(Snapshot confidence, IffWitnessQuorum.Snapshot quorum) {
         if (quorum.hasMultiWitness()) {
-            return "- есть current multi-witness evidence: " + quorum.freshSources + "/" + quorum.possibleSources + "\n"
-                    + "- это отдельный witness слой, не crypto identity\n"
-                    + "- confidence layers остаются как показано выше\n"
-                    + "- direction и точная position пока неизвестны";
+            return "- есть свежие свидетельства от нескольких телефонов: " + quorum.freshSources + "/" + quorum.possibleSources + "\n"
+                    + "- это отдельный слой свидетелей, а не криптоподтверждение личности\n"
+                    + "- слои уверенности остаются как показано выше\n"
+                    + "- направление и точная позиция пока неизвестны";
         }
         if (quorum.freshSources > 0) {
-            return "- есть current single-witness evidence\n"
-                    + "- одного источника мало для quorum\n"
-                    + "- identity не повышается без crypto\n"
-                    + "- direction и точная position пока неизвестны";
+            return "- есть свежее свидетельство от одного телефона\n"
+                    + "- одного источника мало для кворума\n"
+                    + "- доверие к личности не повышается без криптоподписи\n"
+                    + "- направление и точная позиция пока неизвестны";
         }
         if (quorum.staleSources > 0) {
-            return "- есть только stale witness evidence\n"
-                    + "- это память о старом сигнале, не текущий proof\n"
-                    + "- для боевого решения держим контакт UNKNOWN\n"
-                    + "- direction и точная position пока неизвестны";
+            return "- есть только старые свидетельства\n"
+                    + "- это память о старом сигнале, а не текущее доказательство\n"
+                    + "- для боевого решения держим контакт в состоянии нет данных\n"
+                    + "- направление и точная позиция пока неизвестны";
         }
         if ("RADIO_NEAR".equals(confidence.proximity.label)) {
-            return "- рядом слышен свежий beacon заявленного участника\n"
-                    + "- это сильный proximity hint, но не crypto identity\n"
-                    + "- quorum: " + quorum.compact() + ", multi-witness еще нет\n"
-                    + "- direction и точная position пока неизвестны";
+            return "- рядом слышен свежий маяк заявленного участника\n"
+                    + "- это сильная подсказка близости, но не криптоподтверждение личности\n"
+                    + "- кворум: " + ruStatus(quorum.compact()) + ", нескольких свидетелей еще нет\n"
+                    + "- направление и точная позиция пока неизвестны";
         }
         if ("RADIO_WEAK_HINT".equals(confidence.proximity.label)
                 || "RADIO_EDGE_HINT".equals(confidence.proximity.label)) {
-            return "- beacon слышен свежо, но RSSI не дает точную дистанцию\n"
-                    + "- это слабая proximity-подсказка, не подтверждение близкого контакта\n"
-                    + "- quorum: " + quorum.compact() + ", multi-witness еще нет\n"
-                    + "- direction и точная position пока неизвестны";
+            return "- маяк слышен свежо, но RSSI не дает точную дистанцию\n"
+                    + "- это слабая подсказка близости, а не подтверждение близкого контакта\n"
+                    + "- кворум: " + ruStatus(quorum.compact()) + ", нескольких свидетелей еще нет\n"
+                    + "- направление и точная позиция пока неизвестны";
         }
         if ("LOCAL_DECLARED_UNKNOWN".equals(confidence.proximity.label)) {
             return "- локальный игрок заявил подход\n"
-                    + "- это полезный UI-статус, но не radio proof\n"
-                    + "- direction и точная position пока неизвестны";
+                    + "- это полезный статус на экране, но не радиодоказательство\n"
+                    + "- направление и точная позиция пока неизвестны";
         }
         if (confidence.proximity.score > 0) {
-            return "- есть слабое или устаревшее radio-свидетельство\n"
-                    + "- для боевого решения держим proximity осторожной\n"
-                    + "- direction и точная position пока неизвестны";
+            return "- есть слабое или устаревшее радиосвидетельство\n"
+                    + "- для боевого решения считаем близость осторожной\n"
+                    + "- направление и точная позиция пока неизвестны";
         }
-        return "- участник остается известен только по локальному roster\n"
-                + "- proximity не подтверждена\n"
-                + "- direction и точная position пока неизвестны";
+        return "- участник остается известен только по локальному составу\n"
+                + "- близость не подтверждена\n"
+                + "- направление и точная позиция пока неизвестны";
     }
 
     private String operatorDetails(IffPlayer selected, Snapshot confidence, IffWitnessQuorum.Snapshot quorum,
                                    CombatSnapshot combat) {
-        return "- verdict: " + operatorVerdictLabel(confidence, quorum) + "\n"
-                + "- combat: " + combat.state + " / " + combat.action + "\n"
-                + "- trust: " + trustLabel(selected) + "\n"
-                + "- current witnesses: " + quorum.freshSources + "/" + quorum.possibleSources + "\n"
-                + "- stale evidence: " + quorum.staleSources + "\n"
-                + "- remote fresh/stale/total: " + quorum.remoteFreshSources + "/"
+        return "- итог: " + operatorVerdictDisplay(confidence, quorum) + "\n"
+                + "- боевой статус: " + combatStateDisplay(combat) + " / " + combatActionDisplay(combat) + "\n"
+                + "- доверие: " + trustLabel(selected) + "\n"
+                + "- свежие свидетели: " + quorum.freshSources + "/" + quorum.possibleSources + "\n"
+                + "- старые свидетельства: " + quorum.staleSources + "\n"
+                + "- удаленные свежие/старые/всего: " + quorum.remoteFreshSources + "/"
                 + quorum.remoteStaleSources + "/" + quorum.remoteReportCount + "\n"
-                + "- field radio: " + IffBleFieldRadio.compactStatus() + "\n"
-                + "- transport: " + IffUdpWitnessTransport.compactStatus() + "\n"
-                + "- identity remains: " + confidence.identity.label + " " + confidence.identity.score + "%\n"
-                + "- position/direction: UNKNOWN unless their own layers prove otherwise";
+                + "- полевая рация: " + ruStatus(IffBleFieldRadio.compactStatus()) + "\n"
+                + "- транспорт: " + ruStatus(IffUdpWitnessTransport.compactStatus()) + "\n"
+                + "- личность остается: " + confidence.identity.label + " " + confidence.identity.score + "%\n"
+                + "- позиция/направление: неизвестны, пока их не подтвердят отдельные слои";
     }
 
     private String operatorVerdictLabel(Snapshot confidence, IffWitnessQuorum.Snapshot quorum) {
@@ -1462,10 +1608,64 @@ public class IffActivity extends Activity implements SensorEventListener {
         return "NO_CURRENT_EVIDENCE";
     }
 
+    private String operatorVerdictDisplay(Snapshot confidence, IffWitnessQuorum.Snapshot quorum) {
+        if (quorum.hasMultiWitness()) {
+            return "свежий контакт подтвержден несколькими телефонами";
+        }
+        if (quorum.freshSources > 0) {
+            return "свежий контакт от одного источника";
+        }
+        if (quorum.staleSources > 0) {
+            return "только старые свидетельства";
+        }
+        if ("LOCAL_DECLARED_UNKNOWN".equals(confidence.proximity.label)) {
+            return "заявлено локально, без радио";
+        }
+        return "нет свежих данных";
+    }
+
+    private String combatStateDisplay(CombatSnapshot combat) {
+        if (combat == null) {
+            return "нет данных";
+        }
+        if ("LOCAL_DECLARED".equals(combat.state)) {
+            return "локально заявлено";
+        }
+        if ("CURRENT_MULTI".equals(combat.state)) {
+            return "свежий контакт, несколько свидетелей";
+        }
+        if ("CURRENT_SINGLE".equals(combat.state)) {
+            return "свежий контакт, один свидетель";
+        }
+        if ("STALE".equals(combat.state)) {
+            return "старые данные";
+        }
+        return "нет данных";
+    }
+
+    private String combatActionDisplay(CombatSnapshot combat) {
+        if (combat == null) {
+            return "ничего не делать";
+        }
+        if ("LOCAL_STATUS_ONLY".equals(combat.action)) {
+            return "только локальный статус";
+        }
+        if ("TRACK_CURRENT_CONTACT".equals(combat.action)) {
+            return "отслеживать свежий контакт";
+        }
+        if ("WATCH_CURRENT_CONTACT".equals(combat.action)) {
+            return "наблюдать свежий контакт";
+        }
+        if ("DO_NOT_TREAT_AS_NEAR".equals(combat.action)) {
+            return "не считать рядом";
+        }
+        return "нет свежего контакта";
+    }
+
     private String operatorRosterLine(IffPlayer player, Snapshot confidence, IffWitnessQuorum.Snapshot quorum,
                                       WitnessSnapshot witness, CombatSnapshot combat) {
-        return combat.state + " / " + operatorVerdictLabel(confidence, quorum) + " / id " + confidence.identity.score
-                + "% / prox " + confidence.proximity.score + "% / " + trustRosterBadge(player)
+        return combatStateDisplay(combat) + " / " + operatorVerdictDisplay(confidence, quorum) + " / личн. " + confidence.identity.score
+                + "% / близ. " + confidence.proximity.score + "% / " + trustRosterBadge(player)
                 + " / " + rosterRadioLabel(player, witness);
     }
 
@@ -1481,71 +1681,135 @@ public class IffActivity extends Activity implements SensorEventListener {
 
     private String witnessDetails(WitnessSnapshot witness) {
         if (witness == null) {
-            return "- нет свежего или старого beacon witness\n"
-                    + "- Wi-Fi legacy ищет SSID формата " + IffRadioWitnessStore.SSID_PREFIX + "*\n"
-                    + "- BLE field radio: " + IffBleFieldRadio.compactStatus() + "\n"
-                    + "- freshness policy: " + IffRadioWitnessStore.freshnessPolicyLabel();
+            return "- нет свежего или старого радиосвидетеля\n"
+                    + "- старый Wi-Fi ищет SSID формата " + IffRadioWitnessStore.SSID_PREFIX + "*\n"
+                    + "- полевая BLE-рация: " + ruStatus(IffBleFieldRadio.compactStatus()) + "\n"
+                    + "- правило свежести: " + ruStatus(IffRadioWitnessStore.freshnessPolicyLabel());
         }
         return "- ssid: " + witness.ssid + "\n"
                 + "- bssid: " + witness.bssid + "\n"
-                + "- source: " + witness.sourceType() + "\n"
-                + "- freshness: " + witness.freshnessLabel() + "\n"
-                + "- policy: " + IffRadioWitnessStore.freshnessPolicyLabel() + "\n"
-                + "- next transition: " + witness.nextTransitionLabel() + "\n"
-                + "- age: " + formatAge(witness.ageMs()) + "\n"
+                + "- источник: " + ruStatus(witness.sourceType()) + "\n"
+                + "- свежесть: " + ruStatus(witness.freshnessLabel()) + "\n"
+                + "- правило: " + ruStatus(IffRadioWitnessStore.freshnessPolicyLabel()) + "\n"
+                + "- следующее изменение: " + ruStatus(witness.nextTransitionLabel()) + "\n"
+                + "- возраст: " + formatAge(witness.ageMs()) + "\n"
                 + "- rssi: " + witness.rssi + " dBm\n"
-                + "- frequency: " + witness.frequency + " MHz";
+                + "- частота: " + witness.frequency + " MHz";
+    }
+
+    private String fieldReadinessDetails() {
+        IffParticipantMapModel.Snapshot map = participantMapSnapshot();
+        return "- роль этого телефона: " + fieldRoleLabel(localDevicePlayerId) + "\n"
+                + "- имя этого телефона: " + localDevicePlayer().displayName + "\n"
+                + "- полевая рация включена: " + (fieldRadioEnabled ? "да" : "нет") + "\n"
+                + "- сервис рации: " + ruStatus(IffForegroundRadioService.compactStatus()) + "\n"
+                + "- BLE объявление/поиск: " + ruStatus(IffBleFieldRadio.compactStatus()) + "\n"
+                + "- состояние BLE: " + ruStatus(IffBleFieldRadio.lifecycleStatus()) + "\n"
+                + "- состав команды: " + fieldRosterLine() + "\n"
+                + "- видны на карте: " + participantMapVisibleLine(map) + "\n"
+                + "- готовность карты: " + ruStatus(participantMapSummary(map)) + "\n"
+                + "- почему карта скрывает точки: " + ruStatus(mapHiddenReason(map)) + "\n"
+                + "- gps: " + ruStatus(gpsUiStatus());
+    }
+
+    private String fieldRosterLine() {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < roster.length; i++) {
+            IffPlayer player = roster[i];
+            if (builder.length() > 0) {
+                builder.append(", ");
+            }
+            builder.append(fieldRoleLabel(player.playerId))
+                    .append("=")
+                    .append(displayNameFor(player));
+            if (isLocalDevice(player)) {
+                builder.append(" [ЭТОТ]");
+            }
+        }
+        return builder.toString();
+    }
+
+    private String participantMapVisibleLine(IffParticipantMapModel.Snapshot snapshot) {
+        if (snapshot == null || snapshot.points == null || snapshot.points.size() == 0) {
+            return "нет";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < snapshot.points.size(); i++) {
+            IffParticipantMapModel.Point point = snapshot.points.get(i);
+            if (point == null) {
+                continue;
+            }
+            if (builder.length() > 0) {
+                builder.append(", ");
+            }
+            builder.append(safe(point.displayName))
+                    .append(" ")
+                    .append(point.distanceM)
+                    .append("м");
+        }
+        return builder.length() == 0 ? "нет" : builder.toString();
+    }
+
+    private String mapHiddenReason(IffParticipantMapModel.Snapshot snapshot) {
+        if (snapshot == null) {
+            return "снимок карты участников недоступен";
+        }
+        if (snapshot.points != null && snapshot.points.size() > 0) {
+            return "видно";
+        }
+        String reason = safe(snapshot.reason);
+        return reason.length() == 0 ? "нет видимых GPS-точек на карте" : reason;
     }
 
     private String fieldRadioPolicyDetails() {
-        return "- lifecycle: " + IffBleFieldRadio.lifecycleStatus() + "\n"
-                + "- operator control: " + (fieldRadioEnabled ? "ON" : "OFF") + "\n"
-                + "- service: " + IffForegroundRadioService.compactStatus() + "\n"
-                + "- foreground service keeps BLE radio outside visible IFF activity\n"
-                + "- notification stop action stops BLE scan/advertise and logs service stop\n"
-                + "- stale BLE/Wi-Fi witness remains visible but is not current proof\n"
-                + "- expired witness returns proximity to UNKNOWN";
+        return "- состояние: " + ruStatus(IffBleFieldRadio.lifecycleStatus()) + "\n"
+                + "- ручное управление: " + radioEnabledLabel() + "\n"
+                + "- сервис: " + ruStatus(IffForegroundRadioService.compactStatus()) + "\n"
+                + "- фоновый сервис держит BLE-рацию, даже если экран IFF закрыт\n"
+                + "- кнопка остановки в уведомлении выключает BLE-поиск/объявление и пишет остановку в журнал\n"
+                + "- старые BLE/Wi-Fi свидетельства остаются видимыми, но не считаются текущим доказательством\n"
+                + "- просроченный свидетель возвращает близость в состояние неизвестно";
     }
 
     private String witnessQuorumDetails(IffPlayer selected, IffWitnessQuorum.Snapshot quorum) {
         StringBuilder builder = new StringBuilder();
-        builder.append("- target: ").append(displayNameFor(selected)).append("\n")
-                .append("- state: ").append(quorum.compact()).append("\n")
-                .append("- local-device: ");
+        builder.append("- цель: ").append(displayNameFor(selected)).append("\n")
+                .append("- состояние: ").append(ruStatus(quorum.compact())).append("\n")
+                .append("- этот телефон: ");
         if (quorum.localWitness == null) {
-            builder.append("NO_REPORT\n");
+            builder.append("НЕТ ОТЧЕТА\n");
         } else {
-            builder.append(quorum.localWitness.freshnessLabel())
+            builder.append(ruStatus(quorum.localWitness.freshnessLabel()))
                     .append(" ")
                     .append(quorum.localWitness.rssi)
-                    .append("dBm age=")
+                    .append("dBm возраст=")
                     .append(formatAge(quorum.localWitness.ageMs()))
                     .append("\n");
         }
-        builder.append("- remote contract: ").append(IffRemoteWitnessReport.CONTRACT_VERSION).append("\n")
-                .append("- remote reports: ");
+        builder.append("- контракт удаленных отчетов: ").append(IffRemoteWitnessReport.CONTRACT_VERSION).append("\n")
+                .append("- удаленные отчеты: ");
         if (quorum.remoteReports.size() == 0) {
-            builder.append("none received\n");
+            builder.append("не получены\n");
         } else {
-            builder.append(quorum.remoteReportCount).append(" received\n");
+            builder.append(quorum.remoteReportCount).append(" получено\n");
             for (int i = 0; i < quorum.remoteReports.size(); i++) {
                 IffRemoteWitnessReport report = quorum.remoteReports.get(i);
                 builder.append("  ")
                         .append(report.sourcePlayerId)
                         .append(" -> ")
-                        .append(report.freshnessLabel())
+                        .append(ruStatus(report.freshnessLabel()))
                         .append(" ")
                         .append(report.rssi)
-                        .append("dBm age=")
+                        .append("dBm возраст=")
                         .append(formatAge(report.ageMs()))
-                        .append(" signature=")
-                        .append(report.signatureStatus)
+                        .append(" подпись=")
+                        .append(ruStatus(report.signatureStatus))
                         .append("\n");
             }
         }
-        builder.append("- transport: UDP diagnostic channel\n")
-                .append("- signature: ").append(IffRemoteWitnessReport.SIGNATURE_PENDING).append("\n")
-                .append("- identity is not upgraded by quorum without crypto");
+        builder.append("- транспорт: диагностический канал UDP\n")
+                .append("- подпись: ").append(IffRemoteWitnessReport.SIGNATURE_PENDING).append("\n")
+                .append("- кворум без криптоподписи не повышает доверие к личности");
         return builder.toString();
     }
 
@@ -1641,15 +1905,15 @@ public class IffActivity extends Activity implements SensorEventListener {
         int current = currentWitnessEvidenceCount();
         int stale = staleWitnessEvidenceCount();
         if (multiWitnessCount() > 0) {
-            return "MULTI CURRENT";
+            return "НЕСКОЛЬКО СВЕЖИХ";
         }
         if (current > 0) {
-            return "SINGLE CURRENT";
+            return "ОДИН СВЕЖИЙ";
         }
         if (stale > 0) {
-            return "STALE ONLY";
+            return "ТОЛЬКО СТАРЫЕ";
         }
-        return "NO CURRENT";
+        return "НЕТ СВЕЖИХ";
     }
 
     private IffOfficeProximityVerdict.Snapshot officeProximityVerdict() {
@@ -1718,15 +1982,15 @@ public class IffActivity extends Activity implements SensorEventListener {
 
     private String gpsUiStatus() {
         if (!hasLocationPermission()) {
-            return "GPS_UNAVAILABLE";
+            return "GPS НЕДОСТУПЕН";
         }
         LocationManager locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         if (locationManager == null) {
-            return "GPS_UNAVAILABLE";
+            return "GPS НЕДОСТУПЕН";
         }
         Location best = bestLastKnownLocation(locationManager);
         if (best == null) {
-            return "GPS_UNAVAILABLE";
+            return "GPS НЕДОСТУПЕН";
         }
         long ageMs = Math.max(0L, System.currentTimeMillis() - best.getTime());
         return IffGpsSnapshot.from(
@@ -1786,13 +2050,13 @@ public class IffActivity extends Activity implements SensorEventListener {
                 playerId,
                 IffOfficeProximityVerdict.WINDOW_MS);
         if (window.validCount <= 0 && window.outlier127Count <= 0) {
-            return "missing";
+            return "нет данных";
         }
         return window.freshnessLabel()
-                + " avg=" + window.averageRssi + "dBm"
+                + " средн.=" + window.averageRssi + "dBm"
                 + " n=" + window.validCount
                 + " out127=" + window.outlier127Count
-                + " newest=" + formatAge(window.newestAgeMs);
+                + " новейш.=" + formatAge(window.newestAgeMs);
     }
 
     private int remoteReportCount() {
@@ -1852,7 +2116,7 @@ public class IffActivity extends Activity implements SensorEventListener {
 
     private String displayNameFor(IffPlayer player) {
         if (player == null) {
-            return "phone";
+            return "телефон";
         }
         if (isLocalDevice(player)) {
             return player.displayName;
@@ -1914,10 +2178,10 @@ public class IffActivity extends Activity implements SensorEventListener {
         }
         IffParticipantState state = participantStateById(playerId);
         if (state != null) {
-            return "GPS age=" + formatAge(Math.max(0L, SystemClock.elapsedRealtime() - state.receivedTimeMillis))
-                    + " source=" + safe(state.sourcePlayerId);
+            return "GPS возраст=" + formatAge(Math.max(0L, SystemClock.elapsedRealtime() - state.receivedTimeMillis))
+                    + " источник=" + safe(state.sourcePlayerId);
         }
-        return "heard recently";
+        return "недавно слышали";
     }
 
     private IffParticipantState participantStateById(String playerId) {
@@ -1934,11 +2198,11 @@ public class IffActivity extends Activity implements SensorEventListener {
     private String fieldMapSummary() {
         IffFieldMapSnapshot map = fieldMapSnapshot();
         IffParticipantMapModel.Snapshot participants = participantMapSnapshot();
-        return "FIELD MAP\n"
-                + "- " + map.statusLine + "\n"
-                + "- participants: " + participantMapSummary(participants) + "\n"
-                + "- legacy anchors: " + IffWifiTargetObservationStore.compactStatus() + "\n"
-                + "- radio fallback: " + mapRadioDistanceTrend().compact() + "\n\n"
+        return "ПОЛЕВАЯ КАРТА\n"
+                + "- " + ruStatus(map.statusLine) + "\n"
+                + "- участники: " + ruStatus(participantMapSummary(participants)) + "\n"
+                + "- старые опоры: " + ruStatus(IffWifiTargetObservationStore.compactStatus()) + "\n"
+                + "- запасная оценка по рации: " + ruStatus(mapRadioDistanceTrend().compact()) + "\n\n"
                 + simpleMapWitnessList();
     }
 
@@ -1958,23 +2222,23 @@ public class IffActivity extends Activity implements SensorEventListener {
 
     private String participantMapSummary(IffParticipantMapModel.Snapshot snapshot) {
         if (snapshot == null) {
-            return "NONE visible=0 hidden=0";
+            return "НЕТ видно=0 скрыто=0";
         }
-        return snapshot.mode
-                + " visible=" + (snapshot.points == null ? 0 : snapshot.points.size())
-                + " hidden=" + snapshot.hiddenCount
-                + " reason=" + safe(snapshot.reason);
+        return ruStatus(snapshot.mode)
+                + " видно=" + (snapshot.points == null ? 0 : snapshot.points.size())
+                + " скрыто=" + snapshot.hiddenCount
+                + " причина=" + ruStatus(safe(snapshot.reason));
     }
 
     private String participantMapDetails(IffParticipantMapModel.Snapshot snapshot) {
         if (snapshot == null) {
-            return "PARTICIPANT MAP\n- none";
+            return "КАРТА УЧАСТНИКОВ\n- нет";
         }
         StringBuilder builder = new StringBuilder();
-        builder.append("PARTICIPANT MAP\n")
-                .append("- ").append(participantMapSummary(snapshot)).append("\n");
+        builder.append("КАРТА УЧАСТНИКОВ\n")
+                .append("- ").append(ruStatus(participantMapSummary(snapshot))).append("\n");
         if (snapshot.points == null || snapshot.points.size() == 0) {
-            return builder.append("- points: none").toString();
+            return builder.append("- точки: нет").toString();
         }
         for (int i = 0; i < snapshot.points.size(); i++) {
             IffParticipantMapModel.Point point = snapshot.points.get(i);
@@ -1982,21 +2246,21 @@ public class IffActivity extends Activity implements SensorEventListener {
                     .append(point.displayName)
                     .append(": ")
                     .append(point.distanceM)
-                    .append("m +/-")
+                    .append("м +/-")
                     .append(Math.round(point.distanceAccuracyMeters))
-                    .append("m ")
-                    .append(point.ageMs <= 2500L ? "CURRENT" : "STALE")
-                    .append(" bearing=")
+                    .append("м ")
+                    .append(point.ageMs <= 2500L ? "СВЕЖЕЕ" : "СТАРОЕ")
+                    .append(" азимут=")
                     .append(point.bearingDeg)
-                    .append("deg acc=")
+                    .append("град точн.=")
                     .append(Math.round(point.accuracyMeters))
-                    .append("m source=")
+                    .append("м источник=")
                     .append(safe(point.sourcePlayerId))
-                    .append(" hop=")
+                    .append(" переход=")
                     .append(point.hopCount)
                     .append(" rssi=")
                     .append(point.rssiDbm)
-                    .append(" approach=")
+                    .append(" подход=")
                     .append(point.approachActive)
                     .append("\n");
         }
@@ -2005,21 +2269,21 @@ public class IffActivity extends Activity implements SensorEventListener {
 
     private String mapWitnessList() {
         StringBuilder builder = new StringBuilder();
-        builder.append("FIELD CONTACTS\n\n");
+        builder.append("ПОЛЕВЫЕ КОНТАКТЫ\n\n");
         for (int i = 0; i < roster.length; i++) {
             IffPlayer player = roster[i];
             WitnessSnapshot witness = IffRadioWitnessStore.getWitness(player.playerId);
             builder.append(displayNameFor(player))
                     .append(": ")
-                    .append(witnessQuorumFor(player, witness).compact())
+                    .append(ruStatus(witnessQuorumFor(player, witness).compact()))
                     .append(" / ")
-                    .append(witness == null ? "radio UNKNOWN" : witness.freshnessLabel() + " " + witness.rssi + "dBm age=" + formatAge(witness.ageMs()))
+                    .append(witness == null ? "рация: нет данных" : ruStatus(witness.freshnessLabel()) + " " + witness.rssi + "dBm возраст=" + formatAge(witness.ageMs()))
                     .append("\n");
         }
         builder.append("\nGPS и направление будут отдельными слоями уверенности.\n")
-                .append("BLE field radio does not require shared Wi-Fi.\n")
-                .append("Freshness policy: ").append(IffRadioWitnessStore.freshnessPolicyLabel()).append("\n")
-                .append("BLE lifecycle: ").append(IffBleFieldRadio.lifecycleStatus());
+                .append("Полевая BLE-рация не требует общей Wi-Fi сети.\n")
+                .append("Правило свежести: ").append(ruStatus(IffRadioWitnessStore.freshnessPolicyLabel())).append("\n")
+                .append("Состояние BLE: ").append(ruStatus(IffBleFieldRadio.lifecycleStatus()));
         return builder.toString();
     }
 
@@ -2033,7 +2297,7 @@ public class IffActivity extends Activity implements SensorEventListener {
             boolean stale = !current && quorum.staleSources > 0;
             points.add(new IffTacticalMapView.MapPoint(
                     player.playerId,
-                    displayNameFor(player) + (isLocalDevice(player) ? " [THIS]" : ""),
+                    displayNameFor(player) + (isLocalDevice(player) ? " [ЭТОТ]" : ""),
                     mapRadioLabel(witness, quorum),
                     isLocalDevice(player),
                     i == selectedPlayerIndex,
@@ -2045,23 +2309,58 @@ public class IffActivity extends Activity implements SensorEventListener {
 
     private String mapRadioLabel(WitnessSnapshot witness, IffWitnessQuorum.Snapshot quorum) {
         if (witness != null) {
-            return witness.sourceType() + " " + witness.freshnessLabel() + " "
+            return ruStatus(witness.sourceType()) + " " + ruStatus(witness.freshnessLabel()) + " "
                     + witness.rssi + "dBm " + formatAge(witness.ageMs());
         }
         if (quorum.remoteFreshSources > 0) {
-            return "REMOTE_FRESH x" + quorum.remoteFreshSources;
+            return "УДАЛЕННО СВЕЖЕЕ x" + quorum.remoteFreshSources;
         }
         if (quorum.staleSources > 0) {
-            return "STALE_EVIDENCE";
+            return "СТАРОЕ СВИДЕТЕЛЬСТВО";
         }
-        return "UNKNOWN";
+        return "НЕТ ДАННЫХ";
     }
 
     private String formatAge(long ageMs) {
         if (ageMs < 1000L) {
-            return ageMs + "ms";
+            return ageMs + "мс";
         }
-        return (ageMs / 1000L) + "s";
+        return (ageMs / 1000L) + "с";
+    }
+
+    private String ruStatus(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value
+                .replace("UNKNOWN", "НЕТ ДАННЫХ")
+                .replace("CURRENT", "СВЕЖЕЕ")
+                .replace("STALE", "СТАРОЕ")
+                .replace("NO_REPORT", "НЕТ ОТЧЕТА")
+                .replace("NO_MAP", "НЕТ КАРТЫ")
+                .replace("NO_ANCHORS", "НЕТ ОПОР")
+                .replace("ONE_ANCHOR", "ОДНА ОПОРА")
+                .replace("TWO_ANCHORS", "ДВЕ ОПОРЫ")
+                .replace("INSUFFICIENT_DATA", "МАЛО ДАННЫХ")
+                .replace("MISSING", "НЕТ")
+                .replace("missing", "нет")
+                .replace("fresh", "свежее")
+                .replace("stale", "старое")
+                .replace("old", "старое")
+                .replace("visible", "видно")
+                .replace("hidden", "скрыто")
+                .replace("reason", "причина")
+                .replace("target", "цель")
+                .replace("left", "левая")
+                .replace("right", "правая")
+                .replace("locator", "локатор")
+                .replace("source", "источник")
+                .replace("service", "сервис")
+                .replace("enabled", "включено")
+                .replace("disabled", "выключено")
+                .replace("running", "работает")
+                .replace("stopped", "остановлено")
+                .replace("ageMs", "возрастМс");
     }
 
     private String safe(String value) {

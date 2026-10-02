@@ -25,8 +25,15 @@ android {
             dimension = "mainActions"
             buildConfigField("boolean", "SHOW_MAIN_ACTION_BUTTONS", "true")
         }
+        create("legacy") {
+            dimension = "mainActions"
+            minSdk = 18
+            versionNameSuffix = "-android4-5-hidden-iff"
+            buildConfigField("boolean", "SHOW_MAIN_ACTION_BUTTONS", "false")
+        }
         create("hiddenMainActions") {
             dimension = "mainActions"
+            applicationIdSuffix = ".hidden"
             buildConfigField("boolean", "SHOW_MAIN_ACTION_BUTTONS", "false")
         }
     }
@@ -51,4 +58,11 @@ dependencies {
     implementation("com.journeyapps:zxing-android-embedded:3.6.0")
     implementation("com.google.zxing:core:3.3.3")
     implementation("net.sourceforge.streamsupport:streamsupport:1.7.4")
+}
+
+tasks.register<Copy>("packageLegacyDebugApk") {
+    dependsOn("assembleLegacyDebug")
+    from(layout.buildDirectory.file("outputs/apk/legacy/debug/app-legacy-debug.apk"))
+    into(rootProject.layout.projectDirectory.dir("artifacts/android-4-5"))
+    rename { "compass-android-4-5-hidden-iff-debug.apk" }
 }
